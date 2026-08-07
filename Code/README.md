@@ -1,11 +1,6 @@
 # Code
-
 Maven project dùng Java 21 và JavaFX thuần cho đề tài UDM_08 Chat TCP Client–Server.
-
-Đây chỉ là skeleton ban đầu: chưa có class Java, FXML, CSS, xử lý Socket hoặc chức năng nghiệp vụ.
-
 ## Phân chia package
-
 - `client/app`: khởi động JavaFX và quản lý vòng đời ứng dụng.
 - `client/controller`: controller cho các màn hình FXML.
 - `client/network`: kết nối TCP phía client.
@@ -16,15 +11,4 @@ Maven project dùng Java 21 và JavaFX thuần cho đề tài UDM_08 Chat TCP Cl
 - `shared/model`: model dùng chung.
 - `shared/protocol`: protocol dùng chung giữa client và server.
 - `resources/fxml`, `resources/css`, `resources/images`: tài nguyên JavaFX thuần.
-
 Các thư mục rỗng chứa `.gitkeep` để Git lưu được cấu trúc. Xóa `.gitkeep` khi thêm file thật.
-
-## Kiểm tra Maven skeleton
-
-Trên Windows:
-
-```powershell
-.\mvnw.cmd clean test
-```
-
-Lệnh `javafx:run` chỉ sử dụng được sau khi module giao diện tạo lớp `ChatApplication`.
