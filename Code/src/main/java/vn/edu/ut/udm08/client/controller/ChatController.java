@@ -141,11 +141,9 @@ public class ChatController {
         message.content = content;                           
         message.timestamp = System.currentTimeMillis();      
 
-     hơn
         addMessageBubble(content, true);
         messageInput.clear(); 
 
-        
         if (sendListener != null) {
             sendListener.onSendMessage(message);
         }
