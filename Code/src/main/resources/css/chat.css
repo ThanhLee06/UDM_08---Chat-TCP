@@ -1,0 +1,37 @@
+.user-list-pane {
+  -fx-background-color: #f4f4f4;
+  -fx-border-color: #ddd;
+  -fx-border-width: 0 1 0 0;
+}
+.pane-title {
+  -fx-font-size: 13px;
+  -fx-font-weight: bold;
+  -fx-padding: 10 12 10 12;
+  -fx-text-fill: #555;
+}
+.chat-header {
+  -fx-background-color: #ffffff;
+  -fx-border-color: #ddd;
+  -fx-border-width: 0 0 1 0;
+}
+.chat-header-label {
+  -fx-font-size: 14px;
+  -fx-font-weight: bold;
+}
+.bubble-mine {
+  -fx-background-color: #4a90e2;
+  -fx-text-fill: white;
+  -fx-background-radius: 12;
+  -fx-padding: 8 12 8 12;
+}
+.bubble-other {
+  -fx-background-color: #e5e5e5;
+  -fx-text-fill: #222;
+  -fx-background-radius: 12;
+  -fx-padding: 8 12 8 12;
+}
+.input-bar {
+  -fx-background-color: #ffffff;
+  -fx-border-color: #ddd;
+  -fx-border-width: 1 0 0 0;
+}

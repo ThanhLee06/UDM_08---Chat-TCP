@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="vn.edu.ut.udm08.client.controller.ChatController"
+            prefWidth="720" prefHeight="480" stylesheets="@../css/chat.css">
+
+    <left>
+        <VBox styleClass="user-list-pane" prefWidth="180">
+            <Label text="Đang online" styleClass="pane-title"/>
+            <ListView fx:id="onlineUsersList" VBox.vgrow="ALWAYS"/>
+        </VBox>
+    </left>
+
+    <center>
+        <VBox>
+            <HBox styleClass="chat-header" alignment="CENTER_LEFT">
+                <padding><Insets top="10" right="12" bottom="10" left="12"/></padding>
+                <Label fx:id="chatPartnerName" text="Chọn một người để chat" styleClass="chat-header-label"/>
+            </HBox>
+
+            <ScrollPane fx:id="messageScrollPane" fitToWidth="true" VBox.vgrow="ALWAYS">
+                <VBox fx:id="messageContainer" spacing="8">
+                    <padding><Insets top="10" right="12" bottom="10" left="12"/></padding>
+                </VBox>
+            </ScrollPane>
+
+            <HBox styleClass="input-bar" spacing="8" alignment="CENTER">
+                <padding><Insets top="8" right="12" bottom="8" left="12"/></padding>
+                <TextField fx:id="messageInput" promptText="Nhập tin nhắn..." HBox.hgrow="ALWAYS"/>
+                <Button fx:id="sendButton" text="Gửi" onAction="#handleSend"/>
+            </HBox>
+        </VBox>
+    </center>
+</BorderPane>
