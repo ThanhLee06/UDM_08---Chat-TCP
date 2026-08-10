@@ -1,0 +1,96 @@
+package vn.edu.ut.udm08.server.routing;
+
+import vn.edu.ut.udm08.server.session.ClientSession;
+import vn.edu.ut.udm08.server.session.SessionRegistry;
+import vn.edu.ut.udm08.shared.model.MessageType;
+import vn.edu.ut.udm08.shared.model.ProtocolMessage;
+
+// Lop dinh tuyen tin nhan giua Client va Server
+public class MessageRouter {
+    private final SessionRegistry registry;
+
+    public MessageRouter(SessionRegistry registry) {
+        this.registry = registry;
+    }
+
+    // Xu ly dinh tuyen tin nhan CHAT rieng tu nguoi gui den nguoi nhan
+    public void handleChatMessage(ClientSession senderSession, ProtocolMessage msg) {
+        try {
+            // 1. Kiem tra phien lam viec nguoi gui
+            if (senderSession == null || senderSession.getUsername() == null) {
+                sendErrorMessage(senderSession, msg != null ? msg.messageId : null, "UNAUTHORIZED", "Chua dang nhap");
+                return;
+            }
+
+            // 2. Kiem tra nguoi gui (sender) co khop voi session hien tai hay khong
+            if (msg.sender == null || !msg.sender.equals(senderSession.getUsername())) {
+                sendErrorMessage(senderSession, msg.messageId, "INVALID_SENDER", "Nguoi gui khong khop voi phien lam viec");
+                return;
+            }
+
+            // 3. Kiem tra nguoi nhan (target) co bi rong khong
+            if (msg.target == null || msg.target.trim().isEmpty()) {
+                sendErrorMessage(senderSession, msg.messageId, "INVALID_TARGET", "Nguoi nhan khong duoc de trong");
+                return;
+            }
+
+            // 4. Kiem tra noi dung tin nhan (content) khong duoc rong hoac qua dai (> 5000 ky tu)
+            if (msg.content == null || msg.content.trim().isEmpty()) {
+                sendErrorMessage(senderSession, msg.messageId, "INVALID_CONTENT", "Noi dung tin nhan khong duoc de trong");
+                return;
+            }
+            if (msg.content.length() > 5000) {
+                sendErrorMessage(senderSession, msg.messageId, "CONTENT_TOO_LONG", "Noi dung tin nhan qua dai (toi da 5000 ky tu)");
+                return;
+            }
+
+            // 5. Tim ClientSession cua nguoi nhan trong SessionRegistry
+            ClientSession targetSession = registry.getSession(msg.target);
+            if (targetSession == null || !targetSession.isConnected()) {
+                // Nguoi nhan khong ton tai hoac da offline
+                sendErrorMessage(senderSession, msg.messageId, "USER_OFFLINE", "Nguoi nhan khong ton tai hoac da offline");
+                return;
+            }
+
+            // 6. Chuyen tiep nguyen ven goi tin CHAT sang nguoi nhan
+            try {
+                targetSession.sendMessage(msg);
+            } catch (Exception e) {
+                sendErrorMessage(senderSession, msg.messageId, "DELIVERY_FAILED", "Khong the gui tin nhan toi nguoi nhan");
+                return;
+            }
+
+            // 7. Phan hoi goi tin CHAT_OK ve cho nguoi gui xac nhan da toi dich
+            ProtocolMessage okMsg = new ProtocolMessage(MessageType.CHAT_OK);
+            okMsg.messageId = msg.messageId;
+            okMsg.sender = "SERVER";
+            okMsg.target = msg.sender;
+            okMsg.timestamp = System.currentTimeMillis();
+
+            senderSession.sendMessage(okMsg);
+
+        } catch (Exception e) {
+            // Try-catch an toan: bat moi loi de khong lam sap server
+            System.err.println("Loi dinh tuyen tin nhan: " + e.getMessage());
+            sendErrorMessage(senderSession, msg != null ? msg.messageId : null, "ERROR", "Loi he thong dinh tuyen");
+        }
+    }
+
+    // Ham phu ho tro gui goi tin ERROR ve cho client
+    private void sendErrorMessage(ClientSession session, String messageId, String errorCode, String errorMessage) {
+        if (session == null) {
+            return;
+        }
+        try {
+            ProtocolMessage err = new ProtocolMessage(MessageType.ERROR);
+            err.messageId = messageId;
+            err.sender = "SERVER";
+            err.errorCode = errorCode;
+            err.errorMessage = errorMessage;
+            err.timestamp = System.currentTimeMillis();
+            session.sendMessage(err);
+        } catch (Exception ignored) {
+            // Bo qua neu khong gui duoc loi
+        }
+    }
+}
