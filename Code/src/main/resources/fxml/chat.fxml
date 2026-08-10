@@ -6,33 +6,64 @@
 <BorderPane xmlns="http://javafx.com/javafx"
             xmlns:fx="http://javafx.com/fxml"
             fx:controller="vn.edu.ut.udm08.client.controller.ChatController"
-            prefWidth="720" prefHeight="480" stylesheets="@../css/chat.css">
+            prefWidth="960" prefHeight="620" styleClass="root-pane" stylesheets="@../css/chat.css">
 
     <left>
-        <VBox styleClass="user-list-pane" prefWidth="180">
-            <Label text="Đang online" styleClass="pane-title"/>
-            <ListView fx:id="onlineUsersList" VBox.vgrow="ALWAYS"/>
+        <VBox styleClass="user-list-pane" prefWidth="290">
+            <VBox styleClass="user-list-header">
+                <HBox alignment="CENTER_LEFT" spacing="8">
+                    <Label text="💬" styleClass="app-logo"/>
+                    <Label text="Chat TCP" styleClass="app-title"/>
+                </HBox>
+                <TextField promptText="Tìm kiếm" styleClass="search-field"/>
+            </VBox>
+            <Label text="ĐANG ONLINE" styleClass="pane-title"/>
+            <ListView fx:id="onlineUsersList" styleClass="user-list" VBox.vgrow="ALWAYS"/>
         </VBox>
     </left>
 
     <center>
-        <VBox>
-            <HBox styleClass="chat-header" alignment="CENTER_LEFT">
-                <padding><Insets top="10" right="12" bottom="10" left="12"/></padding>
-                <Label fx:id="chatPartnerName" text="Chọn một người để chat" styleClass="chat-header-label"/>
-            </HBox>
+        <StackPane>
+            <VBox styleClass="chat-area">
+                <HBox styleClass="chat-header" alignment="CENTER_LEFT" spacing="12">
+                    <padding><Insets top="12" right="18" bottom="12" left="18"/></padding>
+                    <StackPane fx:id="chatPartnerAvatar" styleClass="avatar-circle" prefWidth="42" prefHeight="42">
+                        <Label fx:id="chatPartnerInitial" text="?" styleClass="avatar-text"/>
+                    </StackPane>
+                    <Label fx:id="chatPartnerName" text="Chọn một người để chat" styleClass="chat-header-label"/>
+                    <Pane HBox.hgrow="ALWAYS"/>
+                    <Label text="📞" styleClass="header-icon"/>
+                    <Label text="🎥" styleClass="header-icon"/>
+                    <Label text="🔍" styleClass="header-icon"/>
+                </HBox>
 
-            <ScrollPane fx:id="messageScrollPane" fitToWidth="true" VBox.vgrow="ALWAYS">
-                <VBox fx:id="messageContainer" spacing="8">
-                    <padding><Insets top="10" right="12" bottom="10" left="12"/></padding>
+                <ScrollPane fx:id="messageScrollPane" fitToWidth="true" styleClass="message-scroll" VBox.vgrow="ALWAYS">
+                    <VBox fx:id="messageContainer" spacing="10">
+                        <padding><Insets top="18" right="18" bottom="18" left="18"/></padding>
+                    </VBox>
+                </ScrollPane>
+
+                <VBox styleClass="input-bar">
+                    <HBox styleClass="toolbar-row" spacing="16" alignment="CENTER_LEFT">
+                        <padding><Insets top="8" right="16" bottom="4" left="16"/></padding>
+                        <Label text="😊" styleClass="toolbar-icon"/>
+                        <Label text="🖼" styleClass="toolbar-icon"/>
+                        <Label text="📎" styleClass="toolbar-icon"/>
+                        <Label text="✂" styleClass="toolbar-icon"/>
+                    </HBox>
+                    <HBox spacing="10" alignment="CENTER">
+                        <padding><Insets top="0" right="16" bottom="12" left="16"/></padding>
+                        <TextField fx:id="messageInput" promptText="Nhập tin nhắn..." styleClass="message-input" HBox.hgrow="ALWAYS"/>
+                        <Button fx:id="sendButton" text="Gửi" styleClass="send-button" onAction="#handleSend"/>
+                    </HBox>
                 </VBox>
-            </ScrollPane>
+            </VBox>
 
-            <HBox styleClass="input-bar" spacing="8" alignment="CENTER">
-                <padding><Insets top="8" right="12" bottom="8" left="12"/></padding>
-                <TextField fx:id="messageInput" promptText="Nhập tin nhắn..." HBox.hgrow="ALWAYS"/>
-                <Button fx:id="sendButton" text="Gửi" onAction="#handleSend"/>
-            </HBox>
-        </VBox>
+            <VBox fx:id="emptyStatePane" styleClass="empty-state" alignment="CENTER" spacing="10">
+                <Label text="💬" styleClass="empty-state-icon"/>
+                <Label text="Chọn một cuộc trò chuyện" styleClass="empty-state-title"/>
+                <Label text="Chọn một người ở danh sách bên trái để bắt đầu chat" styleClass="empty-state-sub"/>
+            </VBox>
+        </StackPane>
     </center>
 </BorderPane>

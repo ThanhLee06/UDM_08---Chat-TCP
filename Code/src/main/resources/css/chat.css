@@ -1,37 +1,224 @@
+.root-pane {
+    -fx-background-color: #ebecf0;
+    -fx-font-family: "Segoe UI", "Arial";
+}
+
+/* ===== Sidebar ===== */
 .user-list-pane {
-  -fx-background-color: #f4f4f4;
-  -fx-border-color: #ddd;
-  -fx-border-width: 0 1 0 0;
+    -fx-background-color: #ffffff;
+    -fx-border-color: #e4e6eb;
+    -fx-border-width: 0 1 0 0;
 }
+
+.user-list-header {
+    -fx-padding: 16 16 12 16;
+    -fx-spacing: 12;
+}
+
+.app-logo {
+    -fx-font-size: 18px;
+}
+
+.app-title {
+    -fx-font-size: 19px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #0068ff;
+}
+
+.search-field {
+    -fx-background-color: #f0f2f5;
+    -fx-background-radius: 18;
+    -fx-padding: 8 14 8 14;
+    -fx-font-size: 13px;
+    -fx-border-width: 0;
+}
+
 .pane-title {
-  -fx-font-size: 13px;
-  -fx-font-weight: bold;
-  -fx-padding: 10 12 10 12;
-  -fx-text-fill: #555;
+    -fx-font-size: 11px;
+    -fx-text-fill: #8a8d91;
+    -fx-font-weight: bold;
+    -fx-padding: 12 16 8 16;
 }
+
+.user-list {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0 8 8 8;
+}
+
+.user-list .list-cell {
+    -fx-background-color: transparent;
+    -fx-padding: 8 10 8 10;
+    -fx-background-radius: 12;
+    -fx-font-size: 14px;
+    -fx-text-fill: #050505;
+}
+
+.user-list .list-cell:hover {
+    -fx-background-color: #f3f4f6;
+}
+
+.user-list .list-cell:selected {
+    -fx-background-color: #e8f1ff;
+    -fx-text-fill: #0068ff;
+    -fx-font-weight: bold;
+}
+
+.user-list .list-cell:selected .cell-name {
+    -fx-text-fill: #0068ff;
+}
+
+/* ===== Avatar (chữ cái + màu nền cố định set bằng code, không đổi theo hover/selected) ===== */
+.avatar-circle {
+    -fx-background-radius: 50%;
+    -fx-min-width: 42;
+    -fx-min-height: 42;
+    -fx-max-width: 42;
+    -fx-max-height: 42;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.12), 4, 0, 0, 1);
+}
+
+.avatar-text {
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-font-size: 16px;
+}
+
+.avatar-circle-small {
+    -fx-background-radius: 50%;
+    -fx-min-width: 34;
+    -fx-min-height: 34;
+    -fx-max-width: 34;
+    -fx-max-height: 34;
+}
+
+.avatar-text-small {
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+}
+
+.cell-name {
+    -fx-font-size: 14px;
+    -fx-text-fill: #050505;
+}
+
+/* ===== Chat area ===== */
+.chat-area {
+    -fx-background-color: #ebecf0;
+}
+
 .chat-header {
-  -fx-background-color: #ffffff;
-  -fx-border-color: #ddd;
-  -fx-border-width: 0 0 1 0;
+    -fx-background-color: #ffffff;
+    -fx-border-color: #e4e6eb;
+    -fx-border-width: 0 0 1 0;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.05), 3, 0, 0, 1);
 }
+
 .chat-header-label {
-  -fx-font-size: 14px;
-  -fx-font-weight: bold;
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #050505;
 }
-.bubble-mine {
-  -fx-background-color: #4a90e2;
-  -fx-text-fill: white;
-  -fx-background-radius: 12;
-  -fx-padding: 8 12 8 12;
+
+.header-icon {
+    -fx-font-size: 18px;
+    -fx-padding: 6 8 6 8;
+    -fx-background-radius: 50%;
+    -fx-cursor: hand;
 }
-.bubble-other {
-  -fx-background-color: #e5e5e5;
-  -fx-text-fill: #222;
-  -fx-background-radius: 12;
-  -fx-padding: 8 12 8 12;
+
+.header-icon:hover {
+    -fx-background-color: #f0f2f5;
 }
+
+.message-scroll {
+    -fx-background-color: #ebecf0;
+    -fx-background: #ebecf0;
+}
+
+/* ===== Message bubbles ===== */
+.message-bubble-sent {
+    -fx-background-color: #0068ff;
+    -fx-background-radius: 16 16 4 16;
+    -fx-padding: 10 14 10 14;
+    -fx-text-fill: white;
+    -fx-font-size: 13px;
+    -fx-max-width: 340;
+    -fx-wrap-text: true;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.10), 3, 0, 0, 1);
+}
+
+.message-bubble-received {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 16 16 16 4;
+    -fx-padding: 10 14 10 14;
+    -fx-text-fill: #050505;
+    -fx-font-size: 13px;
+    -fx-max-width: 340;
+    -fx-wrap-text: true;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 3, 0, 0, 1);
+}
+
+/* ===== Input bar ===== */
 .input-bar {
-  -fx-background-color: #ffffff;
-  -fx-border-color: #ddd;
-  -fx-border-width: 1 0 0 0;
+    -fx-background-color: #ffffff;
+    -fx-border-color: #e4e6eb;
+    -fx-border-width: 1 0 0 0;
+}
+
+.toolbar-icon {
+    -fx-font-size: 18px;
+    -fx-cursor: hand;
+    -fx-opacity: 0.75;
+}
+
+.toolbar-icon:hover {
+    -fx-opacity: 1;
+}
+
+.message-input {
+    -fx-background-color: #f0f2f5;
+    -fx-background-radius: 22;
+    -fx-padding: 10 18 10 18;
+    -fx-font-size: 13px;
+    -fx-border-width: 0;
+}
+
+.message-input:focused {
+    -fx-background-color: #e8f1ff;
+}
+
+.send-button {
+    -fx-background-color: #0068ff;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-background-radius: 22;
+    -fx-padding: 10 22 10 22;
+    -fx-cursor: hand;
+}
+
+.send-button:hover {
+    -fx-background-color: #0052cc;
+}
+
+/* ===== Empty state (khi chưa chọn ai) ===== */
+.empty-state {
+    -fx-background-color: #ebecf0;
+}
+
+.empty-state-icon {
+    -fx-font-size: 48px;
+    -fx-opacity: 0.5;
+}
+
+.empty-state-title {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #65676b;
+}
+
+.empty-state-sub {
+    -fx-font-size: 13px;
+    -fx-text-fill: #8a8d91;
 }
