@@ -9,7 +9,7 @@ import vn.edu.ut.udm08.shared.model.UserProfile;
 
 import java.util.List;
 
-public class MainApp extends Application {
+public class ChatUIPreview extends Application {
 
     @Override
     public void start(Stage primaryStage) throws Exception {
