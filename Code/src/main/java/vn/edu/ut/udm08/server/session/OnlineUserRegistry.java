@@ -36,6 +36,13 @@ public class OnlineUserRegistry {
     }
     return users;
   }
+  public List<ClientSession> getSessions() {
+    List<ClientSession> result = new ArrayList<>();
+    for (ClientSession session : sessions.values()) {
+        result.add(session);
+    }
+    return result;
+  }
   private String normalizeKey(String username) {
     return Normalizer.normalize(username, Normalizer.Form.NFC).toLowerCase(Locale.ROOT);
   }
