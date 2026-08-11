@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.image.Image?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox xmlns="http://javafx.com/javafx/21"
+      xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="vn.edu.ut.udm08.client.controller.LoginController"
+      alignment="CENTER"
+      spacing="10"
+      prefWidth="420"
+      style="-fx-background-color: #f8fafc;">
+    <padding>
+        <Insets top="28" right="45" bottom="28" left="45"/>
+    </padding>
+
+    <Label text="ĐĂNG NHẬP"
+           style="-fx-font-size: 26px; -fx-font-weight: bold; -fx-text-fill: #1e293b;"/>
+
+    <ImageView fx:id="avatarImage"
+               fitWidth="110"
+               fitHeight="110"
+               preserveRatio="true">
+        <image>
+            <Image url="@../images/avatar1.jpg"/>
+        </image>
+    </ImageView>
+
+    <Label text="Chọn ảnh đại diện"/>
+    <ComboBox fx:id="avatarChoiceBox"
+              prefWidth="300"
+              onAction="#onAvatarChanged"/>
+
+    <Label text="Username"/>
+    <TextField fx:id="usernameField"
+               promptText="Nhập username"
+               prefWidth="300"/>
+
+    <Label text="Địa chỉ Server"/>
+    <TextField fx:id="hostField"
+               text="127.0.0.1"
+               promptText="Ví dụ: 192.168.1.10"
+               prefWidth="300"/>
+
+    <Label text="Port"/>
+    <TextField fx:id="portField"
+               text="8080"
+               promptText="Ví dụ: 8080"
+               prefWidth="300"/>
+
+    <Button fx:id="connectButton"
+            text="Kết nối"
+            prefWidth="150"
+            prefHeight="40"
+            defaultButton="true"
+            onAction="#onConnectClick"/>
+
+    <Label fx:id="statusLabel"
+           minHeight="24"
+           wrapText="true"
+           style="-fx-font-size: 13px;"/>
+</VBox>
