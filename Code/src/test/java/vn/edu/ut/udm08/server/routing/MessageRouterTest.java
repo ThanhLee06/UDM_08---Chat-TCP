@@ -214,6 +214,56 @@ public class MessageRouterTest {
         assertEquals("Lai thanh cong roi!", receivedByBob.content);
     }
 
+    @Test
+    public void testGuiTinNhanReplyToMetadata() throws Exception {
+        ProtocolMessage replyMsg = new ProtocolMessage(MessageType.CHAT);
+        replyMsg.messageId = "msg-201";
+        replyMsg.sender = "Alice";
+        replyMsg.target = "Bob";
+        replyMsg.content = "Tra loi tin nhan msg-100 cua Bob";
+        replyMsg.replyTo = "msg-100";
+        replyMsg.timestamp = System.currentTimeMillis();
+
+        router.handleChatMessage(aliceConnection.session, replyMsg);
+
+        ProtocolMessage receivedByBob = bobConnection.readMessage();
+        assertNotNull(receivedByBob);
+        assertEquals(MessageType.CHAT, receivedByBob.type);
+        assertEquals("Alice", receivedByBob.sender);
+        assertEquals("Bob", receivedByBob.target);
+        assertEquals("msg-100", receivedByBob.replyTo);
+        assertNull(receivedByBob.forwardOf);
+
+        ProtocolMessage receivedByAlice = aliceConnection.readMessage();
+        assertEquals(MessageType.CHAT_OK, receivedByAlice.type);
+        assertEquals("msg-201", receivedByAlice.messageId);
+    }
+
+    @Test
+    public void testGuiTinNhanForwardOfMetadata() throws Exception {
+        ProtocolMessage forwardMsg = new ProtocolMessage(MessageType.CHAT);
+        forwardMsg.messageId = "msg-202";
+        forwardMsg.sender = "Alice";
+        forwardMsg.target = "Bob";
+        forwardMsg.content = "Chuyen tiep tin nhan goc msg-050";
+        forwardMsg.forwardOf = "msg-050";
+        forwardMsg.timestamp = System.currentTimeMillis();
+
+        router.handleChatMessage(aliceConnection.session, forwardMsg);
+
+        ProtocolMessage receivedByBob = bobConnection.readMessage();
+        assertNotNull(receivedByBob);
+        assertEquals(MessageType.CHAT, receivedByBob.type);
+        assertEquals("Alice", receivedByBob.sender);
+        assertEquals("Bob", receivedByBob.target);
+        assertEquals("msg-050", receivedByBob.forwardOf);
+        assertNull(receivedByBob.replyTo);
+
+        ProtocolMessage receivedByAlice = aliceConnection.readMessage();
+        assertEquals(MessageType.CHAT_OK, receivedByAlice.type);
+        assertEquals("msg-202", receivedByAlice.messageId);
+    }
+
     private static class TestConnection implements AutoCloseable {
         private Socket clientSocket;
         private Socket serverSocket;
