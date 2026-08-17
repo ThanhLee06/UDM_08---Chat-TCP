@@ -1,15 +1,18 @@
 package vn.edu.ut.udm08.server.routing;
 
 import vn.edu.ut.udm08.server.session.ClientSession;
-import vn.edu.ut.udm08.server.session.SessionRegistry;
+import vn.edu.ut.udm08.server.session.OnlineUserRegistry;
 import vn.edu.ut.udm08.shared.model.MessageType;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
 
 // Lop dinh tuyen tin nhan giua Client va Server
 public class MessageRouter {
-    private final SessionRegistry registry;
+    private final OnlineUserRegistry registry;
 
-    public MessageRouter(SessionRegistry registry) {
+    public MessageRouter(OnlineUserRegistry registry) {
+        if(registry == null){
+            throw new IllegalArgumentException("Registry must not be null!");
+        }
         this.registry = registry;
     }
 
@@ -44,8 +47,8 @@ public class MessageRouter {
                 return;
             }
 
-            // 5. Tim ClientSession cua nguoi nhan trong SessionRegistry
-            ClientSession targetSession = registry.getSession(msg.target);
+            // 5. Tim ClientSession cua nguoi nhan trong OnlineUserRegistry
+            ClientSession targetSession = registry.find(msg.target);
             if (targetSession == null || !targetSession.isConnected()) {
                 // Nguoi nhan khong ton tai hoac da offline
                 sendErrorMessage(senderSession, msg.messageId, "USER_OFFLINE", "Nguoi nhan khong ton tai hoac da offline");

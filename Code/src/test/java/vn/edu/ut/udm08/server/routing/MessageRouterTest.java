@@ -1,38 +1,93 @@
 package vn.edu.ut.udm08.server.routing;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import vn.edu.ut.udm08.server.session.ClientSession;
-import vn.edu.ut.udm08.server.session.SessionRegistry;
+import vn.edu.ut.udm08.server.session.OnlineUserRegistry;
 import vn.edu.ut.udm08.shared.model.MessageType;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
+import vn.edu.ut.udm08.shared.protocol.JsonUtil;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class MessageRouterTest {
+class MessageRouterTest {
 
-    private SessionRegistry registry;
+    private OnlineUserRegistry registry;
     private MessageRouter router;
-    private DummyClientSession alice;
-    private DummyClientSession bob;
+
+    private ClientSession alice;
+    private ClientSession bob;
+
+    private Socket aliceClientSocket;
+    private Socket bobClientSocket;
+
+    private BufferedReader aliceReader;
+    private BufferedReader bobReader;
 
     @BeforeEach
-    public void setUp() {
-        registry = new SessionRegistry();
+    void setUp() throws IOException {
+        registry = new OnlineUserRegistry();
         router = new MessageRouter(registry);
 
-        alice = new DummyClientSession("alice", "avatar1");
-        bob = new DummyClientSession("bob", "avatar2");
+        SocketPair alicePair = createClientSocket();
+        SocketPair bobPair = createClientSocket();
 
-        registry.register(alice);
-        registry.register(bob);
+        aliceClientSocket = alicePair.clientSocket();
+        bobClientSocket = bobPair.clientSocket();
+
+        alice = ClientSession.createAnonymous(alicePair.serverSideSocket());
+        bob = ClientSession.createAnonymous(bobPair.serverSideSocket());
+
+        assertTrue(alice.authenticate("alice", "avatar1"));
+        assertTrue(bob.authenticate("bob", "avatar2"));
+
+        assertTrue(registry.register(alice));
+        assertTrue(registry.register(bob));
+
+        aliceReader = new BufferedReader(
+                new InputStreamReader(
+                        aliceClientSocket.getInputStream(),
+                        StandardCharsets.UTF_8
+                )
+        );
+
+        bobReader = new BufferedReader(
+                new InputStreamReader(
+                        bobClientSocket.getInputStream(),
+                        StandardCharsets.UTF_8
+                )
+        );
+    }
+
+    @AfterEach
+    void tearDown() throws IOException {
+        if (alice != null) {
+            alice.close();
+        }
+
+        if (bob != null) {
+            bob.close();
+        }
+
+        if (aliceClientSocket != null) {
+            aliceClientSocket.close();
+        }
+
+        if (bobClientSocket != null) {
+            bobClientSocket.close();
+        }
     }
 
     @Test
-    public void testGuiTinNhanThanhCong() {
+    void shouldRouteChatMessageSuccessfully() throws Exception {
         ProtocolMessage msg = new ProtocolMessage(MessageType.CHAT);
         msg.messageId = "101";
         msg.sender = "alice";
@@ -41,102 +96,115 @@ public class MessageRouterTest {
 
         router.handleChatMessage(alice, msg);
 
-        // Bob nhan duoc tin nhan CHAT
-        assertEquals(1, bob.receivedMessages.size());
-        assertEquals("Chao Bob", bob.receivedMessages.get(0).content);
+        ProtocolMessage receivedByBob = readMessage(bobReader);
+        ProtocolMessage receivedByAlice = readMessage(aliceReader);
 
-        // Alice nhan duoc phan hoi CHAT_OK
-        assertEquals(1, alice.receivedMessages.size());
-        assertEquals(MessageType.CHAT_OK, alice.receivedMessages.get(0).type);
+        assertEquals(MessageType.CHAT, receivedByBob.type);
+        assertEquals("alice", receivedByBob.sender);
+        assertEquals("bob", receivedByBob.target);
+        assertEquals("Chao Bob", receivedByBob.content);
+
+        assertEquals(MessageType.CHAT_OK, receivedByAlice.type);
+        assertEquals("101", receivedByAlice.messageId);
+        assertEquals("SERVER", receivedByAlice.sender);
     }
 
     @Test
-    public void testGiaMaoNguoiGui() {
+    void shouldRejectForgedSender() throws Exception {
         ProtocolMessage msg = new ProtocolMessage(MessageType.CHAT);
         msg.messageId = "102";
-        msg.sender = "eve"; // Gia mao
+        msg.sender = "eve";
         msg.target = "bob";
-        msg.content = "Tin nhan gia";
+        msg.content = "Tin nhan gia mao";
 
         router.handleChatMessage(alice, msg);
 
-        // Alice nhan duoc loi INVALID_SENDER
-        assertEquals(1, alice.receivedMessages.size());
-        assertEquals("INVALID_SENDER", alice.receivedMessages.get(0).errorCode);
+        ProtocolMessage error = readMessage(aliceReader);
+
+        assertEquals(MessageType.ERROR, error.type);
+        assertEquals("INVALID_SENDER", error.errorCode);
+        assertEquals("102", error.messageId);
+
+        assertNull(bobReader.ready() ? bobReader.readLine() : null);
     }
 
     @Test
-    public void testNguoiNhanOffline() {
+    void shouldRejectOfflineRecipient() throws Exception {
         ProtocolMessage msg = new ProtocolMessage(MessageType.CHAT);
         msg.messageId = "103";
         msg.sender = "alice";
-        msg.target = "charlie"; // Charlie khong online
+        msg.target = "charlie";
         msg.content = "Alo";
 
         router.handleChatMessage(alice, msg);
 
-        // Alice nhan duoc loi USER_OFFLINE
-        assertEquals(1, alice.receivedMessages.size());
-        assertEquals("USER_OFFLINE", alice.receivedMessages.get(0).errorCode);
+        ProtocolMessage error = readMessage(aliceReader);
+
+        assertEquals(MessageType.ERROR, error.type);
+        assertEquals("USER_OFFLINE", error.errorCode);
+        assertEquals("103", error.messageId);
     }
 
     @Test
-    public void testNoiDungRong() {
+    void shouldRejectEmptyContent() throws Exception {
         ProtocolMessage msg = new ProtocolMessage(MessageType.CHAT);
         msg.messageId = "104";
         msg.sender = "alice";
         msg.target = "bob";
-        msg.content = ""; // Noi dung rong
+        msg.content = "";
 
         router.handleChatMessage(alice, msg);
 
-        assertEquals(1, alice.receivedMessages.size());
-        assertEquals("INVALID_CONTENT", alice.receivedMessages.get(0).errorCode);
+        ProtocolMessage error = readMessage(aliceReader);
+
+        assertEquals(MessageType.ERROR, error.type);
+        assertEquals("INVALID_CONTENT", error.errorCode);
+        assertEquals("104", error.messageId);
     }
 
-    // Class Dummy ho tro test
-    private static class DummyClientSession implements ClientSession {
-        private String username;
-        private String avatarId;
-        public List<ProtocolMessage> receivedMessages = new ArrayList<>();
+    @Test
+    void shouldRejectContentLongerThan5000Characters() throws Exception {
+        ProtocolMessage msg = new ProtocolMessage(MessageType.CHAT);
+        msg.messageId = "105";
+        msg.sender = "alice";
+        msg.target = "bob";
+        msg.content = "a".repeat(5001);
 
-        public DummyClientSession(String username, String avatarId) {
-            this.username = username;
-            this.avatarId = avatarId;
-        }
+        router.handleChatMessage(alice, msg);
 
-        @Override
-        public String getUsername() {
-            return username;
-        }
+        ProtocolMessage error = readMessage(aliceReader);
 
-        @Override
-        public void setUsername(String username) {
-            this.username = username;
-        }
+        assertEquals(MessageType.ERROR, error.type);
+        assertEquals("CONTENT_TOO_LONG", error.errorCode);
+        assertEquals("105", error.messageId);
+    }
 
-        @Override
-        public String getAvatarId() {
-            return avatarId;
-        }
+    private ProtocolMessage readMessage(BufferedReader reader) throws Exception {
+        String json = reader.readLine();
 
-        @Override
-        public void setAvatarId(String avatarId) {
-            this.avatarId = avatarId;
-        }
+        assertNotNull(json, "Expected a message from the server");
 
-        @Override
-        public void sendMessage(ProtocolMessage message) throws Exception {
-            receivedMessages.add(message);
-        }
+        return JsonUtil.fromJson(json);
+    }
 
-        @Override
-        public boolean isConnected() {
-            return true;
-        }
+    private SocketPair createClientSocket() throws IOException {
+        ServerSocket serverSocket = new ServerSocket(0);
 
-        @Override
-        public void close() {
-        }
+        Socket clientSocket = new Socket(
+                "localhost",
+                serverSocket.getLocalPort()
+        );
+
+        Socket serverSideSocket = serverSocket.accept();
+
+        serverSocket.close();
+
+        return new SocketPair(clientSocket, serverSideSocket);
+    }
+
+    private record SocketPair(
+            Socket clientSocket,
+            Socket serverSideSocket
+    ) {
     }
 }
