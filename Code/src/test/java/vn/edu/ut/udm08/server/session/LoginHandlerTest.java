@@ -109,6 +109,37 @@ public class LoginHandlerTest {
             assertFalse(second.session.isConnected());
         }
     }
+    @Test
+    void rejectsNullOrNonHelloMessage() throws Exception {
+        OnlineUserRegistry registry = new OnlineUserRegistry();
+        LoginHandler handler = new LoginHandler(registry);
+        try (TestConnection connection = new TestConnection()) {
+            boolean loggedIn = handler.handleHello(connection.session, null);
+            ProtocolMessage error = connection.readMessage();
+            assertFalse(loggedIn);
+            assertEquals("INVALID_HELLO", error.errorCode);
+
+            ProtocolMessage chatMsg = new ProtocolMessage(MessageType.CHAT);
+            boolean loggedInChat = handler.handleHello(connection.session, chatMsg);
+            ProtocolMessage errorChat = connection.readMessage();
+            assertFalse(loggedInChat);
+            assertEquals("INVALID_HELLO", errorChat.errorCode);
+        }
+    }
+    @Test
+    void rejectsAlreadyAuthenticatedSession() throws Exception {
+        OnlineUserRegistry registry = new OnlineUserRegistry();
+        LoginHandler handler = new LoginHandler(registry);
+        try (TestConnection connection = new TestConnection()) {
+            assertTrue(handler.handleHello(connection.session, hello("user1", "01")));
+            connection.readMessage();
+            connection.readMessage();
+            boolean secondHello = handler.handleHello(connection.session, hello("user1", "01"));
+            ProtocolMessage error = connection.readMessage();
+            assertFalse(secondHello);
+            assertEquals("ALREADY_AUTHENTICATED", error.errorCode);
+        }
+    }
     private ProtocolMessage hello(String username, String avatarId) {
         ProtocolMessage message = new ProtocolMessage(MessageType.HELLO);
         message.sender = username;

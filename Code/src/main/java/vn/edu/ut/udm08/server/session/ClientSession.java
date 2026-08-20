@@ -14,7 +14,10 @@ public class ClientSession {
     private PrintWriter writer;
     private String username;
     private String avatarId;
-    private ClientSession(Socket socket) {
+    protected ClientSession() {
+        this.socket = null;
+    }
+    protected ClientSession(Socket socket) {
         this.socket = socket;
     }
     public static ClientSession createAnonymous(Socket socket) {

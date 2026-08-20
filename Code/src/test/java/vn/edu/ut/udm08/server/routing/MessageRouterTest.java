@@ -95,7 +95,7 @@ public class MessageRouterTest {
     }
 
     // Class Dummy ho tro test
-    private static class DummyClientSession implements ClientSession {
+    private static class DummyClientSession extends ClientSession {
         private String username;
         private String avatarId;
         public List<ProtocolMessage> receivedMessages = new ArrayList<>();
@@ -110,7 +110,6 @@ public class MessageRouterTest {
             return username;
         }
 
-        @Override
         public void setUsername(String username) {
             this.username = username;
         }
@@ -120,13 +119,12 @@ public class MessageRouterTest {
             return avatarId;
         }
 
-        @Override
         public void setAvatarId(String avatarId) {
             this.avatarId = avatarId;
         }
 
         @Override
-        public void sendMessage(ProtocolMessage message) throws Exception {
+        public void sendMessage(ProtocolMessage message) {
             receivedMessages.add(message);
         }
 
