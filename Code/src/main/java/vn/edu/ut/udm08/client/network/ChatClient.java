@@ -33,10 +33,29 @@ public class ChatClient {
      * @param avatarId ID ảnh đại diện người dùng chọn.
      * @param listener Callback để chuyển tiếp sự kiện mạng lên giao diện.
      * @throws IOException Nếu xảy ra lỗi kết nối mạng hoặc lỗi định dạng JSON.
+     * @throws IllegalArgumentException Nếu host hoặc port không hợp lệ.
      */
     public void connect(String host, int port, String username, String avatarId, ChatListener listener) throws IOException {
+        connect(new ClientConfig(host, port), username, avatarId, listener);
+    }
+
+    /**
+     * Kết nối đến TCP Server dựa trên cấu hình ClientConfig.
+     *
+     * @param config Cấu hình kết nối chứa Host và Port hợp lệ.
+     * @param username Tên người dùng kết nối.
+     * @param avatarId ID ảnh đại diện người dùng chọn.
+     * @param listener Callback để chuyển tiếp sự kiện mạng lên giao diện.
+     * @throws IOException Nếu xảy ra lỗi kết nối mạng hoặc lỗi định dạng JSON.
+     * @throws IllegalArgumentException Nếu config là null.
+     */
+    public void connect(ClientConfig config, String username, String avatarId, ChatListener listener) throws IOException {
+        if (config == null) {
+            throw new IllegalArgumentException("ClientConfig không được để null");
+        }
+
         // 1. Thiết lập kết nối Socket TCP
-        this.socket = new Socket(host, port);
+        this.socket = new Socket(config.getHost(), config.getPort());
         
         // 2. Khởi tạo các luồng đọc/ghi dữ liệu sử dụng UTF-8
         this.reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
