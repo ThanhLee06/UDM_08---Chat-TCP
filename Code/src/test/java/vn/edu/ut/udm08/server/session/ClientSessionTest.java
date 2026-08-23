@@ -1,12 +1,10 @@
 package vn.edu.ut.udm08.server.session;
+import java.net.ServerSocket;
 import java.net.Socket;
 import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import static org.junit.jupiter.api.Assertions.*;
+
 public class ClientSessionTest {
   @Test
   public void createsAnonymousSession() throws Exception {
@@ -66,5 +64,83 @@ public class ClientSessionTest {
     @Test
     void rejectsNullSocketUsingAssertThrows() {
         assertThrows(IllegalArgumentException.class, () -> ClientSession.createAnonymous(null));
+    }
+
+
+    //===========================
+    @Test
+    void createsIndependentSessions() throws Exception {
+        try (ServerSocket serverSocket = new ServerSocket(0);
+             Socket clientA = new Socket("localhost", serverSocket.getLocalPort());
+             Socket clientB = new Socket("localhost", serverSocket.getLocalPort());
+             Socket serverA = serverSocket.accept();
+             Socket serverB = serverSocket.accept()) {
+
+            ClientSession sessionA = ClientSession.createAnonymous(serverA);
+            ClientSession sessionB = ClientSession.createAnonymous(serverB);
+
+            assertNotNull(sessionA);
+            assertNotNull(sessionB);
+            assertNotSame(sessionA, sessionB);
+
+            assertFalse(sessionA.isAuthenticated());
+            assertFalse(sessionB.isAuthenticated());
+        }
+    }
+
+    @Test
+    void keepsSessionStateIndependent() throws Exception {
+        try (ServerSocket serverSocket = new ServerSocket(0);
+             Socket clientA = new Socket("localhost", serverSocket.getLocalPort());
+             Socket clientB = new Socket("localhost", serverSocket.getLocalPort());
+             Socket serverA = serverSocket.accept();
+             Socket serverB = serverSocket.accept()) {
+
+            ClientSession sessionA = ClientSession.createAnonymous(serverA);
+            ClientSession sessionB = ClientSession.createAnonymous(serverB);
+
+            assertTrue(sessionA.authenticate("user1", "01"));
+            assertFalse(sessionB.isAuthenticated());
+
+            assertEquals("user1", sessionA.getUsername());
+            assertNull(sessionB.getUsername());
+        }
+    }
+
+    @Test
+    void supportsMultipleConnectedSessions() throws Exception {
+        try (ServerSocket serverSocket = new ServerSocket(0);
+             Socket clientA = new Socket("localhost", serverSocket.getLocalPort());
+             Socket clientB = new Socket("localhost", serverSocket.getLocalPort());
+             Socket serverA = serverSocket.accept();
+             Socket serverB = serverSocket.accept()) {
+
+            ClientSession sessionA = ClientSession.createAnonymous(serverA);
+            ClientSession sessionB = ClientSession.createAnonymous(serverB);
+
+            assertTrue(sessionA.isConnected());
+            assertTrue(sessionB.isConnected());
+        }
+    }
+
+    @Test
+    void closingOneSessionDoesNotAffectAnotherSession() throws Exception {
+        try (ServerSocket serverSocket = new ServerSocket(0);
+             Socket clientA = new Socket("localhost", serverSocket.getLocalPort());
+             Socket clientB = new Socket("localhost", serverSocket.getLocalPort());
+             Socket serverA = serverSocket.accept();
+             Socket serverB = serverSocket.accept()) {
+
+            ClientSession sessionA = ClientSession.createAnonymous(serverA);
+            ClientSession sessionB = ClientSession.createAnonymous(serverB);
+
+            assertTrue(sessionA.isConnected());
+            assertTrue(sessionB.isConnected());
+
+            sessionA.close();
+
+            assertFalse(sessionA.isConnected());
+            assertTrue(sessionB.isConnected());
+        }
     }
 }
