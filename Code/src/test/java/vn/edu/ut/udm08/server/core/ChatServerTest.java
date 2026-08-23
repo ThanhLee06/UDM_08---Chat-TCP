@@ -296,4 +296,25 @@ class ChatServerTest {
             TimeUnit.MILLISECONDS.sleep(20);
         }
     }
+
+    //=============
+    @Test
+    void shouldKeepServerRunningAfterInvalidJsonFromClient() throws Exception {
+        server = createServer();
+        startServer();
+
+        try (Socket invalidClient = new Socket("localhost", server.getPort())) {
+            PrintWriter writer = writer(invalidClient);
+            writer.println("this-is-not-valid-json");
+
+            TimeUnit.MILLISECONDS.sleep(100);
+        }
+
+        assertTrue(server.isRunning());
+
+        try (Socket anotherClient = new Socket("localhost", server.getPort())) {
+            assertTrue(anotherClient.isConnected());
+            assertFalse(anotherClient.isClosed());
+        }
+    }
 }

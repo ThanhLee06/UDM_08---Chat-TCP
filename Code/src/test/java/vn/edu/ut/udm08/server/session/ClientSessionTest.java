@@ -1,7 +1,13 @@
 package vn.edu.ut.udm08.server.session;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+
 import org.junit.jupiter.api.Test;
+import vn.edu.ut.udm08.shared.model.MessageType;
+import vn.edu.ut.udm08.shared.model.ProtocolMessage;
+import vn.edu.ut.udm08.shared.protocol.JsonUtil;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -143,4 +149,167 @@ public class ClientSessionTest {
             assertTrue(sessionB.isConnected());
         }
     }
+
+    //========================
+    @Test
+    void shouldReadValidJsonMessage() throws Exception {
+        try (ServerSocket serverSocket = new ServerSocket(0);
+             Socket client = new Socket("localhost", serverSocket.getLocalPort());
+             Socket server = serverSocket.accept()) {
+
+            ClientSession session = ClientSession.createAnonymous(server);
+
+            ProtocolMessage message = new ProtocolMessage(MessageType.CHAT);
+            message.sender = "alice";
+            message.target = "bob";
+            message.content = "Hello Bob";
+
+            PrintWriter writer = new PrintWriter(new OutputStreamWriter(client.getOutputStream(), StandardCharsets.UTF_8), true);
+
+            writer.println(JsonUtil.toJson(message));
+
+            ProtocolMessage received = session.readMessage();
+
+            assertNotNull(received);
+            assertEquals(MessageType.CHAT, received.type);
+            assertEquals("alice", received.sender);
+            assertEquals("bob", received.target);
+            assertEquals("Hello Bob", received.content);
+        }
+    }
+
+    @Test
+    void shouldReadMultipleJsonLinesAsSeparateMessages() throws Exception {
+        try (ServerSocket serverSocket = new ServerSocket(0);
+             Socket client = new Socket("localhost", serverSocket.getLocalPort());
+             Socket server = serverSocket.accept()) {
+
+            ClientSession session = ClientSession.createAnonymous(server);
+
+            PrintWriter writer = new PrintWriter(new OutputStreamWriter(client.getOutputStream(), StandardCharsets.UTF_8), true);
+
+            ProtocolMessage first = new ProtocolMessage(MessageType.CHAT);
+            first.content = "First";
+
+            ProtocolMessage second = new ProtocolMessage(MessageType.CHAT);
+            second.content = "Second";
+
+            writer.println(JsonUtil.toJson(first));
+            writer.println(JsonUtil.toJson(second));
+
+            ProtocolMessage receivedFirst = session.readMessage();
+            ProtocolMessage receivedSecond = session.readMessage();
+
+            assertEquals("First", receivedFirst.content);
+            assertEquals("Second", receivedSecond.content);
+        }
+    }
+
+    @Test
+    void shouldPreserveUtf8Content() throws Exception {
+        try (ServerSocket serverSocket = new ServerSocket(0);
+            Socket client = new Socket("localhost", serverSocket.getLocalPort());
+            Socket server = serverSocket.accept()) {
+
+            ClientSession session = ClientSession.createAnonymous(server);
+
+            PrintWriter writer = new PrintWriter(new OutputStreamWriter(client.getOutputStream(), StandardCharsets.UTF_8), true);
+
+            ProtocolMessage message = new ProtocolMessage(MessageType.CHAT);
+            message.content = "Xin chào Việt Nam 👋";
+
+            writer.println(JsonUtil.toJson(message));
+
+            ProtocolMessage received = session.readMessage();
+
+            assertEquals("Xin chào Việt Nam 👋", received.content);
+        }
+    }
+
+    @Test
+    void shouldSendMessageAsJsonLine() throws Exception {
+        try (ServerSocket serverSocket = new ServerSocket(0);
+            Socket client = new Socket("localhost", serverSocket.getLocalPort());
+            Socket server = serverSocket.accept()) {
+
+            ClientSession session = ClientSession.createAnonymous(server);
+
+            BufferedReader reader = new BufferedReader(new InputStreamReader(client.getInputStream(), StandardCharsets.UTF_8));
+
+            ProtocolMessage message = new ProtocolMessage(MessageType.CHAT);
+            message.sender = "alice";
+            message.target = "bob";
+            message.content = "Hello Bob";
+
+            session.sendMessage(message);
+
+            String json = reader.readLine();
+
+            assertNotNull(json);
+
+            ProtocolMessage received = JsonUtil.fromJson(json);
+
+            assertEquals(MessageType.CHAT, received.type);
+            assertEquals("alice", received.sender);
+            assertEquals("bob", received.target);
+            assertEquals("Hello Bob", received.content);
+        }
+    }
+
+    @Test
+    void shouldPreserveAllProtocolFieldsThroughJsonLine() throws Exception {
+        try (ServerSocket serverSocket = new ServerSocket(0);
+            Socket client = new Socket("localhost", serverSocket.getLocalPort());
+            Socket server = serverSocket.accept()) {
+
+            ClientSession session = ClientSession.createAnonymous(server);
+
+            PrintWriter writer = new PrintWriter(new OutputStreamWriter(client.getOutputStream(), StandardCharsets.UTF_8), true);
+
+            ProtocolMessage message = new ProtocolMessage(MessageType.CHAT);
+            message.messageId = "msg-001";
+            message.sender = "alice";
+            message.target = "bob";
+            message.content = "Hello";
+            message.avatarId = "avatar-01";
+            message.timestamp = 123456789L;
+
+            writer.println(JsonUtil.toJson(message));
+
+            ProtocolMessage received = session.readMessage();
+
+            assertEquals("msg-001", received.messageId);
+            assertEquals("alice", received.sender);
+            assertEquals("bob", received.target);
+            assertEquals("Hello", received.content);
+            assertEquals("avatar-01", received.avatarId);
+            assertEquals(123456789L, received.timestamp);
+        }
+    }
+
+    @Test
+    void shouldRejectInvalidJsonSafely() throws Exception {
+        try (ServerSocket serverSocket = new ServerSocket(0);
+            Socket client = new Socket("localhost", serverSocket.getLocalPort());
+            Socket server = serverSocket.accept()) {
+
+            ClientSession session = ClientSession.createAnonymous(server);
+
+            PrintWriter writer = new PrintWriter(new OutputStreamWriter(client.getOutputStream(), StandardCharsets.UTF_8), true);
+
+            writer.println("this-is-not-valid-json");
+
+            assertThrows(IOException.class, session::readMessage);
+        }
+    }
+
+    @Test
+    void shouldRejectNullMessage() throws Exception {
+        try (Socket socket = new Socket()) {
+            ClientSession session = ClientSession.createAnonymous(socket);
+            assertThrows(IllegalArgumentException.class, () -> session.sendMessage(null));
+        }
+    }
+
+
 }
