@@ -59,6 +59,9 @@ public class MessageRouter {
             }
 
             // 6. Chuyen tiep nguyen ven goi tin CHAT sang nguoi nhan
+            if (msg.timestamp == null || msg.timestamp <= 0) {
+                msg.timestamp = System.currentTimeMillis();
+            }
             try {
                 targetSession.sendMessage(msg);
             } catch (Exception e) {
