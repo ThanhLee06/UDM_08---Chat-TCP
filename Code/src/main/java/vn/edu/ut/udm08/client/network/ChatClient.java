@@ -50,8 +50,17 @@ public class ChatClient {
      * @throws IllegalArgumentException Nếu config là null.
      */
     public void connect(ClientConfig config, String username, String avatarId, ChatListener listener) throws IOException {
+        if (isConnected()) {
+            throw new IllegalStateException("ChatClient đã được kết nối trước đó");
+        }
         if (config == null) {
             throw new IllegalArgumentException("ClientConfig không được để null");
+        }
+        if (username == null || username.isBlank()) {
+            throw new IllegalArgumentException("Username không được để trống");
+        }
+        if (avatarId == null || avatarId.isBlank()) {
+            throw new IllegalArgumentException("AvatarId không được để trống");
         }
 
         // 1. Thiết lập kết nối Socket TCP
@@ -61,8 +70,8 @@ public class ChatClient {
         this.reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
         this.writer = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
         
-        this.username = username;
-        this.avatarId = avatarId;
+        this.username = username.trim();
+        this.avatarId = avatarId.trim();
 
         // 3. Khởi chạy luồng nhận tin nhắn chạy ngầm (bọc JavaFX wrapper để an toàn luồng)
         ChatListener safeListener = new JavaFXChatListenerWrapper(listener);
@@ -154,38 +163,34 @@ public class ChatClient {
      * Đóng an toàn các luồng dữ liệu và socket.
      */
     private void closeResources() {
-        // Dừng luồng đọc ngầm trước
+        // Dừng cờ luồng đọc ngầm trước
         if (receiver != null) {
             receiver.stop();
             receiver = null;
+        }
+
+        // Đóng Socket trước để ngắt ngay lập tức mọi thao tác đọc/ghi đang chờ (blocking I/O)
+        try {
+            if (socket != null && !socket.isClosed()) {
+                socket.close();
+            }
+        } catch (IOException ignored) {
+        } finally {
+            socket = null;
         }
 
         try {
             if (reader != null) {
                 reader.close();
             }
-        } catch (IOException e) {
-            // Bỏ qua hoặc ghi log lỗi đóng luồng đọc
+        } catch (IOException ignored) {
         } finally {
             reader = null;
         }
 
-        try {
-            if (writer != null) {
-                writer.close();
-            }
-        } finally {
+        if (writer != null) {
+            writer.close();
             writer = null;
-        }
-
-        try {
-            if (socket != null && !socket.isClosed()) {
-                socket.close();
-            }
-        } catch (IOException e) {
-            // Bỏ qua hoặc ghi log lỗi đóng socket
-        } finally {
-            socket = null;
         }
     }
 
