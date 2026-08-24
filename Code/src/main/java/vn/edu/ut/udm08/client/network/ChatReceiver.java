@@ -2,6 +2,7 @@ package vn.edu.ut.udm08.client.network;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.util.Collections;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
 import vn.edu.ut.udm08.shared.protocol.JsonUtil;
 
@@ -31,8 +32,10 @@ public class ChatReceiver implements Runnable {
     public void run() {
         try {
             String line;
-            // Đọc liên tục cho tới khi stream đóng hoặc biến running bị tắt
             while (running && (line = reader.readLine()) != null) {
+                if (line.isBlank()) {
+                    continue;
+                }
                 try {
                     // Giải mã gói tin JSON từ Server
                     ProtocolMessage message = JsonUtil.fromJson(line);
@@ -45,6 +48,11 @@ public class ChatReceiver implements Runnable {
                         listener.onErrorReceived("JSON_PARSE_ERROR", "Lỗi cú pháp gói tin nhận được: " + e.getMessage());
                     }
                 }
+            }
+
+            // Nếu Server đóng luồng mạng (EOF line == null) trong khi client chưa chủ động stop()
+            if (running) {
+                notifyConnectionLost(new IOException("Máy chủ đã ngắt kết nối"));
             }
         } catch (IOException e) {
             // Khi luồng bị ngắt đột ngột (Socket đóng hoặc cáp mạng đứt)
@@ -64,17 +72,28 @@ public class ChatReceiver implements Runnable {
     }
 
     /**
+     * Kiểm tra trạng thái đang chạy của luồng đọc.
+     *
+     * @return true nếu luồng đang hoạt động, ngược lại false.
+     */
+    public boolean isRunning() {
+        return running;
+    }
+
+    /**
      * Phân loại và chuyển giao gói tin tới callback tương ứng.
      */
-    private void dispatchMessage(ProtocolMessage message) {
-        if (listener == null) return;
+    void dispatchMessage(ProtocolMessage message) {
+        if (listener == null || message == null || message.type == null) {
+            return;
+        }
 
         switch (message.type) {
             case HELLO_OK:
                 listener.onLoginSuccess(message);
                 break;
             case USER_LIST:
-                listener.onUserListUpdated(message.users);
+                listener.onUserListUpdated(message.users != null ? message.users : Collections.emptyList());
                 break;
             case CHAT:
                 listener.onMessageReceived(message);
@@ -86,7 +105,7 @@ public class ChatReceiver implements Runnable {
                 listener.onErrorReceived(message.errorCode, message.errorMessage);
                 break;
             default:
-                // Gói tin lạ chưa được hỗ trợ
+                // Gói tin không xác định / chưa hỗ trợ
                 break;
         }
     }
