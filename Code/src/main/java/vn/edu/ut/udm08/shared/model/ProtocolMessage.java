@@ -15,6 +15,9 @@ public class ProtocolMessage {
     public String errorMessage;
     public String replyTo;
     public String forwardOf;
+    public String convId;
+    public String fwdFrom;
+    public String kind;
     public ProtocolMessage() {}
     public ProtocolMessage(MessageType type) {
         this.type = type;

@@ -5,12 +5,33 @@ import vn.edu.ut.udm08.server.session.OnlineUserRegistry;
 import vn.edu.ut.udm08.shared.model.MessageType;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
 
+import vn.edu.ut.udm08.server.room.ForwardMessageHandler;
+import vn.edu.ut.udm08.server.room.InMemoryMessageDao;
+import vn.edu.ut.udm08.server.room.MessageDao;
+
 // Lop dinh tuyen tin nhan giua Client va Server
 public class MessageRouter {
     private final OnlineUserRegistry registry;
+    private final ForwardMessageHandler forwardHandler;
 
     public MessageRouter(OnlineUserRegistry registry) {
+        this(registry, new InMemoryMessageDao());
+    }
+
+    public MessageRouter(OnlineUserRegistry registry, MessageDao messageDao) {
         this.registry = registry;
+        this.forwardHandler = new ForwardMessageHandler(registry, messageDao);
+    }
+
+    public MessageRouter(OnlineUserRegistry registry, ForwardMessageHandler forwardHandler) {
+        this.registry = registry;
+        this.forwardHandler = forwardHandler;
+    }
+
+    public void handleForwardMessage(ClientSession senderSession, ProtocolMessage msg) {
+        if (forwardHandler != null) {
+            forwardHandler.handleForwardMessage(senderSession, msg);
+        }
     }
 
     // Xu ly dinh tuyen tin nhan CHAT rieng tu nguoi gui den nguoi nhan
