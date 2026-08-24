@@ -264,6 +264,35 @@ public class MessageRouterTest {
         assertEquals("msg-202", receivedByAlice.messageId);
     }
 
+    @Test
+    public void testTinNhanNullHandling() throws Exception {
+        router.handleChatMessage(aliceConnection.session, null);
+        ProtocolMessage err = aliceConnection.readMessage();
+        assertNotNull(err);
+        assertEquals(MessageType.ERROR, err.type);
+        assertEquals("INVALID_MESSAGE", err.errorCode);
+    }
+
+    @Test
+    public void testTargetSocketClosedReturnsUserOffline() throws Exception {
+        // Dong session cua Bob (nguoi nhan offline)
+        bobConnection.close();
+
+        ProtocolMessage msg = new ProtocolMessage(MessageType.CHAT);
+        msg.messageId = "msg-301";
+        msg.sender = "Alice";
+        msg.target = "Bob";
+        msg.content = "Gui khi Bob da offline";
+
+        router.handleChatMessage(aliceConnection.session, msg);
+
+        // Alice nhan duoc USER_OFFLINE
+        ProtocolMessage err = aliceConnection.readMessage();
+        assertNotNull(err);
+        assertEquals(MessageType.ERROR, err.type);
+        assertEquals("USER_OFFLINE", err.errorCode);
+    }
+
     private static class TestConnection implements AutoCloseable {
         private Socket clientSocket;
         private Socket serverSocket;

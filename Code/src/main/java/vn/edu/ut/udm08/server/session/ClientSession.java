@@ -54,7 +54,8 @@ public class ClientSession {
         }
         return JsonUtil.fromJson(json);
     }
-    public void sendMessage(ProtocolMessage message) throws IOException {
+    // Gui tin nhan TCP toi Client (Synchronized de dam bao nhieu luong khong bi de chong du lieu JSON)
+    public synchronized void sendMessage(ProtocolMessage message) throws IOException {
         if (message == null) {
             throw new IllegalArgumentException("Message != null");
         }

@@ -16,9 +16,15 @@ public class MessageRouter {
     // Xu ly dinh tuyen tin nhan CHAT rieng tu nguoi gui den nguoi nhan
     public void handleChatMessage(ClientSession senderSession, ProtocolMessage msg) {
         try {
+            // 0. Kiem tra goi tin null
+            if (msg == null) {
+                sendErrorMessage(senderSession, null, "INVALID_MESSAGE", "Ban tin khong hop le");
+                return;
+            }
+
             // 1. Kiem tra phien lam viec nguoi gui
             if (senderSession == null || senderSession.getUsername() == null) {
-                sendErrorMessage(senderSession, msg != null ? msg.messageId : null, "UNAUTHORIZED", "Chua dang nhap");
+                sendErrorMessage(senderSession, msg.messageId, "UNAUTHORIZED", "Chua dang nhap");
                 return;
             }
 
@@ -56,6 +62,9 @@ public class MessageRouter {
             try {
                 targetSession.sendMessage(msg);
             } catch (Exception e) {
+                // Dong va gỡ bo targetSession khoi registry neu socket bi hhong
+                registry.remove(targetSession);
+                targetSession.close();
                 sendErrorMessage(senderSession, msg.messageId, "DELIVERY_FAILED", "Khong the gui tin nhan toi nguoi nhan");
                 return;
             }
