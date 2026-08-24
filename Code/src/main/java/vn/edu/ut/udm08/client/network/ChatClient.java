@@ -151,9 +151,9 @@ public class ChatClient {
     }
 
     /**
-     * Ngắt kết nối TCP và đóng toàn bộ luồng dữ liệu an toàn.
+     * Ngắt kết nối TCP và đóng toàn bộ luồng dữ liệu an toàn (Idempotent).
      */
-    public void disconnect() {
+    public synchronized void disconnect() {
         try {
             // Gửi gói tin thông báo ngắt kết nối (DISCONNECT) trước khi đóng socket
             if (writer != null && socket != null && !socket.isClosed()) {
@@ -163,27 +163,27 @@ public class ChatClient {
                 try {
                     String json = JsonUtil.toJson(disconnectMessage);
                     writer.println(json);
-                } catch (Exception e) {
+                } catch (Exception ignored) {
                     // Bỏ qua lỗi JSON khi đang đóng kết nối
                 }
             }
         } finally {
-            // Đảm bảo đóng tất cả tài nguyên dù có lỗi xảy ra
+            // Đảm bảo đóng tất cả tài nguyên và đặt lại trạng thái dù có lỗi xảy ra
             closeResources();
         }
     }
 
     /**
-     * Đóng an toàn các luồng dữ liệu và socket.
+     * Đóng an toàn các luồng dữ liệu, socket và đặt lại trạng thái client.
      */
     private void closeResources() {
-        // Dừng cờ luồng đọc ngầm trước
+        // 1. Dừng cờ luồng đọc ngầm trước
         if (receiver != null) {
             receiver.stop();
             receiver = null;
         }
 
-        // Đóng Socket trước để ngắt ngay lập tức mọi thao tác đọc/ghi đang chờ (blocking I/O)
+        // 2. Đóng Socket trước để ngắt ngay lập tức mọi thao tác đọc/ghi đang chờ (blocking I/O)
         try {
             if (socket != null && !socket.isClosed()) {
                 socket.close();
@@ -193,6 +193,7 @@ public class ChatClient {
             socket = null;
         }
 
+        // 3. Đóng luồng đọc
         try {
             if (reader != null) {
                 reader.close();
@@ -202,10 +203,15 @@ public class ChatClient {
             reader = null;
         }
 
+        // 4. Đóng luồng ghi
         if (writer != null) {
             writer.close();
             writer = null;
         }
+
+        // 5. Đặt lại thông tin người dùng để sẵn sàng cho lần kết nối sau
+        this.username = null;
+        this.avatarId = null;
     }
 
     /**

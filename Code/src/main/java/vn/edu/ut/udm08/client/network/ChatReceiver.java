@@ -111,13 +111,16 @@ public class ChatReceiver implements Runnable {
     }
 
     /**
-     * Báo lỗi mất kết nối đường truyền đột ngột.
+     * Báo lỗi mất kết nối đường truyền đột ngột và dọn dẹp tài nguyên.
      */
     private void notifyConnectionLost(Throwable cause) {
-        if (listener != null) {
-            listener.onConnectionLost(cause);
+        try {
+            // Đóng Socket và dọn dẹp tài nguyên trước để đảm bảo trạng thái đã ngắt kết nối
+            client.disconnect();
+        } finally {
+            if (listener != null) {
+                listener.onConnectionLost(cause);
+            }
         }
-        // Gọi đóng Socket ở client để đồng bộ lại trạng thái kết nối
-        client.disconnect();
     }
 }
