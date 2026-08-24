@@ -2,6 +2,7 @@ package vn.edu.ut.udm08.client.network;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.util.Collections;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
 import vn.edu.ut.udm08.shared.protocol.JsonUtil;
 
@@ -82,15 +83,17 @@ public class ChatReceiver implements Runnable {
     /**
      * Phân loại và chuyển giao gói tin tới callback tương ứng.
      */
-    private void dispatchMessage(ProtocolMessage message) {
-        if (listener == null) return;
+    void dispatchMessage(ProtocolMessage message) {
+        if (listener == null || message == null || message.type == null) {
+            return;
+        }
 
         switch (message.type) {
             case HELLO_OK:
                 listener.onLoginSuccess(message);
                 break;
             case USER_LIST:
-                listener.onUserListUpdated(message.users);
+                listener.onUserListUpdated(message.users != null ? message.users : Collections.emptyList());
                 break;
             case CHAT:
                 listener.onMessageReceived(message);
@@ -102,7 +105,7 @@ public class ChatReceiver implements Runnable {
                 listener.onErrorReceived(message.errorCode, message.errorMessage);
                 break;
             default:
-                // Gói tin lạ chưa được hỗ trợ
+                // Gói tin không xác định / chưa hỗ trợ
                 break;
         }
     }
