@@ -83,12 +83,16 @@ public class ChatController {
         this.sendListener = listener;
     }
 
-    // Gọi mỗi khi server gửi xuống danh sách user đang online (
     public void updateOnlineUsers(List<UserProfile> users) {
-       
         Platform.runLater(() -> {
-           
-            onlineUsers.setAll(users);
+            if (users == null) {
+                onlineUsers.clear();
+                return;
+            }
+            List<UserProfile> otherUsers = users.stream()
+                    .filter(u -> u != null && u.username != null && !u.username.equalsIgnoreCase(currentUsername))
+                    .toList();
+            onlineUsers.setAll(otherUsers);
         });
     }
 
@@ -96,15 +100,11 @@ public class ChatController {
    
     public void receiveMessage(ProtocolMessage message) {
         Platform.runLater(() -> {
-          
             boolean isMine = message.sender != null && message.sender.equals(currentUsername);
-
-        
-            boolean belongsToCurrentChat = selectedUser != null &&
-                    (message.sender.equals(selectedUser.username) || isMine);
+            if (isMine) return;
+            boolean belongsToCurrentChat = selectedUser != null && message.sender.equals(selectedUser.username);
             if (belongsToCurrentChat) {
-             
-                addMessageBubble(message.content, isMine);
+                addMessageBubble(message.content, false);
             }
         });
     }
