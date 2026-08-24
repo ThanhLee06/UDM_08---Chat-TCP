@@ -7,6 +7,7 @@ import java.io.PrintWriter;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.io.IOException;
+import java.util.UUID;
 
 import vn.edu.ut.udm08.shared.model.MessageType;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
@@ -108,8 +109,9 @@ public class ChatClient {
      * Đóng gói và gửi gói tin CHAT đến một đối tượng nhận (target).
      *
      * @param target Tên người nhận tin nhắn (username nhận tin hoặc tên phòng/kênh).
-     * @param content Nội dung tin nhắn cần gửi.
+     * @param content Nội dung tin nhắn cần gửi (tối đa 5000 ký tự).
      * @throws IOException Nếu kết nối bị ngắt hoặc xảy ra lỗi luồng ghi.
+     * @throws IllegalArgumentException Nếu target hoặc content rỗng, hoặc content vượt quá 5000 ký tự.
      */
     public void sendMessage(String target, String content) throws IOException {
         // 1. Kiểm tra trạng thái kết nối
@@ -117,20 +119,32 @@ public class ChatClient {
             throw new IOException("Không thể gửi tin nhắn: Chưa kết nối đến Server hoặc kết nối đã bị đóng.");
         }
 
-        // 2. Tạo đối tượng tin nhắn CHAT
+        // 2. Kiểm tra tính hợp lệ của dữ liệu đầu vào
+        if (target == null || target.isBlank()) {
+            throw new IllegalArgumentException("Người nhận (target) không được để trống");
+        }
+        if (content == null || content.isBlank()) {
+            throw new IllegalArgumentException("Nội dung tin nhắn không được để trống");
+        }
+        if (content.length() > 5000) {
+            throw new IllegalArgumentException("Nội dung tin nhắn quá dài (tối đa 5000 ký tự)");
+        }
+
+        // 3. Tạo đối tượng tin nhắn CHAT với ID duy nhất
         ProtocolMessage chatMessage = new ProtocolMessage(MessageType.CHAT);
+        chatMessage.messageId = UUID.randomUUID().toString();
         chatMessage.sender = this.username;
-        chatMessage.target = target;
-        chatMessage.content = content;
+        chatMessage.target = target.trim();
+        chatMessage.content = content.trim();
         chatMessage.timestamp = System.currentTimeMillis();
 
-        // 3. Chuyển đổi đối tượng tin nhắn thành chuỗi JSON
+        // 4. Chuyển đổi đối tượng tin nhắn thành chuỗi JSON Lines
         String json = JsonUtil.toJson(chatMessage);
 
-        // 4. Gửi chuỗi JSON qua Socket
+        // 5. Gửi chuỗi JSON qua Socket
         sendRawMessage(json);
 
-        // 5. Kiểm tra lỗi vật lý trên luồng ghi dữ liệu
+        // 6. Kiểm tra lỗi vật lý trên luồng ghi dữ liệu
         if (writer != null && writer.checkError()) {
             throw new IOException("Không thể gửi tin nhắn: Gặp lỗi vật lý trên luồng truyền dữ liệu TCP Socket.");
         }
