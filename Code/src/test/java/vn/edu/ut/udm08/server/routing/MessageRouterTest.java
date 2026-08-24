@@ -293,6 +293,28 @@ public class MessageRouterTest {
         assertEquals("USER_OFFLINE", err.errorCode);
     }
 
+    @Test
+    public void testSenderDisconnectedWhenSendingChatOK() throws Exception {
+        ProtocolMessage msg = new ProtocolMessage(MessageType.CHAT);
+        msg.messageId = "msg-302";
+        msg.sender = "Alice";
+        msg.target = "Bob";
+        msg.content = "Gui thanh cong nhung Alice dong connection ngay";
+        msg.timestamp = System.currentTimeMillis();
+
+        // Dong connection cua Alice ngay truoc khi goi handleChatMessage
+        aliceConnection.close();
+
+        // Server xu ly: message toi Bob thanh cong, va khong bi throw Exception khi gui CHAT_OK cho Alice
+        assertDoesNotThrow(() -> router.handleChatMessage(aliceConnection.session, msg));
+
+        // Bob van nhan duoc tin nhan
+        ProtocolMessage receivedByBob = bobConnection.readMessage();
+        assertNotNull(receivedByBob);
+        assertEquals("msg-302", receivedByBob.messageId);
+        assertEquals("Gui thanh cong nhung Alice dong connection ngay", receivedByBob.content);
+    }
+
     private static class TestConnection implements AutoCloseable {
         private Socket clientSocket;
         private Socket serverSocket;

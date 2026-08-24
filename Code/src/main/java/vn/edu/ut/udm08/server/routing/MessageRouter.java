@@ -69,14 +69,19 @@ public class MessageRouter {
                 return;
             }
 
-            // 7. Phan hoi goi tin CHAT_OK ve cho nguoi gui xac nhan da toi dich
+            // 7. Phan hoi goi tin CHAT_OK ve cho nguoi gui xac nhan da toi dich thành công
             ProtocolMessage okMsg = new ProtocolMessage(MessageType.CHAT_OK);
             okMsg.messageId = msg.messageId;
             okMsg.sender = "SERVER";
             okMsg.target = msg.sender;
             okMsg.timestamp = System.currentTimeMillis();
 
-            senderSession.sendMessage(okMsg);
+            try {
+                senderSession.sendMessage(okMsg);
+            } catch (Exception e) {
+                // Sender ngắt kết nối ngay sau khi gửi - Bỏ qua an toàn để không ảnh hưởng Server
+                System.err.println("Khong the gui CHAT_OK ve cho sender (da ngat ket noi): " + e.getMessage());
+            }
 
         } catch (Exception e) {
             // Try-catch an toan: bat moi loi de khong lam sap server
