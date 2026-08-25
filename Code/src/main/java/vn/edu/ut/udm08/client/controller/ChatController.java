@@ -76,7 +76,14 @@ public class ChatController {
 
     public void updateOnlineUsers(List<UserProfile> users) {
         Platform.runLater(() -> {
-            onlineUsers.setAll(users);
+            if (users == null) {
+                onlineUsers.clear();
+                return;
+            }
+            List<UserProfile> otherUsers = users.stream()
+                    .filter(u -> u != null && u.username != null && !u.username.equalsIgnoreCase(currentUsername))
+                    .toList();
+            onlineUsers.setAll(otherUsers);
         });
     }
 
@@ -88,6 +95,10 @@ public class ChatController {
                     (message.sender.equals(selectedUser.username) || isMine);
             if (belongsToCurrentChat) {
                 addMessageBubble(message.sender, message.content, message.timestamp, isMine);
+            if (isMine) return;
+            boolean belongsToCurrentChat = selectedUser != null && message.sender.equals(selectedUser.username);
+            if (belongsToCurrentChat) {
+                addMessageBubble(message.content, false);
             }
         });
     }

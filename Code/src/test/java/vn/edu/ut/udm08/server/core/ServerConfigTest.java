@@ -19,14 +19,19 @@ class ServerConfigTest {
     }
 
     @Test
+    void shouldAllowZeroPortForEphemeralBinding() {
+        Properties properties = new Properties();
+        properties.setProperty("server.port", "0");
+
+        ServerConfig config = ServerConfig.fromProperties(properties);
+
+        assertEquals(0, config.getPort());
+    }
+
+    @Test
     void shouldRejectMissingPort() {
         Properties properties = new Properties();
-
-        IllegalStateException exception = assertThrows(
-                IllegalStateException.class,
-                () -> ServerConfig.fromProperties(properties)
-        );
-
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> ServerConfig.fromProperties(properties));
         assertTrue(exception.getMessage().contains("server.port"));
     }
 
@@ -35,21 +40,15 @@ class ServerConfigTest {
         Properties properties = new Properties();
         properties.setProperty("server.port", "abc");
 
-        assertThrows(
-                IllegalStateException.class,
-                () -> ServerConfig.fromProperties(properties)
-        );
+        assertThrows(IllegalStateException.class, () -> ServerConfig.fromProperties(properties));
     }
 
     @Test
-    void shouldRejectPortBelowOne() {
+    void shouldRejectNegativePort() {
         Properties properties = new Properties();
-        properties.setProperty("server.port", "0");
+        properties.setProperty("server.port", "-1");
 
-        assertThrows(
-                IllegalStateException.class,
-                () -> ServerConfig.fromProperties(properties)
-        );
+        assertThrows(IllegalStateException.class, () -> ServerConfig.fromProperties(properties));
     }
 
     @Test
@@ -57,10 +56,7 @@ class ServerConfigTest {
         Properties properties = new Properties();
         properties.setProperty("server.port", "65536");
 
-        assertThrows(
-                IllegalStateException.class,
-                () -> ServerConfig.fromProperties(properties)
-        );
+        assertThrows(IllegalStateException.class, () -> ServerConfig.fromProperties(properties));
     }
 
     @Test
