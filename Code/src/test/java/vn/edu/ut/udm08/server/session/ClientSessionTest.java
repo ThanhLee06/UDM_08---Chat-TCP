@@ -304,6 +304,77 @@ public class ClientSessionTest {
     }
 
     @Test
+    void shouldEndSessionWhenClientDisconnects() throws Exception {
+        try (ServerSocket serverSocket = new ServerSocket(0);
+             Socket client = new Socket("localhost", serverSocket.getLocalPort());
+             Socket server = serverSocket.accept()) {
+
+            ClientSession session = ClientSession.createAnonymous(server);
+
+            Thread sessionThread = new Thread(session);
+            sessionThread.start();
+
+            Thread.sleep(50);
+
+            assertTrue(session.isRunning());
+
+            client.close();
+
+            sessionThread.join(2000);
+
+            assertFalse(session.isRunning());
+            assertFalse(session.isConnected());
+        }
+    }
+
+    @Test
+    void shouldInvokeDisconnectHandlerWhenSessionEnds() throws Exception {
+        try (ServerSocket serverSocket = new ServerSocket(0);
+             Socket client = new Socket("localhost", serverSocket.getLocalPort());
+             Socket server = serverSocket.accept()) {
+
+            ClientSession session = ClientSession.createAnonymous(server);
+
+            java.util.concurrent.atomic.AtomicBoolean disconnected =
+                    new java.util.concurrent.atomic.AtomicBoolean(false);
+
+            session.setDisconnectHandler(() -> disconnected.set(true));
+
+            Thread sessionThread = new Thread(session);
+            sessionThread.start();
+
+            client.close();
+
+            sessionThread.join(2000);
+
+            assertFalse(sessionThread.isAlive());
+            assertTrue(disconnected.get());
+            assertFalse(session.isRunning());
+        }
+    }
+
+    @Test
+    void shouldCloseSessionResourcesSafely() throws Exception {
+        try (ServerSocket serverSocket = new ServerSocket(0);
+             Socket client = new Socket("localhost", serverSocket.getLocalPort());
+             Socket server = serverSocket.accept()) {
+
+            ClientSession session = ClientSession.createAnonymous(server);
+
+            session.close();
+
+            assertFalse(session.isConnected());
+            assertFalse(session.isRunning());
+
+            // close() phải idempotent, gọi lần hai không được lỗi
+            session.close();
+
+            assertFalse(session.isConnected());
+            assertFalse(session.isRunning());
+        }
+    }
+
+    @Test
     void shouldRejectNullMessage() throws Exception {
         try (Socket socket = new Socket()) {
             ClientSession session = ClientSession.createAnonymous(socket);
