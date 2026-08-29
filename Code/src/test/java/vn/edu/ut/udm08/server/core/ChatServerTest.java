@@ -317,4 +317,84 @@ class ChatServerTest {
             assertFalse(anotherClient.isClosed());
         }
     }
+
+    @Test
+    void shouldKeepOtherClientWorkingAfterOneClientSendsInvalidJson() throws Exception {
+        server = createServer();
+        startServer();
+
+        try (Socket invalidClient = new Socket("localhost", server.getPort());
+             Socket validClient = new Socket("localhost", server.getPort())) {
+
+            invalidClient.setSoTimeout(2000);
+            validClient.setSoTimeout(2000);
+
+            BufferedReader validReader = reader(validClient);
+            PrintWriter invalidWriter = writer(invalidClient);
+            PrintWriter validWriter = writer(validClient);
+
+            // Client A sends malformed JSON.
+            invalidWriter.println("this-is-not-valid-json");
+
+            TimeUnit.MILLISECONDS.sleep(100);
+
+            // Client B must still be able to communicate normally.
+            ProtocolMessage hello = new ProtocolMessage(MessageType.HELLO);
+            hello.sender = "bob";
+            hello.avatarId = "avatar-02";
+
+            validWriter.println(JsonUtil.toJson(hello));
+
+            ProtocolMessage helloOk = readMessage(validReader);
+            ProtocolMessage userList = readMessage(validReader);
+
+            assertEquals(MessageType.HELLO_OK, helloOk.type);
+            assertEquals("bob", helloOk.target);
+
+            assertEquals(MessageType.USER_LIST, userList.type);
+            assertTrue(userList.users.stream()
+                    .anyMatch(user -> "bob".equals(user.username)));
+
+            assertTrue(server.isRunning());
+        }
+    }
+
+    @Test
+    void shouldKeepServerAcceptingClientsAfterOneClientSessionFails() throws Exception {
+        server = createServer();
+        startServer();
+
+        try (Socket failedClient = new Socket("localhost", server.getPort())) {
+
+            PrintWriter failedWriter = writer(failedClient);
+
+            failedWriter.println("malformed-json");
+
+            TimeUnit.MILLISECONDS.sleep(100);
+
+            assertTrue(server.isRunning());
+
+            try (Socket newClient = new Socket("localhost", server.getPort())) {
+
+                newClient.setSoTimeout(2000);
+
+                BufferedReader reader = reader(newClient);
+                PrintWriter writer = writer(newClient);
+
+                sendHello(writer, "charlie", "avatar-03");
+
+                ProtocolMessage helloOk = readMessage(reader);
+                ProtocolMessage userList = readMessage(reader);
+
+                assertEquals(MessageType.HELLO_OK, helloOk.type);
+                assertEquals("charlie", helloOk.target);
+
+                assertEquals(MessageType.USER_LIST, userList.type);
+                assertTrue(userList.users.stream()
+                        .anyMatch(user -> "charlie".equals(user.username)));
+            }
+        }
+
+        assertTrue(server.isRunning());
+    }
 }
