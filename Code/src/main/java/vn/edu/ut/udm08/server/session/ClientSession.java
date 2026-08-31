@@ -62,10 +62,13 @@ public class ClientSession implements Runnable {
                     messageHandler.accept(message);
                 }
             }
-        } catch (IOException e) {
+        }
+        catch (IOException e) {
             System.err.println("Client session I/O error: " + e.getMessage());
-        } finally {
-            running = false;
+        }
+        finally {
+            close();
+            System.out.println("Client session disconnected");
             if (disconnectHandler != null) {
                 disconnectHandler.run();
             }
@@ -143,9 +146,30 @@ public class ClientSession implements Runnable {
 
     public void close() {
         running = false;
+
         try {
-            socket.close();
-        } catch (IOException ignored) {
+            if (reader != null) {
+                reader.close();
+            }
+        }
+        catch (IOException ignored) {
+            //
+        } finally {
+            reader = null;
+        }
+
+        if (writer != null) {
+            writer.close();
+            writer = null;
+        }
+
+        try {
+            if (socket != null && !socket.isClosed()) {
+                socket.close();
+            }
+        }
+        catch (IOException ignored) {
+            //
         }
     }
 

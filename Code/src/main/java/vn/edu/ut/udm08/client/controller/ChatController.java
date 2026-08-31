@@ -89,12 +89,15 @@ public class ChatController {
 
     public void receiveMessage(ProtocolMessage message) {
         Platform.runLater(() -> {
-            boolean isMine = message.sender != null && message.sender.equals(currentUsername);
-            if (isMine) return;
+            if (message == null) {
+                return;
+            }
 
-            boolean belongsToCurrentChat = selectedUser != null && message.sender.equals(selectedUser.username);
+            boolean isMine = message.sender != null && message.sender.equals(currentUsername);
+            boolean belongsToCurrentChat = selectedUser != null && message.sender != null && (message.sender.equals(selectedUser.username) || isMine);
+
             if (belongsToCurrentChat) {
-                addMessageBubble(message.sender, message.content, message.timestamp, false);
+                addMessageBubble(message.sender, message.content, message.timestamp, isMine);
             }
         });
     }
