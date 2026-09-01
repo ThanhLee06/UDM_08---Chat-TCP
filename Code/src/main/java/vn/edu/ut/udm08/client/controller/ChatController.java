@@ -94,7 +94,6 @@ public class ChatController {
             }
 
             boolean isMine = message.sender != null && message.sender.equals(currentUsername);
-
             boolean belongsToCurrentChat = selectedUser != null && message.sender != null && (message.sender.equals(selectedUser.username) || isMine);
 
             if (belongsToCurrentChat) {
