@@ -6,6 +6,8 @@ import vn.edu.ut.udm08.server.repository.IUserRepository;
 import vn.edu.ut.udm08.shared.dto.RegisterRequest;
 import vn.edu.ut.udm08.shared.dto.RegisterResponse;
 import vn.edu.ut.udm08.shared.model.User;
+import vn.edu.ut.udm08.shared.security.IPasswordEncoder;
+import vn.edu.ut.udm08.shared.security.PasswordEncoder;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -13,19 +15,21 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.junit.jupiter.api.Assertions.*;
 public class UserRegisterServiceTest {
     private UserRegisterService service;
+    private IPasswordEncoder passwordEncoder;
     @BeforeEach
     public void setUp() {
-        service = new UserRegisterService(new TestUserRepository());
+        passwordEncoder = new PasswordEncoder();
+        service = new UserRegisterService(new TestUserRepository(), passwordEncoder);
     }
     @Test
-    public void testRegisterSuccess() {
+    public void testRegisterSuccessHashesPassword() {
         RegisterRequest request = new RegisterRequest("ThanhUser", "0901234567", "thanh@gmail.com", "pass123", "PRESET", "01.png");
         RegisterResponse response = service.register(request);
         assertTrue(response.isSuccess());
         assertNotNull(response.getUser());
         assertEquals("ThanhUser", response.getUser().getUsername());
-        assertEquals("0901234567", response.getUser().getPhoneNumber());
-        assertEquals("thanh@gmail.com", response.getUser().getEmail());
+        assertNotEquals("pass123", response.getUser().getPasswordHash());
+        assertTrue(passwordEncoder.matches("pass123", response.getUser().getPasswordHash()));
     }
     @Test
     public void testRegisterRejectsDuplicateUsername() {
