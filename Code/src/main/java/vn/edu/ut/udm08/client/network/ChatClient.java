@@ -75,7 +75,9 @@ public class ChatClient {
         this.avatarId = avatarId.trim();
 
         // 3. Khởi chạy luồng nhận tin nhắn chạy ngầm (bọc JavaFX wrapper để an toàn luồng)
-        ChatListener safeListener = new JavaFXChatListenerWrapper(listener);
+//        ChatListener safeListener = new JavaFXChatListenerWrapper(listener);
+        ChatListener safeListener = listener;
+
         this.receiver = new ChatReceiver(this, reader, safeListener);
         Thread receiverThread = new Thread(this.receiver, "ChatReceiverThread");
         receiverThread.setDaemon(true); // Đảm bảo thread tự tắt khi app JavaFX chính dừng

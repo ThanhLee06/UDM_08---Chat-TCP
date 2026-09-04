@@ -59,7 +59,11 @@ public class ClientSession implements Runnable {
                 }
 
                 if (messageHandler != null) {
-                    messageHandler.accept(message);
+                    try {
+                        messageHandler.accept(message);
+                    } catch (RuntimeException e) {
+                        System.err.println("Client session message handling error: " + e.getMessage());
+                    }
                 }
             }
         }
