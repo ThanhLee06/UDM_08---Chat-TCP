@@ -7,6 +7,8 @@ import javafx.fxml.FXML;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.Parent;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import vn.edu.ut.udm08.shared.model.MessageType;
@@ -37,6 +39,8 @@ public class ChatController {
     private UserProfile selectedUser; 
     //luu lai tin nhan duoc chon de reply
     private ProtocolMessage replyingToMessage;
+    //thanh quote hien dang hien thi 
+    private HBox replyBar;
 
     private static final String[] AVATAR_COLORS = {
             "#0068ff", "#00c853", "#ff6d00", "#e91e63",
@@ -106,6 +110,7 @@ public class ChatController {
 
     private void selectUser(UserProfile user) {
         this.selectedUser = user;
+         cancelReply();
 
         chatPartnerName.setText(user.username);
         chatPartnerInitial.setText(user.username.substring(0, 1).toUpperCase());
@@ -128,7 +133,12 @@ public class ChatController {
         message.sender = currentUsername;                    
         message.target = selectedUser.username;             
         message.content = content;                           
-        message.timestamp = System.currentTimeMillis();      
+        message.timestamp = System.currentTimeMillis(); 
+        if (replyingToMessage != null) {
+        message.replyToMessageId = replyingToMessage.messageId;
+        message.replyToSender = replyingToMessage.sender;
+        message.replyToContent = replyingToMessage.content;
+        }       
 
         addMessageBubble(message, true);
         messageInput.clear(); 
@@ -136,6 +146,7 @@ public class ChatController {
         if (sendListener != null) {
             sendListener.onSendMessage(message);
         }
+        cancelReply();
     }
 
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
@@ -192,7 +203,44 @@ public class ChatController {
     }
      private void startReply(ProtocolMessage message) {
         this.replyingToMessage = message;
-        System.out.println("Đang trả lời tin nhắn: " + message.content);
+         showReplyBar(message);
+    }
+    private void showReplyBar(ProtocolMessage message) {
+        removeReplyBar();
+
+        Label replyingToLabel = new Label("Đang trả lời " + message.sender);
+        replyingToLabel.getStyleClass().add("reply-bar-sender");
+
+        Label quoteText = new Label(message.content);
+        quoteText.getStyleClass().add("reply-bar-text");
+
+        VBox quoteInfo = new VBox(2, replyingToLabel, quoteText);
+
+        Button cancelButton = new Button("✕");
+        cancelButton.getStyleClass().add("reply-cancel-button");
+        cancelButton.setOnAction(e -> cancelReply());
+
+        replyBar = new HBox(10, quoteInfo, cancelButton);
+        replyBar.getStyleClass().add("reply-bar");
+        HBox.setHgrow(quoteInfo, Priority.ALWAYS);
+
+        Parent inputRow = messageInput.getParent();
+        if (inputRow != null && inputRow.getParent() instanceof VBox rootBox) {
+            int index = rootBox.getChildren().indexOf(inputRow);
+            if (index >= 0) {
+                rootBox.getChildren().add(index, replyBar);
+            }
+        }
+    }
+    private void cancelReply() {
+        replyingToMessage = null;
+        removeReplyBar();
+    }
+    private void removeReplyBar() {
+        if (replyBar != null && replyBar.getParent() instanceof VBox parentBox) {
+            parentBox.getChildren().remove(replyBar);
+        }
+        replyBar = null;
     }
 
     private static String avatarColorFor(String username) {

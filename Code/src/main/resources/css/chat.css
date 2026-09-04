@@ -234,3 +234,17 @@
   -fx-text-fill: #65676b;
   -fx-padding: 0 4 0 4;
 }
+.reply-bar {
+    -fx-background-color: #f0f0f0;
+    -fx-padding: 6 10;
+    -fx-background-radius: 6;
+}
+.reply-bar-sender {
+    -fx-font-size: 11px;
+    -fx-text-fill: #0068ff;
+    -fx-font-weight: bold;
+}
+.reply-bar-text {
+    -fx-font-size: 12px;
+    -fx-text-fill: #555555;
+}
