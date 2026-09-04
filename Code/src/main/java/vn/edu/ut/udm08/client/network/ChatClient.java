@@ -151,6 +151,60 @@ public class ChatClient {
     }
 
     /**
+     * Gửi tin nhắn trả lời (Reply) một tin nhắn trước đó trong cuộc hội thoại (ST-050).
+     *
+     * @param convId Mã cuộc hội thoại hoặc người nhận (không được để trống).
+     * @param content Nội dung tin nhắn trả lời (tối đa 5000 ký tự).
+     * @param replyToMessageId Mã tin nhắn đang được trả lời (không được để trống).
+     * @return Đối tượng {@link ProtocolMessage} vừa được gửi đi.
+     * @throws IOException Nếu chưa kết nối hoặc gặp lỗi luồng I/O Socket.
+     * @throws IllegalArgumentException Nếu convId, content hoặc replyToMessageId rỗng, hoặc nội dung vượt quá 5000 ký tự.
+     */
+    public ProtocolMessage sendReply(String convId, String content, String replyToMessageId) throws IOException {
+        // 1. Kiểm tra trạng thái kết nối
+        if (!isConnected()) {
+            throw new IOException("Không thể gửi tin nhắn trả lời: Chưa kết nối đến Server hoặc kết nối đã bị đóng.");
+        }
+
+        // 2. Kiểm tra tính hợp lệ của dữ liệu đầu vào
+        if (convId == null || convId.isBlank()) {
+            throw new IllegalArgumentException("Mã hội thoại (convId) không được để trống");
+        }
+        if (content == null || content.isBlank()) {
+            throw new IllegalArgumentException("Nội dung tin nhắn trả lời không được để trống");
+        }
+        if (content.length() > 5000) {
+            throw new IllegalArgumentException("Nội dung tin nhắn quá dài (tối đa 5000 ký tự)");
+        }
+        if (replyToMessageId == null || replyToMessageId.isBlank()) {
+            throw new IllegalArgumentException("Mã tin nhắn được trả lời (replyTo) không được để trống");
+        }
+
+        // 3. Tạo đối tượng tin nhắn CHAT kèm trường replyTo và convId
+        ProtocolMessage replyMessage = new ProtocolMessage(MessageType.CHAT);
+        replyMessage.messageId = UUID.randomUUID().toString();
+        replyMessage.sender = this.username;
+        replyMessage.target = convId.trim();
+        replyMessage.convId = convId.trim();
+        replyMessage.content = content.trim();
+        replyMessage.replyTo = replyToMessageId.trim();
+        replyMessage.timestamp = System.currentTimeMillis();
+
+        // 4. Chuyển đổi đối tượng tin nhắn thành chuỗi JSON Lines
+        String json = JsonUtil.toJson(replyMessage);
+
+        // 5. Gửi chuỗi JSON qua Socket
+        sendRawMessage(json);
+
+        // 6. Kiểm tra lỗi vật lý trên luồng ghi dữ liệu
+        if (writer != null && writer.checkError()) {
+            throw new IOException("Không thể gửi tin nhắn trả lời: Gặp lỗi vật lý trên luồng truyền dữ liệu TCP Socket.");
+        }
+
+        return replyMessage;
+    }
+
+    /**
      * Ngắt kết nối TCP và đóng toàn bộ luồng dữ liệu an toàn (Idempotent).
      */
     public synchronized void disconnect() {
