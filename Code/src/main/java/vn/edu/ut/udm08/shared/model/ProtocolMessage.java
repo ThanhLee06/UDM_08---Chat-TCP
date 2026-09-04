@@ -13,6 +13,10 @@ public class ProtocolMessage {
     public List<UserProfile> users;
     public String errorCode;
     public String errorMessage;
+    public String convId;
+    public String replyTo;
+    public String fwdFrom;
+
     public ProtocolMessage() {}
     public ProtocolMessage(MessageType type) {
         this.type = type;
