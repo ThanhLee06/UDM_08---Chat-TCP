@@ -35,6 +35,8 @@ public class ChatController {
 
     private String currentUsername;
     private UserProfile selectedUser; 
+    //luu lai tin nhan duoc chon de reply
+    private ProtocolMessage replyingToMessage;
 
     private static final String[] AVATAR_COLORS = {
             "#0068ff", "#00c853", "#ff6d00", "#e91e63",
@@ -97,7 +99,7 @@ public class ChatController {
             boolean belongsToCurrentChat = selectedUser != null && message.sender != null && (message.sender.equals(selectedUser.username) || isMine);
 
             if (belongsToCurrentChat) {
-                addMessageBubble(message.sender, message.content, message.timestamp, isMine);
+                addMessageBubble(message, isMine);
             }
         });
     }
@@ -128,7 +130,7 @@ public class ChatController {
         message.content = content;                           
         message.timestamp = System.currentTimeMillis();      
 
-        addMessageBubble(currentUsername, content, message.timestamp, true);
+        addMessageBubble(message, true);
         messageInput.clear(); 
 
         if (sendListener != null) {
@@ -139,13 +141,21 @@ public class ChatController {
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
 
     // Tạo 1 bubble tin nhắn (kèm avatar, tên, timestamp) và thêm vào khung chat
-    private void addMessageBubble(String sender, String content, long timestamp, boolean isMine) {
-        Label bubble = new Label(content);
+       private void addMessageBubble(ProtocolMessage message, boolean isMine) {
+        Label bubble = new Label(message.content);
         bubble.getStyleClass().add(isMine ? "message-bubble-sent" : "message-bubble-received");
         bubble.setWrapText(true);
         bubble.setMaxWidth(400);
+        bubble.setUserData(message);
+        ContextMenu contextMenu = new ContextMenu();
+        MenuItem replyItem = new MenuItem("Trả lời");
+        replyItem.setOnAction(e -> startReply(message));
+        contextMenu.getItems().add(replyItem);
+        bubble.setOnContextMenuRequested(e ->
+                contextMenu.show(bubble, e.getScreenX(), e.getScreenY())
+        );
 
-        String timeText = Instant.ofEpochMilli(timestamp)
+        String timeText = Instant.ofEpochMilli(message.timestamp)
                 .atZone(ZoneId.systemDefault())
                 .format(TIME_FORMAT);
         Label timeLabel = new Label(timeText);
@@ -161,14 +171,14 @@ public class ChatController {
             column.getChildren().addAll(bubble, timeLabel);
             row.getChildren().add(column);
         } else {
-            Label initial = new Label(sender.substring(0, 1).toUpperCase());
+            Label initial = new Label(message.sender.substring(0, 1).toUpperCase());
             initial.getStyleClass().add("avatar-text-small");
 
             StackPane avatar = new StackPane(initial);
             avatar.getStyleClass().add("avatar-circle-small");
-            avatar.setStyle("-fx-background-color: " + avatarColorFor(sender) + ";");
+            avatar.setStyle("-fx-background-color: " + avatarColorFor(message.sender) + ";");
 
-            Label nameLabel = new Label(sender);
+            Label nameLabel = new Label(message.sender);
             nameLabel.getStyleClass().add("message-sender-name");
 
             column.getChildren().addAll(nameLabel, bubble, timeLabel);
@@ -179,6 +189,10 @@ public class ChatController {
 
         messageScrollPane.layout();
         messageScrollPane.setVvalue(1.0);
+    }
+     private void startReply(ProtocolMessage message) {
+        this.replyingToMessage = message;
+        System.out.println("Đang trả lời tin nhắn: " + message.content);
     }
 
     private static String avatarColorFor(String username) {
