@@ -15,12 +15,13 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 /**
  * Lớp quản lý bộ nhớ đệm (In-Memory Cache) tin nhắn phía Client theo từng hội thoại (convId).
  * <p>
- * Tính năng chính:
+ * Hỗ trợ các nghiệp vụ:
  * <ul>
- *   <li>Lưu trữ tin nhắn theo từng convId riêng biệt.</li>
- *   <li>Tra cứu tin nhắn cực nhanh O(1) theo messageId phục vụ tính năng reply và forward.</li>
- *   <li>Giới hạn dung lượng cache tối đa N tin nhắn gần nhất mỗi hội thoại để tránh tràn bộ nhớ (Memory Leak).</li>
- *   <li>Đảm bảo an toàn đa luồng (Thread-safe) giữa Socket Reader Thread và JavaFX Application Thread thông qua ReadWriteLock.</li>
+ *   <li>Lưu trữ tin nhắn theo từng convId riêng biệt (ST-049).</li>
+ *   <li>Tra cứu tin nhắn gốc nhanh O(1) theo messageId phục vụ tính năng reply và forward (ST-052).</li>
+ *   <li>Tra cứu ngược hội thoại chứa tin nhắn: messageId -> convId (ST-052).</li>
+ *   <li>Giới hạn dung lượng cache tối đa N tin gần nhất mỗi hội thoại để chống tràn RAM (FIFO Eviction).</li>
+ *   <li>Đảm bảo an toàn đa luồng (Thread-safe) giữa Socket Thread và UI JavaFX Thread.</li>
  * </ul>
  *
  * @author UDM_08 Team
@@ -36,8 +37,11 @@ public class ConversationCache {
     /** Bảng băm lưu trữ danh sách tin nhắn: Key = convId, Value = Danh sách tin nhắn theo thứ tự thời gian */
     private final Map<String, LinkedList<ProtocolMessage>> conversationMap;
 
-    /** Bảng băm chỉ mục tra cứu nhanh: Key = messageId, Value = ProtocolMessage */
+    /** Bảng băm chỉ mục tra cứu nhanh: Key = messageId, Value = ProtocolMessage (O(1) lookup) */
     private final Map<String, ProtocolMessage> messageIndex;
+
+    /** Bảng băm tra cứu ngược: Key = messageId, Value = convId */
+    private final Map<String, String> messageToConvMap;
 
     /** Khóa Read-Write Lock để đồng bộ hóa đa luồng an toàn và tối ưu hiệu năng đọc */
     private final ReadWriteLock rwLock;
@@ -64,6 +68,7 @@ public class ConversationCache {
         this.maxMessagesPerConversation = maxMessagesPerConversation;
         this.conversationMap = new HashMap<>();
         this.messageIndex = new HashMap<>();
+        this.messageToConvMap = new HashMap<>();
         this.rwLock = new ReentrantReadWriteLock();
         this.readLock = rwLock.readLock();
         this.writeLock = rwLock.writeLock();
@@ -71,9 +76,6 @@ public class ConversationCache {
 
     /**
      * Thêm một tin nhắn mới vào bộ nhớ đệm của một hội thoại cụ thể.
-     * <p>
-     * Nếu số lượng tin nhắn trong hội thoại vượt quá giới hạn {@link #maxMessagesPerConversation},
-     * tin nhắn cũ nhất sẽ tự động bị loại bỏ (FIFO Eviction) để giải phóng bộ nhớ.
      *
      * @param convId Mã định danh hội thoại (không được null hoặc rỗng).
      * @param message Đối tượng tin nhắn cần lưu vào cache (không được null).
@@ -94,14 +96,15 @@ public class ConversationCache {
             // Cập nhật chỉ mục messageId nếu tin nhắn có messageId
             if (message.messageId != null && !message.messageId.isBlank()) {
                 messageIndex.put(message.messageId, message);
+                messageToConvMap.put(message.messageId, convId);
             }
 
             // Kiểm tra và loại bỏ tin nhắn cũ nhất nếu vượt quá dung lượng tối đa
             while (list.size() > maxMessagesPerConversation) {
                 ProtocolMessage oldest = list.removeFirst();
                 if (oldest != null && oldest.messageId != null) {
-                    // Xóa khỏi bảng chỉ mục để tránh rò rỉ bộ nhớ
                     messageIndex.remove(oldest.messageId);
+                    messageToConvMap.remove(oldest.messageId);
                 }
             }
             return true;
@@ -146,24 +149,23 @@ public class ConversationCache {
 
         if (message.messageId != null && !message.messageId.isBlank()) {
             messageIndex.put(message.messageId, message);
+            messageToConvMap.put(message.messageId, convId);
         }
 
         while (list.size() > maxMessagesPerConversation) {
             ProtocolMessage oldest = list.removeFirst();
             if (oldest != null && oldest.messageId != null) {
                 messageIndex.remove(oldest.messageId);
+                messageToConvMap.remove(oldest.messageId);
             }
         }
     }
 
     /**
      * Lấy toàn bộ danh sách tin nhắn hiện có trong bộ nhớ đệm của một cuộc hội thoại.
-     * <p>
-     * Trả về bản sao danh sách không thể sửa đổi (Unmodifiable List) để đảm bảo luồng UI
-     * không làm ảnh hưởng đến dữ liệu gốc bên trong cache.
      *
      * @param convId Mã định danh cuộc hội thoại.
-     * @return Danh sách tin nhắn theo thứ tự thời gian (hoặc danh sách rỗng nếu hội thoại chưa có tin nhắn).
+     * @return Danh sách tin nhắn không thể sửa đổi (Unmodifiable List).
      */
     public List<ProtocolMessage> getMessages(String convId) {
         if (convId == null || convId.isBlank()) {
@@ -176,7 +178,6 @@ public class ConversationCache {
             if (list == null || list.isEmpty()) {
                 return Collections.emptyList();
             }
-            // Trả về bản sao độc lập để an toàn luồng
             return Collections.unmodifiableList(new ArrayList<>(list));
         } finally {
             readLock.unlock();
@@ -184,12 +185,11 @@ public class ConversationCache {
     }
 
     /**
-     * Tra cứu nhanh tin nhắn theo mã messageId từ tất cả các cuộc hội thoại đang được cache.
-     * <p>
-     * Thao tác tra cứu đạt độ phức tạp O(1) nhờ bảng băm chỉ mục {@link #messageIndex}.
+     * Tra cứu nhanh tin nhắn gốc theo mã messageId từ tất cả các cuộc hội thoại đang được cache.
+     * (Nghiệp vụ cốt lõi ST-052 phục vụ Reply & Forward)
      *
      * @param messageId Mã định danh tin nhắn cần tìm.
-     * @return Đối tượng {@link ProtocolMessage} nếu tìm thấy, ngược lại trả về null.
+     * @return Đối tượng {@link ProtocolMessage} nếu tìm thấy trong cache, null nếu không tồn tại.
      */
     public ProtocolMessage getMessageById(String messageId) {
         if (messageId == null || messageId.isBlank()) {
@@ -199,6 +199,56 @@ public class ConversationCache {
         readLock.lock();
         try {
             return messageIndex.get(messageId);
+        } finally {
+            readLock.unlock();
+        }
+    }
+
+    /**
+     * Tra cứu tin nhắn gốc theo messageId (Bí danh - Alias cho {@link #getMessageById(String)}).
+     *
+     * @param messageId Mã định danh tin nhắn gốc.
+     * @return Tin nhắn gốc nếu có trong cache, ngược lại null.
+     */
+    public ProtocolMessage findOriginalMessage(String messageId) {
+        return getMessageById(messageId);
+    }
+
+    /**
+     * Kiểm tra xem một tin nhắn có đang tồn tại trong bộ nhớ đệm hay không (O(1)).
+     *
+     * @param messageId Mã định danh tin nhắn.
+     * @return true nếu tin nhắn có trong cache, ngược lại false.
+     */
+    public boolean containsMessage(String messageId) {
+        if (messageId == null || messageId.isBlank()) {
+            return false;
+        }
+
+        readLock.lock();
+        try {
+            return messageIndex.containsKey(messageId);
+        } finally {
+            readLock.unlock();
+        }
+    }
+
+    /**
+     * Tra cứu ngược: Tìm mã cuộc hội thoại (convId) mà tin nhắn này thuộc về.
+     * <p>
+     * Hỗ trợ tính năng: Nhấp vào quote tin nhắn reply để tự động cuộn đến tin gốc trong hội thoại.
+     *
+     * @param messageId Mã định danh tin nhắn.
+     * @return convId chứa tin nhắn hoặc null nếu không tìm thấy.
+     */
+    public String getConversationIdByMessageId(String messageId) {
+        if (messageId == null || messageId.isBlank()) {
+            return null;
+        }
+
+        readLock.lock();
+        try {
+            return messageToConvMap.get(messageId);
         } finally {
             readLock.unlock();
         }
@@ -284,6 +334,7 @@ public class ConversationCache {
                 for (ProtocolMessage msg : list) {
                     if (msg != null && msg.messageId != null) {
                         messageIndex.remove(msg.messageId);
+                        messageToConvMap.remove(msg.messageId);
                     }
                 }
             }
@@ -300,6 +351,7 @@ public class ConversationCache {
         try {
             conversationMap.clear();
             messageIndex.clear();
+            messageToConvMap.clear();
         } finally {
             writeLock.unlock();
         }
