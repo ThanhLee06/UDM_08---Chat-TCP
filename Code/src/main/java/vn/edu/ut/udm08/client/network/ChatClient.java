@@ -205,6 +205,57 @@ public class ChatClient {
     }
 
     /**
+     * Gửi tin nhắn chuyển tiếp (Forward) từ một tin nhắn gốc sang hội thoại đích (ST-051).
+     *
+     * @param targetConvId Mã cuộc hội thoại đích cần chuyển tiếp tin nhắn tới (không được để trống).
+     * @param content Lời nhắn kèm theo khi chuyển tiếp (có thể null hoặc rỗng nếu chỉ chuyển tiếp tin gốc, tối đa 5000 ký tự).
+     * @param fwdFromMessageId Mã định danh của tin nhắn gốc cần chuyển tiếp (không được để trống).
+     * @return Đối tượng {@link ProtocolMessage} vừa được gửi đi.
+     * @throws IOException Nếu chưa kết nối hoặc gặp lỗi luồng I/O Socket.
+     * @throws IllegalArgumentException Nếu targetConvId hoặc fwdFromMessageId rỗng, hoặc nội dung vượt quá 5000 ký tự.
+     */
+    public ProtocolMessage sendForward(String targetConvId, String content, String fwdFromMessageId) throws IOException {
+        // 1. Kiểm tra trạng thái kết nối
+        if (!isConnected()) {
+            throw new IOException("Không thể gửi tin nhắn chuyển tiếp: Chưa kết nối đến Server hoặc kết nối đã bị đóng.");
+        }
+
+        // 2. Kiểm tra tính hợp lệ của dữ liệu đầu vào
+        if (targetConvId == null || targetConvId.isBlank()) {
+            throw new IllegalArgumentException("Mã hội thoại đích (targetConvId) không được để trống");
+        }
+        if (fwdFromMessageId == null || fwdFromMessageId.isBlank()) {
+            throw new IllegalArgumentException("Mã tin nhắn nguồn chuyển tiếp (fwdFrom) không được để trống");
+        }
+        if (content != null && content.length() > 5000) {
+            throw new IllegalArgumentException("Nội dung tin nhắn chuyển tiếp quá dài (tối đa 5000 ký tự)");
+        }
+
+        // 3. Tạo đối tượng tin nhắn CHAT kèm trường fwdFrom và convId đích
+        ProtocolMessage forwardMessage = new ProtocolMessage(MessageType.CHAT);
+        forwardMessage.messageId = UUID.randomUUID().toString();
+        forwardMessage.sender = this.username;
+        forwardMessage.target = targetConvId.trim();
+        forwardMessage.convId = targetConvId.trim();
+        forwardMessage.content = (content != null && !content.isBlank()) ? content.trim() : "";
+        forwardMessage.fwdFrom = fwdFromMessageId.trim();
+        forwardMessage.timestamp = System.currentTimeMillis();
+
+        // 4. Chuyển đổi đối tượng tin nhắn thành chuỗi JSON Lines
+        String json = JsonUtil.toJson(forwardMessage);
+
+        // 5. Gửi chuỗi JSON qua Socket
+        sendRawMessage(json);
+
+        // 6. Kiểm tra lỗi vật lý trên luồng ghi dữ liệu
+        if (writer != null && writer.checkError()) {
+            throw new IOException("Không thể gửi tin nhắn chuyển tiếp: Gặp lỗi vật lý trên luồng truyền dữ liệu TCP Socket.");
+        }
+
+        return forwardMessage;
+    }
+
+    /**
      * Ngắt kết nối TCP và đóng toàn bộ luồng dữ liệu an toàn (Idempotent).
      */
     public synchronized void disconnect() {
