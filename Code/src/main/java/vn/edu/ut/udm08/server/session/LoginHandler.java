@@ -12,6 +12,36 @@ public class LoginHandler {
         }
         this.registry = registry;
     }
+    public boolean handleLoginSuccess(ClientSession session, vn.edu.ut.udm08.shared.model.User user) {
+        if (session == null || user == null || user.getId() == null) {
+            return false;
+        }
+        if (session.isAuthenticated()) {
+            sendError(session, "ALREADY_AUTHENTICATED", "Phien nay da dang nhap");
+            return false;
+        }
+
+        if (user.getUsername() != null && !user.getUsername().isBlank()) {
+            registry.kickSession(user.getUsername(), "Tài khoản của bạn vừa đăng nhập ở một thiết bị khác.");
+        }
+        if (user.getPhoneNumber() != null && !user.getPhoneNumber().isBlank()) {
+            registry.kickSession(user.getPhoneNumber(), "Tài khoản của bạn vừa đăng nhập ở một thiết bị khác.");
+        }
+
+        boolean authenticated = session.authenticate(user);
+        if (!authenticated) {
+            sendError(session, "INVALID_IDENTITY", "Thong tin dang nhap khong hop le");
+            return false;
+        }
+        boolean registered = registry.register(session);
+        if (!registered) {
+            sendError(session, "USERNAME_TAKEN", "Tai khoan da dang nhap tren thiet bi khac");
+            return false;
+        }
+        broadcastUserList();
+        return true;
+    }
+
     public boolean handleHello(ClientSession session, ProtocolMessage message) {
         if (session == null) {
             return false;
@@ -32,11 +62,7 @@ public class LoginHandler {
             sendError(session, "INVALID_AVATAR", "Avatar khong hop le");
             return false;
         }
-        if (registry.find(message.sender) != null) {
-            sendError(session, "USERNAME_TAKEN", "Username da co nguoi su dung");
-            session.close();
-            return false;
-        }
+        registry.kickSession(message.sender, "Tài khoản của bạn vừa đăng nhập ở một thiết bị khác.");
         boolean authenticated = session.authenticate(message.sender, message.avatarId);
         if (!authenticated) {
             sendError(session, "INVALID_IDENTITY", "Thong tin dang nhap khong hop le");
