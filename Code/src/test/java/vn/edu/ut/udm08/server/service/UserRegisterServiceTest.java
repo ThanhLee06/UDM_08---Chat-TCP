@@ -1,5 +1,4 @@
 package vn.edu.ut.udm08.server.service;
-
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import vn.edu.ut.udm08.server.repository.IUserRepository;
@@ -23,37 +22,58 @@ public class UserRegisterServiceTest {
     }
     @Test
     public void testRegisterSuccessHashesPassword() {
-        RegisterRequest request = new RegisterRequest("ThanhUser", "0901234567", "thanh@gmail.com", "pass123", "PRESET", "01.png");
+        RegisterRequest request = new RegisterRequest("ThanhUser", "0901234567", "thanh@gmail.com", "Pass123@", "PRESET", "01.png");
         RegisterResponse response = service.register(request);
         assertTrue(response.isSuccess());
         assertNotNull(response.getUser());
         assertEquals("ThanhUser", response.getUser().getUsername());
-        assertNotEquals("pass123", response.getUser().getPasswordHash());
-        assertTrue(passwordEncoder.matches("pass123", response.getUser().getPasswordHash()));
+        assertNotEquals("Pass123@", response.getUser().getPasswordHash());
+        assertTrue(passwordEncoder.matches("Pass123@", response.getUser().getPasswordHash()));
+    }
+    @Test
+    public void testRegisterRejectsInvalidEmail() {
+        RegisterRequest request = new RegisterRequest("ThanhUser", "0901234567", "invalid-email-format", "Pass123@", "PRESET", "01.png");
+        RegisterResponse response = service.register(request);
+        assertFalse(response.isSuccess());
+        assertEquals("Email không hợp lệ", response.getMessage());
+    }
+    @Test
+    public void testRegisterRejectsWeakPasswordShort() {
+        RegisterRequest request = new RegisterRequest("ThanhUser", "0901234567", "thanh@gmail.com", "P1@", "PRESET", "01.png");
+        RegisterResponse response = service.register(request);
+        assertFalse(response.isSuccess());
+        assertEquals("Mật khẩu phải có ít nhất 8 ký tự", response.getMessage());
+    }
+    @Test
+    public void testRegisterRejectsWeakPasswordNoSpecialChar() {
+        RegisterRequest request = new RegisterRequest("ThanhUser", "0901234567", "thanh@gmail.com", "Password123", "PRESET", "01.png");
+        RegisterResponse response = service.register(request);
+        assertFalse(response.isSuccess());
+        assertEquals("Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt", response.getMessage());
     }
     @Test
     public void testRegisterRejectsDuplicateUsername() {
-        RegisterRequest request1 = new RegisterRequest("ThanhUser", "0901234567", "thanh1@gmail.com", "pass123", "PRESET", "01.png");
+        RegisterRequest request1 = new RegisterRequest("ThanhUser", "0901234567", "thanh1@gmail.com", "Pass123@", "PRESET", "01.png");
         service.register(request1);
-        RegisterRequest request2 = new RegisterRequest("thanhuser", "0909999999", "thanh2@gmail.com", "pass123", "PRESET", "01.png");
+        RegisterRequest request2 = new RegisterRequest("thanhuser", "0909999999", "thanh2@gmail.com", "Pass123@", "PRESET", "01.png");
         RegisterResponse response = service.register(request2);
         assertFalse(response.isSuccess());
         assertEquals("Tên đăng nhập đã được sử dụng", response.getMessage());
     }
     @Test
     public void testRegisterRejectsDuplicatePhone() {
-        RegisterRequest request1 = new RegisterRequest("User1", "0901234567", "thanh1@gmail.com", "pass123", "PRESET", "01.png");
+        RegisterRequest request1 = new RegisterRequest("User1", "0901234567", "thanh1@gmail.com", "Pass123@", "PRESET", "01.png");
         service.register(request1);
-        RegisterRequest request2 = new RegisterRequest("User2", "0901234567", "thanh2@gmail.com", "pass123", "PRESET", "01.png");
+        RegisterRequest request2 = new RegisterRequest("User2", "0901234567", "thanh2@gmail.com", "Pass123@", "PRESET", "01.png");
         RegisterResponse response = service.register(request2);
         assertFalse(response.isSuccess());
         assertEquals("Số điện thoại đã được đăng ký", response.getMessage());
     }
     @Test
     public void testRegisterRejectsDuplicateEmail() {
-        RegisterRequest request1 = new RegisterRequest("User1", "0901234567", "thanh@gmail.com", "pass123", "PRESET", "01.png");
+        RegisterRequest request1 = new RegisterRequest("User1", "0901234567", "thanh@gmail.com", "Pass123@", "PRESET", "01.png");
         service.register(request1);
-        RegisterRequest request2 = new RegisterRequest("User2", "0909999999", "THANH@gmail.com", "pass123", "PRESET", "01.png");
+        RegisterRequest request2 = new RegisterRequest("User2", "0909999999", "THANH@gmail.com", "Pass123@", "PRESET", "01.png");
         RegisterResponse response = service.register(request2);
         assertFalse(response.isSuccess());
         assertEquals("Email đã được sử dụng", response.getMessage());

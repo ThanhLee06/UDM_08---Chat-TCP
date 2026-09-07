@@ -6,15 +6,26 @@ import vn.edu.ut.udm08.shared.mapper.UserMapper;
 import vn.edu.ut.udm08.shared.model.User;
 import vn.edu.ut.udm08.shared.security.IPasswordEncoder;
 import vn.edu.ut.udm08.shared.security.PasswordEncoder;
+import vn.edu.ut.udm08.shared.validation.EmailValidator;
+import vn.edu.ut.udm08.shared.validation.IEmailValidator;
+import vn.edu.ut.udm08.shared.validation.IPasswordValidator;
+import vn.edu.ut.udm08.shared.validation.PasswordValidator;
 public class UserRegisterService {
     private final IUserRepository userRepository;
     private final IPasswordEncoder passwordEncoder;
+    private final IEmailValidator emailValidator;
+    private final IPasswordValidator passwordValidator;
     public UserRegisterService(IUserRepository userRepository) {
         this(userRepository, new PasswordEncoder());
     }
     public UserRegisterService(IUserRepository userRepository, IPasswordEncoder passwordEncoder) {
+        this(userRepository, passwordEncoder, new EmailValidator(), new PasswordValidator());
+    }
+    public UserRegisterService(IUserRepository userRepository, IPasswordEncoder passwordEncoder, IEmailValidator emailValidator, IPasswordValidator passwordValidator) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.emailValidator = emailValidator;
+        this.passwordValidator = passwordValidator;
     }
     public RegisterResponse register(RegisterRequest request) {
         if (request == null) {
@@ -22,6 +33,13 @@ public class UserRegisterService {
         }
         if (request.getUsername() == null || request.getUsername().trim().isEmpty() || request.getPhoneNumber() == null || request.getPhoneNumber().trim().isEmpty() || request.getEmail() == null || request.getEmail().trim().isEmpty() || request.getPassword() == null || request.getPassword().trim().isEmpty()) {
             return RegisterResponse.fail("Vui lòng nhập đầy đủ thông tin");
+        }
+        if (!emailValidator.isValidEmail(request.getEmail())) {
+            return RegisterResponse.fail("Email không hợp lệ");
+        }
+        String passwordError = passwordValidator.getValidationError(request.getPassword());
+        if (passwordError != null) {
+            return RegisterResponse.fail(passwordError);
         }
         if (userRepository.existsByUsername(request.getUsername())) {
             return RegisterResponse.fail("Tên đăng nhập đã được sử dụng");
