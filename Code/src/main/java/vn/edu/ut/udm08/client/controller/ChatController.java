@@ -16,6 +16,10 @@ import javafx.scene.Node;
 import vn.edu.ut.udm08.shared.model.MessageType;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
 import vn.edu.ut.udm08.shared.model.UserProfile;
+import javafx.scene.layout.FlowPane;
+import javafx.stage.Popup;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -34,6 +38,7 @@ public class ChatController {
     @FXML private TextField messageInput;
     @FXML private Button sendButton;
     @FXML private VBox emptyStatePane;    
+    @FXML private Label emojiIcon;
 
     private final ObservableList<UserProfile> onlineUsers = FXCollections.observableArrayList();
 
@@ -158,6 +163,67 @@ public class ChatController {
             sendListener.onSendMessage(message);
         }
     }
+    private static final Map<String, String[]> EMOJI_GROUPS = new LinkedHashMap<>();
+static {
+    EMOJI_GROUPS.put("Mặt cười", new String[]{
+        "😀","😁","😂","🤣","😊","😍","😘","😜","🤔","😎","😢","😭","😡","😱","🥳","🙄"
+    });
+    EMOJI_GROUPS.put("Cử chỉ", new String[]{
+        "👍","👎","👏","🙏","💪","👌","✌️","🤝","👋","🤟","🫶","🖐️"
+    });
+    EMOJI_GROUPS.put("Động vật", new String[]{
+        "🐶","🐱","🐭","🐰","🦊","🐻","🐼","🐸","🐵","🦁","🐷","🐔"
+    });
+    EMOJI_GROUPS.put("Đồ ăn", new String[]{
+        "🍎","🍕","🍔","🍟","🍩","🍰","☕","🍺","🍜","🍣","🍫","🥗"
+    });
+    EMOJI_GROUPS.put("Trái tim", new String[]{
+        "❤️","🧡","💛","💚","💙","💜","🖤","🤍","💕","💖","💔","❤️‍🔥"
+    });
+}
+
+private void handleEmojiButtonClick() {
+    Popup popup = new Popup();
+    popup.setAutoHide(true);
+
+    TabPane tabPane = new TabPane();
+    tabPane.setPrefSize(320, 260);
+    tabPane.getStyleClass().add("emoji-tab-pane");
+
+    for (Map.Entry<String, String[]> group : EMOJI_GROUPS.entrySet()) {
+        FlowPane flowPane = new FlowPane(6, 6);
+        flowPane.setPrefWrapLength(300);
+        flowPane.getStyleClass().add("emoji-flow-pane");
+
+        for (String emoji : group.getValue()) {
+            Button emojiButton = new Button(emoji);
+            emojiButton.getStyleClass().add("emoji-item-button");
+            emojiButton.setOnAction(e -> insertEmojiAtCaret(emoji));
+            flowPane.getChildren().add(emojiButton);
+        }
+
+        ScrollPane scrollPane = new ScrollPane(flowPane);
+        scrollPane.setFitToWidth(true);
+        scrollPane.getStyleClass().add("emoji-scroll-pane");
+
+        Tab tab = new Tab(group.getKey(), scrollPane);
+        tab.setClosable(false);
+        tabPane.getTabs().add(tab);
+    }
+
+    popup.getContent().add(tabPane);
+
+    javafx.geometry.Bounds bounds = emojiIcon.localToScreen(emojiIcon.getBoundsInLocal());
+    popup.show(emojiIcon, bounds.getMinX(), bounds.getMinY() - 270);
+}
+
+private void insertEmojiAtCaret(String emoji) {
+    int caretPos = messageInput.getCaretPosition();
+    messageInput.insertText(caretPos, emoji);
+    messageInput.positionCaret(caretPos + emoji.length());
+    messageInput.requestFocus();
+}
+
 
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
 
