@@ -16,8 +16,11 @@ public class ProtocolMessage {
     public String replyToMessageId;
     public String replyToSender;
 public String replyToContent;
+public String forwardedFromSender;
+public boolean isForwarded;
     public ProtocolMessage() {}
-    public ProtocolMessage(MessageType type) {
+    public ProtocolMessage(MessageType type)
+     {
         this.type = type;
     }
 }

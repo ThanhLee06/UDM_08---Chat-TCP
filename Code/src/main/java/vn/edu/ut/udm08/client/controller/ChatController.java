@@ -12,6 +12,7 @@ import javafx.scene.Parent;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.Node;
 import vn.edu.ut.udm08.shared.model.MessageType;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
 import vn.edu.ut.udm08.shared.model.UserProfile;
@@ -203,7 +204,9 @@ public class ChatController {
         ContextMenu contextMenu = new ContextMenu();
         MenuItem replyItem = new MenuItem("Trả lời");
         replyItem.setOnAction(e -> startReply(message));
-        contextMenu.getItems().add(replyItem);
+       MenuItem forwardItem = new MenuItem("Chuyển tiếp");
+        forwardItem.setOnAction(e -> openForwardDialog(message));
+        contextMenu.getItems().addAll(replyItem, forwardItem);
         bubble.setOnContextMenuRequested(e ->
                 contextMenu.show(bubble, e.getScreenX(), e.getScreenY())
         );
@@ -250,6 +253,66 @@ public class ChatController {
         this.replyingToMessage = message;
          showReplyBar(message);
     }
+private void openForwardDialog(ProtocolMessage message) {
+    Dialog<UserProfile> dialog = new Dialog<>();
+    dialog.setTitle("Chuyển tiếp tin nhắn");
+    dialog.setHeaderText("Chọn người nhận để chuyển tiếp:");
+
+    ButtonType forwardButtonType = new ButtonType("Chuyển tiếp", ButtonBar.ButtonData.OK_DONE);
+    dialog.getDialogPane().getButtonTypes().addAll(forwardButtonType, ButtonType.CANCEL);
+
+    TextField searchField = new TextField();
+    searchField.setPromptText("Tìm người nhận...");
+
+    ObservableList<UserProfile> forwardTargets = FXCollections.observableArrayList(onlineUsers);
+    ListView<UserProfile> targetListView = new ListView<>(forwardTargets);
+    targetListView.setCellFactory(list -> new UserListCell());
+    targetListView.setPrefHeight(220);
+
+    searchField.textProperty().addListener((obs, oldVal, newVal) -> {
+        String keyword = newVal == null ? "" : newVal.trim().toLowerCase();
+        forwardTargets.setAll(onlineUsers.stream()
+                .filter(u -> u.username.toLowerCase().contains(keyword))
+                .toList());
+    });
+
+    VBox content = new VBox(8, searchField, targetListView);
+    dialog.getDialogPane().setContent(content);
+
+    Node forwardButtonNode = dialog.getDialogPane().lookupButton(forwardButtonType);
+    forwardButtonNode.setDisable(true);
+    targetListView.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) ->
+            forwardButtonNode.setDisable(newVal == null));
+
+    dialog.setResultConverter(buttonType -> {
+        if (buttonType == forwardButtonType) {
+            return targetListView.getSelectionModel().getSelectedItem();
+        }
+        return null;
+    });
+
+    dialog.showAndWait().ifPresent(target -> forwardMessage(message, target));
+}
+
+private void forwardMessage(ProtocolMessage original, UserProfile target) {
+    ProtocolMessage forwarded = new ProtocolMessage(MessageType.CHAT);
+    forwarded.messageId = UUID.randomUUID().toString();
+    forwarded.sender = currentUsername;
+    forwarded.target = target.username;
+    forwarded.content = original.content;
+    forwarded.timestamp = System.currentTimeMillis();
+    forwarded.forwardedFromSender = original.sender;
+    forwarded.isForwarded = true;
+
+    if (sendListener != null) {
+        sendListener.onSendMessage(forwarded);
+    }
+
+    if (selectedUser != null && selectedUser.username.equals(target.username)) {
+        addMessageBubble(forwarded, true);
+    }
+}
+
     private void showReplyBar(ProtocolMessage message) {
         removeReplyBar();
 
