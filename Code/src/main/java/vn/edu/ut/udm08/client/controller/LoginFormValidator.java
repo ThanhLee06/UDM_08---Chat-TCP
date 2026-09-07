@@ -11,16 +11,21 @@ public class LoginFormValidator {
         if (portText == null || portText.isBlank()) {
             return "Vui lòng nhập Port!";
         }
-
         int port;
         try {
             port = Integer.parseInt(portText);
         } catch (NumberFormatException e) {
             return "Port phải là số hợp lệ!";
         }
-
         if (port < 1 || port > 65535) {
             return "Port phải từ 1 đến 65535!";
+        }
+        return null;
+    }
+
+    public String validate(String usernameOrPhone) {
+        if (usernameOrPhone == null || usernameOrPhone.trim().isEmpty()) {
+            return "Vui lòng nhập Tên tài khoản hoặc Số điện thoại!";
         }
         return null;
     }
@@ -29,7 +34,6 @@ public class LoginFormValidator {
         if (username == null || username.isEmpty() || username.length() > 20) {
             return false;
         }
-
         for (int i = 0; i < username.length(); i++) {
             if (!Character.isLetterOrDigit(username.charAt(i))) {
                 return false;

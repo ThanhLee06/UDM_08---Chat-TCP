@@ -6,7 +6,11 @@ import java.util.Optional;
 public interface IUserRepository {
     boolean existsByUsername(String username);
     boolean existsByPhoneNumber(String phoneNumber);
-    boolean existsByEmail(String email);
     User save(User user);
     Optional<User> findByPhoneNumber(String phoneNumber);
+    boolean updatePassword(String phoneNumber, String newPasswordHash);
+    default java.util.List<User> findAll() { return java.util.Collections.emptyList(); }
+    default boolean deleteByPhoneNumber(String phoneNumber) { return false; }
+    default boolean deleteById(long id) { return false; }
+    default boolean deleteAll() { return false; }
 }

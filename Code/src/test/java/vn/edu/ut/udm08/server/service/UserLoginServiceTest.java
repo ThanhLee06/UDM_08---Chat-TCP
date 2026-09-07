@@ -1,4 +1,5 @@
 package vn.edu.ut.udm08.server.service;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import vn.edu.ut.udm08.server.repository.IUserRepository;
@@ -12,10 +13,12 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import static org.junit.jupiter.api.Assertions.*;
+
 public class UserLoginServiceTest {
     private UserLoginService loginService;
     private IPasswordEncoder passwordEncoder;
     private TestUserRepository testRepo;
+
     @BeforeEach
     public void setUp() {
         passwordEncoder = new PasswordEncoder();
@@ -24,10 +27,10 @@ public class UserLoginServiceTest {
         User user = new User();
         user.setUsername("ThanhUser");
         user.setPhoneNumber("0901234567");
-        user.setEmail("thanh@gmail.com");
         user.setPasswordHash(passwordEncoder.encode("pass123"));
         testRepo.save(user);
     }
+
     @Test
     public void testLoginSuccess() {
         LoginRequest request = new LoginRequest("0901234567", "pass123");
@@ -37,6 +40,7 @@ public class UserLoginServiceTest {
         assertNotNull(response.getUser());
         assertEquals("ThanhUser", response.getUser().getUsername());
     }
+
     @Test
     public void testLoginWrongPassword() {
         LoginRequest request = new LoginRequest("0901234567", "wrongpass");
@@ -44,6 +48,7 @@ public class UserLoginServiceTest {
         assertFalse(response.isSuccess());
         assertEquals("Mật khẩu không chính xác", response.getMessage());
     }
+
     @Test
     public void testLoginAccountNotFound() {
         LoginRequest request = new LoginRequest("0999999999", "pass123");
@@ -51,12 +56,14 @@ public class UserLoginServiceTest {
         assertFalse(response.isSuccess());
         assertEquals("Tài khoản không tồn tại", response.getMessage());
     }
+
     @Test
     public void testLoginNullRequest() {
         LoginResponse response = loginService.login(null);
         assertFalse(response.isSuccess());
         assertEquals("Thông tin đăng nhập không hợp lệ", response.getMessage());
     }
+
     @Test
     public void testLoginEmptyPhoneNumber() {
         LoginRequest request = new LoginRequest("", "pass123");
@@ -64,6 +71,7 @@ public class UserLoginServiceTest {
         assertFalse(response.isSuccess());
         assertEquals("Vui lòng nhập số điện thoại và mật khẩu", response.getMessage());
     }
+
     @Test
     public void testLoginEmptyPassword() {
         LoginRequest request = new LoginRequest("0901234567", "");
@@ -71,36 +79,45 @@ public class UserLoginServiceTest {
         assertFalse(response.isSuccess());
         assertEquals("Vui lòng nhập số điện thoại và mật khẩu", response.getMessage());
     }
+
     private static class TestUserRepository implements IUserRepository {
         private final Map<String, User> usersByUsername = new ConcurrentHashMap<>();
         private final Map<String, User> usersByPhone = new ConcurrentHashMap<>();
-        private final Map<String, User> usersByEmail = new ConcurrentHashMap<>();
         private final AtomicLong idGenerator = new AtomicLong(1);
+
         @Override
         public boolean existsByUsername(String username) {
             return username != null && usersByUsername.containsKey(username.trim().toLowerCase());
         }
+
         @Override
         public boolean existsByPhoneNumber(String phoneNumber) {
             return phoneNumber != null && usersByPhone.containsKey(phoneNumber.trim());
         }
-        @Override
-        public boolean existsByEmail(String email) {
-            return email != null && usersByEmail.containsKey(email.trim().toLowerCase());
-        }
+
         @Override
         public User save(User user) {
             if (user == null) return null;
             user.setId(idGenerator.getAndIncrement());
             if (user.getUsername() != null) usersByUsername.put(user.getUsername().trim().toLowerCase(), user);
             if (user.getPhoneNumber() != null) usersByPhone.put(user.getPhoneNumber().trim(), user);
-            if (user.getEmail() != null) usersByEmail.put(user.getEmail().trim().toLowerCase(), user);
             return user;
         }
+
         @Override
         public Optional<User> findByPhoneNumber(String phoneNumber) {
             if (phoneNumber == null) return Optional.empty();
             return Optional.ofNullable(usersByPhone.get(phoneNumber.trim()));
+        }
+
+        @Override
+        public boolean updatePassword(String phoneNumber, String newPasswordHash) {
+            Optional<User> userOpt = findByPhoneNumber(phoneNumber);
+            if (userOpt.isPresent()) {
+                userOpt.get().setPasswordHash(newPasswordHash);
+                return true;
+            }
+            return false;
         }
     }
 }

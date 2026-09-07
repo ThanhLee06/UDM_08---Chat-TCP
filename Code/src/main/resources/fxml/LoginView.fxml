@@ -4,65 +4,114 @@
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.image.Image?>
 <?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
 
 <VBox xmlns="http://javafx.com/javafx/21"
       xmlns:fx="http://javafx.com/fxml/1"
       fx:controller="vn.edu.ut.udm08.client.controller.LoginController"
       alignment="CENTER"
-      spacing="10"
+      spacing="0"
       prefWidth="420"
-      style="-fx-background-color: #f8fafc;">
+      prefHeight="580"
+      style="-fx-background-color: #f3f4f6;">
     <padding>
-        <Insets top="28" right="45" bottom="28" left="45"/>
+        <Insets top="20" right="25" bottom="20" left="25"/>
     </padding>
 
-    <Label text="ĐĂNG NHẬP"
-           style="-fx-font-size: 26px; -fx-font-weight: bold; -fx-text-fill: #1e293b;"/>
+    <VBox alignment="CENTER" spacing="15" style="-fx-background-color: #ffffff; -fx-background-radius: 16px; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.06), 12, 0, 0, 4);" VBox.vgrow="ALWAYS">
+        <padding>
+            <Insets top="24" right="24" bottom="24" left="24"/>
+        </padding>
 
-    <ImageView fx:id="avatarImage"
-               fitWidth="110"
-               fitHeight="110"
-               preserveRatio="true">
-        <image>
-            <Image url="@../images/avatar1.jpg"/>
-        </image>
-    </ImageView>
+        <Label text="CHAT TCP" style="-fx-font-size: 24px; -fx-font-weight: 900; -fx-text-fill: #0068ff;"/>
 
-    <Label text="Chọn ảnh đại diện"/>
-    <ComboBox fx:id="avatarChoiceBox"
-              prefWidth="300"
-              onAction="#onAvatarChanged"/>
+        <HBox alignment="CENTER" spacing="0" style="-fx-background-color: #f1f5f9; -fx-background-radius: 8px; -fx-padding: 3px;" prefWidth="300">
+            <Button fx:id="tabLoginBtn" text="Đăng nhập" onAction="#showLoginTab" prefWidth="147" prefHeight="34" style="-fx-background-color: #ffffff; -fx-text-fill: #0068ff; -fx-font-weight: bold; -fx-background-radius: 6px; -fx-cursor: hand;"/>
+            <Button fx:id="tabRegisterBtn" text="Đăng ký" onAction="#showRegisterTab" prefWidth="147" prefHeight="34" style="-fx-background-color: transparent; -fx-text-fill: #64748b; -fx-font-weight: bold; -fx-background-radius: 6px; -fx-cursor: hand;"/>
+        </HBox>
 
-    <Label text="Username"/>
-    <TextField fx:id="usernameField"
-               promptText="Nhập username"
-               prefWidth="300"/>
+        <StackPane VBox.vgrow="ALWAYS">
+            <VBox fx:id="loginPane" spacing="12" alignment="TOP_LEFT" visible="true">
+                <Label text="Số điện thoại" style="-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #1e293b;"/>
+                <HBox spacing="8" alignment="CENTER_LEFT">
+                    <Label text="+84" style="-fx-background-color: #f1f5f9; -fx-padding: 8 12; -fx-background-radius: 8px; -fx-font-weight: bold; -fx-text-fill: #0068ff;"/>
+                    <TextField fx:id="phoneField" promptText="0988769299" prefHeight="38" HBox.hgrow="ALWAYS" style="-fx-background-radius: 8px; -fx-border-color: #cbd5e1; -fx-border-radius: 8px;"/>
+                </HBox>
 
-    <Label text="Địa chỉ Server"/>
-    <TextField fx:id="hostField"
-               text="127.0.0.1"
-               promptText="Ví dụ: 192.168.1.10"
-               prefWidth="300"/>
+                <Label text="Mật khẩu" style="-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #1e293b;"/>
+                <StackPane alignment="CENTER_RIGHT">
+                    <PasswordField fx:id="passwordField" promptText="Nhập mật khẩu" prefHeight="38" style="-fx-background-radius: 8px; -fx-border-color: #cbd5e1; -fx-border-radius: 8px;"/>
+                    <TextField fx:id="passwordVisibleField" promptText="Nhập mật khẩu" prefHeight="38" visible="false" style="-fx-background-radius: 8px; -fx-border-color: #cbd5e1; -fx-border-radius: 8px;"/>
+                    <Button fx:id="toggleEyeBtn" text="👁" onAction="#onTogglePasswordVisibility" style="-fx-background-color: transparent; -fx-cursor: hand;"/>
+                </StackPane>
 
-    <Label text="Port"/>
-    <TextField fx:id="portField"
-               text="8080"
-               promptText="Ví dụ: 8080"
-               prefWidth="300"/>
+                <HBox alignment="CENTER_RIGHT">
+                    <Button fx:id="forgotPassLinkBtn" text="Quên mật khẩu?" onAction="#showForgotTab" style="-fx-background-color: transparent; -fx-text-fill: #0068ff; -fx-font-size: 12px; -fx-cursor: hand;"/>
+                </HBox>
 
-    <Button fx:id="connectButton"
-            text="Kết nối"
-            prefWidth="150"
-            prefHeight="40"
-            defaultButton="true"
-            onAction="#onConnectClick"/>
+                <Label fx:id="statusLabel" wrapText="true" style="-fx-font-size: 12px;"/>
 
-    <Label fx:id="statusLabel"
-           minHeight="24"
-           wrapText="true"
-           style="-fx-font-size: 13px;"/>
+                <Button fx:id="loginBtn" text="Đăng nhập với mật khẩu" onAction="#onLoginClick" prefHeight="42" maxWidth="Infinity" defaultButton="true" style="-fx-background-color: #0068ff; -fx-text-fill: white; -fx-font-size: 14px; -fx-font-weight: bold; -fx-background-radius: 8px; -fx-cursor: hand;"/>
+            </VBox>
+
+            <VBox fx:id="registerPane" spacing="10" alignment="TOP_LEFT" visible="false">
+                <HBox spacing="12" alignment="CENTER_LEFT">
+                    <ImageView fx:id="regAvatarImage" fitWidth="50" fitHeight="50" preserveRatio="true">
+                        <image>
+                            <Image url="@../images/avatar1.jpg"/>
+                        </image>
+                    </ImageView>
+                    <VBox spacing="4" HBox.hgrow="ALWAYS">
+                        <ComboBox fx:id="regAvatarChoiceBox" prefWidth="180" onAction="#onRegAvatarChanged"/>
+                        <Button fx:id="uploadAvatarBtn" text="Tải ảnh lên" onAction="#onUploadAvatarClick" style="-fx-background-color: #f1f5f9; -fx-text-fill: #0068ff; -fx-font-size: 11px; -fx-cursor: hand; -fx-background-radius: 6px;"/>
+                    </VBox>
+                </HBox>
+
+                <Label text="Tên hiển thị" style="-fx-font-size: 12px; -fx-font-weight: bold;"/>
+                <TextField fx:id="regUsernameField" promptText="Ví dụ: Nguyễn Văn A" prefHeight="34" style="-fx-background-radius: 6px; -fx-border-color: #cbd5e1; -fx-border-radius: 6px;"/>
+
+                <Label text="Số điện thoại" style="-fx-font-size: 12px; -fx-font-weight: bold;"/>
+                <HBox spacing="6">
+                    <TextField fx:id="regPhoneField" promptText="0901234567" prefHeight="34" HBox.hgrow="ALWAYS" style="-fx-background-radius: 6px; -fx-border-color: #cbd5e1; -fx-border-radius: 6px;"/>
+                    <Button fx:id="sendOtpBtn" text="Gửi OTP" onAction="#onSendOtpClick" prefHeight="34" style="-fx-background-color: #0068ff; -fx-text-fill: white; -fx-font-size: 11px; -fx-cursor: hand; -fx-background-radius: 6px;"/>
+                </HBox>
+
+                <TextField fx:id="regOtpField" promptText="Nhập mã OTP (6 số)" prefHeight="34" style="-fx-background-radius: 6px; -fx-border-color: #cbd5e1; -fx-border-radius: 6px;"/>
+
+                <Label text="Mật khẩu (ít nhất 8 ký tự, 1 chữ hoa, 1 thường, 1 số)" style="-fx-font-size: 11px; -fx-font-weight: bold;"/>
+                <PasswordField fx:id="regPasswordField" promptText="Mật khẩu" prefHeight="34" style="-fx-background-radius: 6px; -fx-border-color: #cbd5e1; -fx-border-radius: 6px;"/>
+                <PasswordField fx:id="regConfirmPasswordField" promptText="Xác nhận mật khẩu" prefHeight="34" style="-fx-background-radius: 6px; -fx-border-color: #cbd5e1; -fx-border-radius: 6px;"/>
+
+                <Label fx:id="regStatusLabel" wrapText="true" style="-fx-font-size: 11px;"/>
+
+                <Button fx:id="registerBtn" text="Tạo tài khoản" onAction="#onRegisterClick" prefHeight="38" maxWidth="Infinity" style="-fx-background-color: #0068ff; -fx-text-fill: white; -fx-font-size: 13px; -fx-font-weight: bold; -fx-background-radius: 6px; -fx-cursor: hand;"/>
+            </VBox>
+
+            <VBox fx:id="forgotPane" spacing="10" alignment="TOP_LEFT" visible="false">
+                <Label text="Đặt lại mật khẩu" style="-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #0068ff;"/>
+
+                <Label text="Số điện thoại đăng ký" style="-fx-font-size: 12px; -fx-font-weight: bold;"/>
+                <HBox spacing="6">
+                    <TextField fx:id="forgotPhoneField" promptText="0901234567" prefHeight="34" HBox.hgrow="ALWAYS" style="-fx-background-radius: 6px; -fx-border-color: #cbd5e1; -fx-border-radius: 6px;"/>
+                    <Button fx:id="forgotSendOtpBtn" text="Gửi OTP" onAction="#onForgotSendOtpClick" prefHeight="34" style="-fx-background-color: #0068ff; -fx-text-fill: white; -fx-font-size: 11px; -fx-cursor: hand; -fx-background-radius: 6px;"/>
+                </HBox>
+
+                <TextField fx:id="forgotOtpField" promptText="Nhập mã OTP (6 số)" prefHeight="34" style="-fx-background-radius: 6px; -fx-border-color: #cbd5e1; -fx-border-radius: 6px;"/>
+
+                <Label text="Mật khẩu mới" style="-fx-font-size: 11px; -fx-font-weight: bold;"/>
+                <PasswordField fx:id="forgotNewPasswordField" promptText="Mật khẩu mới" prefHeight="34" style="-fx-background-radius: 6px; -fx-border-color: #cbd5e1; -fx-border-radius: 6px;"/>
+                <PasswordField fx:id="forgotConfirmPasswordField" promptText="Xác nhận mật khẩu mới" prefHeight="34" style="-fx-background-radius: 6px; -fx-border-color: #cbd5e1; -fx-border-radius: 6px;"/>
+
+                <Label fx:id="forgotStatusLabel" wrapText="true" style="-fx-font-size: 11px;"/>
+
+                <Button fx:id="resetPasswordBtn" text="Cập nhật mật khẩu" onAction="#onResetPasswordClick" prefHeight="38" maxWidth="Infinity" style="-fx-background-color: #0068ff; -fx-text-fill: white; -fx-font-size: 13px; -fx-font-weight: bold; -fx-background-radius: 6px; -fx-cursor: hand;"/>
+            </VBox>
+        </StackPane>
+    </VBox>
 </VBox>

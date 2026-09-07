@@ -67,7 +67,7 @@ public class LoginHandlerTest {
         }
     }
     @Test
-    void rejectsDuplicateUsernameIgnoringCase() throws Exception {
+    void kicksPreviousSessionOnDuplicateLogin() throws Exception {
         OnlineUserRegistry registry = new OnlineUserRegistry();
         LoginHandler handler = new LoginHandler(registry);
         try (TestConnection first = new TestConnection();
@@ -76,13 +76,9 @@ public class LoginHandlerTest {
             first.readMessage();
             first.readMessage();
             boolean secondLogin = handler.handleHello(second.session, hello("USER1", "02"));
-            ProtocolMessage error = second.readMessage();
-            assertFalse(secondLogin);
-            assertEquals(MessageType.ERROR, error.type);
-            assertEquals("USERNAME_TAKEN", error.errorCode);
+            assertTrue(secondLogin);
             assertEquals(1, registry.getOnlineUsers().size());
-            assertEquals("user1", registry.find("USER1").getUsername());
-            assertFalse(second.session.isConnected());
+            assertEquals("USER1", registry.find("user1").getUsername());
         }
     }
     @Test
