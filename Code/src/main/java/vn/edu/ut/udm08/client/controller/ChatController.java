@@ -191,7 +191,12 @@ public class ChatController {
             quoteBlock.setWrapText(true);
             quoteBlock.setStyle("-fx-cursor: hand;");
             final String targetId = message.replyToMessageId;
-        quoteBlock.setOnMouseClicked(e -> scrollToMessage(targetId));
+        quoteBlock.setOnMouseClicked(e -> {
+        boolean found = scrollToMessage(targetId);
+        if (!found) {
+            showMessageNotFoundHint(quoteBlock);
+        }
+    });
             bubble.getChildren().add(quoteBlock);
         }
         
@@ -274,12 +279,12 @@ public class ChatController {
     }
 
     // ST-082: cuon toi tin nhan goc va highlight tam thoi de nguoi dung de nhan biet
-private void scrollToMessage(String messageId) {
-    if (messageId == null) return;
+private boolean scrollToMessage(String messageId) {
+    if (messageId == null) return false;
 
     javafx.scene.Node target = messageNodeIndex.get(messageId);
     if (target == null) {
-        return;
+        return false;
     }
 
     messageScrollPane.layout();
@@ -293,6 +298,7 @@ private void scrollToMessage(String messageId) {
     }
 
     highlightNode(target);
+    return true;
 }
 
 
@@ -347,4 +353,17 @@ private void highlightNode(javafx.scene.Node target) {
             }
         }
     }
+    private void showMessageNotFoundHint(javafx.scene.Node anchor) {
+    Tooltip hint = new Tooltip("Tin nhắn gốc không còn tồn tại hoặc đã bị xóa");
+    hint.getStyleClass().add("reply-not-found-hint");
+    hint.setAutoHide(true);
+
+    javafx.geometry.Bounds bounds = anchor.localToScreen(anchor.getBoundsInLocal());
+    if (bounds != null) {
+        hint.show(anchor, bounds.getMinX(), bounds.getMaxY() + 4);
+        javafx.animation.PauseTransition pause = new javafx.animation.PauseTransition(javafx.util.Duration.seconds(2));
+        pause.setOnFinished(e -> hint.hide());
+        pause.play();
+    }
+}
 }
