@@ -72,9 +72,14 @@ public class MessageRouter {
             }
 
             // 5. Tim ClientSession cua nguoi nhan trong OnlineUserRegistry
-            ClientSession targetSession = registry.find(msg.target);
+            String targetUsername = msg.target != null ? msg.target.trim() : null;
+            ClientSession targetSession = registry.find(targetUsername);
             if (targetSession == null || !targetSession.isConnected()) {
-                // Nguoi nhan khong ton tai hoac da offline
+                // Neu targetSession ton tai nhung socket da ngat, dọn dẹp khỏi Registry
+                if (targetSession != null && !targetSession.isConnected()) {
+                    registry.remove(targetSession);
+                    targetSession.close();
+                }
                 sendErrorMessage(senderSession, msg.messageId, "USER_OFFLINE", "Nguoi nhan khong ton tai hoac da offline");
                 return;
             }
@@ -123,6 +128,7 @@ public class MessageRouter {
             ProtocolMessage err = new ProtocolMessage(MessageType.ERROR);
             err.messageId = messageId;
             err.sender = "SERVER";
+            err.target = session.getUsername();
             err.errorCode = errorCode;
             err.errorMessage = errorMessage;
             err.timestamp = System.currentTimeMillis();

@@ -315,6 +315,62 @@ public class MessageRouterTest {
         assertEquals("Gui thanh cong nhung Alice dong connection ngay", receivedByBob.content);
     }
 
+    @Test
+    public void testOfflineUserHandlingDoesNotAffectSenderOrOtherUsers() throws Exception {
+        // 1. Gui tin nhan toi user khong ton tai trong OnlineUserRegistry
+        ProtocolMessage msgNonExistent = new ProtocolMessage(MessageType.CHAT);
+        msgNonExistent.messageId = "msg-401";
+        msgNonExistent.sender = "Alice";
+        msgNonExistent.target = "NonExistentUser";
+        msgNonExistent.content = "Test nguoi dung khong ton tai";
+
+        router.handleChatMessage(aliceConnection.session, msgNonExistent);
+
+        // Alice nhan duoc ERROR USER_OFFLINE
+        ProtocolMessage err1 = aliceConnection.readMessage();
+        assertNotNull(err1);
+        assertEquals(MessageType.ERROR, err1.type);
+        assertEquals("USER_OFFLINE", err1.errorCode);
+        assertEquals("msg-401", err1.messageId);
+        assertTrue(aliceConnection.session.isConnected(), "Session nguoi gui phai tiep tuc hoat dong");
+
+        // 2. Gui tin nhan toi user offline (Bob disconnect)
+        bobConnection.close();
+        ProtocolMessage msgOffline = new ProtocolMessage(MessageType.CHAT);
+        msgOffline.messageId = "msg-402";
+        msgOffline.sender = "Alice";
+        msgOffline.target = "Bob";
+        msgOffline.content = "Test nguoi dung mat ket noi";
+
+        router.handleChatMessage(aliceConnection.session, msgOffline);
+
+        // Alice nhan duoc ERROR USER_OFFLINE, Bob bi remove khoi Registry
+        ProtocolMessage err2 = aliceConnection.readMessage();
+        assertNotNull(err2);
+        assertEquals(MessageType.ERROR, err2.type);
+        assertEquals("USER_OFFLINE", err2.errorCode);
+        assertNull(registry.find("Bob"), "User offline phai duoc don dẹp khoi Registry");
+        assertTrue(aliceConnection.session.isConnected(), "Session nguoi gui van duy tri ket noi");
+
+        // 3. Gui tin nhan toi Charlie ngay sau do -> Van hoat dong binh thuong
+        ProtocolMessage msgToCharlie = new ProtocolMessage(MessageType.CHAT);
+        msgToCharlie.messageId = "msg-403";
+        msgToCharlie.sender = "Alice";
+        msgToCharlie.target = "Charlie";
+        msgToCharlie.content = "Chao Charlie, he thong van chay tot!";
+
+        router.handleChatMessage(aliceConnection.session, msgToCharlie);
+
+        ProtocolMessage receivedByCharlie = charlieConnection.readMessage();
+        assertNotNull(receivedByCharlie);
+        assertEquals("Chao Charlie, he thong van chay tot!", receivedByCharlie.content);
+
+        ProtocolMessage okToAlice = aliceConnection.readMessage();
+        assertNotNull(okToAlice);
+        assertEquals(MessageType.CHAT_OK, okToAlice.type);
+    }
+
+
     private static class TestConnection implements AutoCloseable {
         private Socket clientSocket;
         private Socket serverSocket;
