@@ -263,11 +263,14 @@ private void openForwardDialog(ProtocolMessage message) {
 
     TextField searchField = new TextField();
     searchField.setPromptText("Tìm người nhận...");
+    searchField.getStyleClass().add("forward-search-field");
+    
 
     ObservableList<UserProfile> forwardTargets = FXCollections.observableArrayList(onlineUsers);
     ListView<UserProfile> targetListView = new ListView<>(forwardTargets);
     targetListView.setCellFactory(list -> new UserListCell());
     targetListView.setPrefHeight(220);
+    targetListView.setPlaceholder(new Label("Không tìm thấy người dùng"));
 
     searchField.textProperty().addListener((obs, oldVal, newVal) -> {
         String keyword = newVal == null ? "" : newVal.trim().toLowerCase();
@@ -278,6 +281,7 @@ private void openForwardDialog(ProtocolMessage message) {
 
     VBox content = new VBox(8, searchField, targetListView);
     dialog.getDialogPane().setContent(content);
+    content.getStyleClass().add("forward-dialog-content");
 
     Node forwardButtonNode = dialog.getDialogPane().lookupButton(forwardButtonType);
     forwardButtonNode.setDisable(true);
@@ -290,8 +294,9 @@ private void openForwardDialog(ProtocolMessage message) {
         }
         return null;
     });
-
+    dialog.setOnShown(e -> searchField.requestFocus());
     dialog.showAndWait().ifPresent(target -> forwardMessage(message, target));
+    
 }
 
 private void forwardMessage(ProtocolMessage original, UserProfile target) {
