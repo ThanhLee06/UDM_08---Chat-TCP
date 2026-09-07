@@ -255,3 +255,8 @@
     -fx-padding: 4 8 4 8;
     -fx-background-radius: 6;
 }
+.message-highlight {
+    -fx-background-color: rgba(0, 104, 255, 0.12);
+    -fx-background-radius: 12;
+    -fx-padding: 4;
+}

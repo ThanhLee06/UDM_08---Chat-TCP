@@ -44,6 +44,7 @@ public class ChatController {
     private HBox replyBar;
     //luu tam lich su tin nhan
      private final java.util.Map<String, ProtocolMessage> messageHistory = new java.util.HashMap<>();
+     private final java.util.Map<String, javafx.scene.Node> messageNodeIndex = new java.util.HashMap<>();
 
     private static final String[] AVATAR_COLORS = {
             "#0068ff", "#00c853", "#ff6d00", "#e91e63",
@@ -125,6 +126,7 @@ public class ChatController {
         chatPartnerAvatar.setStyle("-fx-background-color: " + avatarColorFor(user.username) + ";");
 
         messageContainer.getChildren().clear();
+        messageNodeIndex.clear();
 
         sendButton.setDisable(false);
         messageInput.setDisable(false);
@@ -187,6 +189,9 @@ public class ChatController {
          Label quoteBlock = new Label(quoteText);
             quoteBlock.getStyleClass().add("reply-quote-block");
             quoteBlock.setWrapText(true);
+            quoteBlock.setStyle("-fx-cursor: hand;");
+            final String targetId = message.replyToMessageId;
+        quoteBlock.setOnMouseClicked(e -> scrollToMessage(targetId));
             bubble.getChildren().add(quoteBlock);
         }
         
@@ -229,6 +234,9 @@ public class ChatController {
         }
 
         messageContainer.getChildren().add(row);
+         if (message.messageId != null) {
+        messageNodeIndex.put(message.messageId, row);
+    }
 
         messageScrollPane.layout();
         messageScrollPane.setVvalue(1.0);
@@ -264,6 +272,38 @@ public class ChatController {
             }
         }
     }
+
+    // ST-082: cuon toi tin nhan goc va highlight tam thoi de nguoi dung de nhan biet
+private void scrollToMessage(String messageId) {
+    if (messageId == null) return;
+
+    javafx.scene.Node target = messageNodeIndex.get(messageId);
+    if (target == null) {
+        return;
+    }
+
+    messageScrollPane.layout();
+    messageContainer.layout();
+
+    double contentHeight = messageContainer.getHeight() - messageScrollPane.getViewportBounds().getHeight();
+    if (contentHeight > 0) {
+        double targetY = target.getBoundsInParent().getMinY();
+        double vValue = targetY / contentHeight;
+        messageScrollPane.setVvalue(Math.max(0, Math.min(1, vValue)));
+    }
+
+    highlightNode(target);
+}
+
+
+private void highlightNode(javafx.scene.Node target) {
+    if (!(target instanceof HBox row)) return;
+
+    row.getStyleClass().add("message-highlight");
+    javafx.animation.PauseTransition pause = new javafx.animation.PauseTransition(javafx.util.Duration.seconds(1.2));
+    pause.setOnFinished(e -> row.getStyleClass().remove("message-highlight"));
+    pause.play();
+}
     private void cancelReply() {
         replyingToMessage = null;
         removeReplyBar();
