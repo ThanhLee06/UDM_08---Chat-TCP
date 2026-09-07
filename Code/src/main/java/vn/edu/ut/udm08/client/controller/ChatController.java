@@ -42,6 +42,8 @@ public class ChatController {
     private ProtocolMessage replyingToMessage;
     //thanh quote hien dang hien thi 
     private HBox replyBar;
+    //luu tam lich su tin nhan
+     private final java.util.Map<String, ProtocolMessage> messageHistory = new java.util.HashMap<>();
 
     private static final String[] AVATAR_COLORS = {
             "#0068ff", "#00c853", "#ff6d00", "#e91e63",
@@ -145,25 +147,49 @@ public class ChatController {
         message.replyToSender = replyingToMessage.sender;
         message.replyToContent = replyingToMessage.content;
         }       
-
         addMessageBubble(message, true);
         messageInput.clear(); 
+        cancelReply();
 
         if (sendListener != null) {
             sendListener.onSendMessage(message);
         }
-        cancelReply();
     }
 
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
 
     // Tạo 1 bubble tin nhắn (kèm avatar, tên, timestamp) và thêm vào khung chat
        private void addMessageBubble(ProtocolMessage message, boolean isMine) {
-        Label bubble = new Label(message.content);
+         if (message.messageId != null) {
+            messageHistory.put(message.messageId, message);
+        }
+        Label contentLabel = new Label(message.content);
+        contentLabel.getStyleClass().add("message-bubble-text");
+        contentLabel.setWrapText(true);
+         VBox bubble = new VBox(4);
         bubble.getStyleClass().add(isMine ? "message-bubble-sent" : "message-bubble-received");
-        bubble.setWrapText(true);
         bubble.setMaxWidth(400);
         bubble.setUserData(message);
+         if (message.replyToMessageId != null) {
+            ProtocolMessage original = messageHistory.get(message.replyToMessageId);
+            String quoteText;
+           if (original != null)
+             {
+               quoteText = original.sender + ": " + original.content;
+            } 
+           else if (message.replyToSender != null && message.replyToContent != null) 
+            {
+               quoteText = message.replyToSender + ": " + message.replyToContent;
+           } else 
+            {
+               quoteText = "Tin nhắn gốc không khả dụng";
+         }
+         Label quoteBlock = new Label(quoteText);
+            quoteBlock.getStyleClass().add("reply-quote-block");
+            quoteBlock.setWrapText(true);
+            bubble.getChildren().add(quoteBlock);
+        }
+        
         ContextMenu contextMenu = new ContextMenu();
         MenuItem replyItem = new MenuItem("Trả lời");
         replyItem.setOnAction(e -> startReply(message));
