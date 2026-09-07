@@ -173,6 +173,12 @@ public class ChatController {
         bubble.getStyleClass().add(isMine ? "message-bubble-sent" : "message-bubble-received");
         bubble.setMaxWidth(400);
         bubble.setUserData(message);
+        if (message.isForwarded && message.forwardedFromSender != null)  
+        {
+        Label forwardedLabel = new Label("↪ Đã chuyển tiếp từ " + message.forwardedFromSender);
+        forwardedLabel.getStyleClass().add("forwarded-label");
+        bubble.getChildren().add(forwardedLabel);
+        }
          if (message.replyToMessageId != null) {
             ProtocolMessage original = messageHistory.get(message.replyToMessageId);
             String quoteText;

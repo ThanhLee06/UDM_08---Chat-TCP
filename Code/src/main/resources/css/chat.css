@@ -274,3 +274,9 @@
     -fx-background-radius: 8;
     -fx-padding: 6 10;
 }
+.forwarded-label {
+    -fx-font-size: 11px;
+    -fx-font-style: italic;
+    -fx-text-fill: #8a8a8a;
+    -fx-padding: 0 0 2 0;
+}
