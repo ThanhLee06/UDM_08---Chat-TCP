@@ -9,6 +9,7 @@ import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.Parent;
+import javafx.scene.input.KeyCode;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import vn.edu.ut.udm08.shared.model.MessageType;
@@ -68,6 +69,11 @@ public class ChatController {
         messageInput.setDisable(true);
 
         messageInput.setOnAction(e -> handleSend());
+        messageInput.setOnKeyPressed(e -> {
+            if (e.getCode() == KeyCode.ESCAPE && replyingToMessage != null) {
+                cancelReply();
+            }
+        });
 
         emptyStatePane.setVisible(true);
     }
