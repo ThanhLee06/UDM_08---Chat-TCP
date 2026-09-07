@@ -248,3 +248,10 @@
     -fx-font-size: 12px;
     -fx-text-fill: #555555;
 }
+.reply-quote-block {
+    -fx-font-size: 12px;
+    -fx-text-fill: #666666;
+    -fx-background-color: rgba(0,0,0,0.05);
+    -fx-padding: 4 8 4 8;
+    -fx-background-radius: 6;
+}
