@@ -15,6 +15,13 @@ public class ChatReceiver implements Runnable {
     private final ChatListener listener;
     private volatile boolean running = true;
 
+    /**
+     * Khởi tạo luồng đọc ngầm dữ liệu từ socket.
+     *
+     * @param client ChatClient quản lý kết nối.
+     * @param reader Luồng đọc ký tự từ Server.
+     * @param listener Callback nhận xử lý gói tin.
+     */
     public ChatReceiver(ChatClient client, BufferedReader reader, ChatListener listener) {
         this.client = client;
         this.reader = reader;
@@ -30,21 +37,25 @@ public class ChatReceiver implements Runnable {
                     continue;
                 }
                 try {
+                    // Giải mã gói tin JSON từ Server
                     ProtocolMessage message = JsonUtil.fromJson(line);
                     if (message != null && message.type != null) {
                         dispatchMessage(message);
                     }
                 } catch (Exception e) {
+                    // Báo lỗi cú pháp gói tin JSON, nhưng vẫn giữ luồng chạy tiếp
                     if (listener != null) {
                         listener.onErrorReceived("JSON_PARSE_ERROR", "Lỗi cú pháp gói tin nhận được: " + e.getMessage());
                     }
                 }
             }
 
+            // Nếu Server đóng luồng mạng (EOF line == null) trong khi client chưa chủ động stop()
             if (running) {
                 notifyConnectionLost(new IOException("Máy chủ đã ngắt kết nối"));
             }
         } catch (IOException e) {
+            // Khi luồng bị ngắt đột ngột (Socket đóng hoặc cáp mạng đứt)
             if (running) {
                 notifyConnectionLost(e);
             }
@@ -53,14 +64,25 @@ public class ChatReceiver implements Runnable {
         }
     }
 
+    /**
+     * Dừng luồng đọc ngầm từ xa.
+     */
     public void stop() {
         this.running = false;
     }
 
+    /**
+     * Kiểm tra trạng thái đang chạy của luồng đọc.
+     *
+     * @return true nếu luồng đang hoạt động, ngược lại false.
+     */
     public boolean isRunning() {
         return running;
     }
 
+    /**
+     * Phân loại và chuyển giao gói tin tới callback tương ứng.
+     */
     void dispatchMessage(ProtocolMessage message) {
         if (listener == null || message == null || message.type == null) {
             return;
@@ -77,29 +99,41 @@ public class ChatReceiver implements Runnable {
                 listener.onMessageReceived(message);
                 break;
             case CHAT_OK:
-                client.handleChatOk(message);
                 listener.onMessageSentSuccess(message.messageId);
                 break;
+            case ERROR:
+                if (client != null && client.isSessionInvalidError(message.errorCode)) {
+                    client.handleSessionExpired(message.errorCode, message.errorMessage, listener);
+                    break;
+                }
+                listener.onErrorReceived(message.errorCode, message.errorMessage);
+                break;
             case LOGOUT_OK:
-                client.handleLogoutOk(listener);
+                if (client != null) {
+                    client.handleLogoutOk(listener);
+                } else {
+                    listener.onLogoutSuccess();
+                }
                 break;
             case SESSION_EXPIRED:
-                client.handleSessionExpired(message.errorCode, message.errorMessage, listener);
-                break;
-            case ERROR:
-                if (client.isSessionInvalidError(message.errorCode)) {
+                if (client != null) {
                     client.handleSessionExpired(message.errorCode, message.errorMessage, listener);
-                } else if (!client.handleMessageError(message)) {
-                    listener.onErrorReceived(message.errorCode, message.errorMessage);
+                } else {
+                    listener.onSessionExpired(message.errorCode, message.errorMessage);
                 }
                 break;
             default:
+                // Gói tin không xác định / chưa hỗ trợ
                 break;
         }
     }
 
+    /**
+     * Báo lỗi mất kết nối đường truyền đột ngột và dọn dẹp tài nguyên.
+     */
     private void notifyConnectionLost(Throwable cause) {
         try {
+            // Đóng Socket và dọn dẹp tài nguyên trước để đảm bảo trạng thái đã ngắt kết nối
             client.disconnect();
         } finally {
             if (listener != null) {

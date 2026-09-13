@@ -8,10 +8,16 @@ import vn.edu.ut.udm08.shared.model.UserProfile;
 /**
  * Một Wrapper bọc quanh ChatListener nhằm tự động chuyển các tác vụ gọi Callback
  * về chạy trên luồng giao diện của JavaFX (JavaFX Application Thread).
+ * Thiết kế này giúp chống đơ giao diện và loại bỏ lỗi IllegalStateException.
  */
 public class JavaFXChatListenerWrapper implements ChatListener {
     private final ChatListener delegate;
 
+    /**
+     * Khởi tạo Wrapper với một listener thực tế (Controller).
+     *
+     * @param delegate ChatListener thực tế nhận sự kiện.
+     */
     public JavaFXChatListenerWrapper(ChatListener delegate) {
         this.delegate = delegate;
     }
@@ -55,13 +61,6 @@ public class JavaFXChatListenerWrapper implements ChatListener {
     public void onConnectionLost(Throwable cause) {
         if (delegate != null) {
             Platform.runLater(() -> delegate.onConnectionLost(cause));
-        }
-    }
-
-    @Override
-    public void onMessageStatusUpdated(ProtocolMessage message) {
-        if (delegate != null) {
-            Platform.runLater(() -> delegate.onMessageStatusUpdated(message));
         }
     }
 
