@@ -8,6 +8,7 @@ import vn.edu.ut.udm08.shared.mapper.UserMapper;
 import vn.edu.ut.udm08.shared.model.User;
 import vn.edu.ut.udm08.shared.security.IPasswordEncoder;
 import vn.edu.ut.udm08.shared.security.PasswordEncoder;
+import vn.edu.ut.udm08.shared.validation.PasswordValidator;
 
 public class UserRegisterService {
     private final IUserRepository userRepository;
@@ -42,6 +43,9 @@ public class UserRegisterService {
             request.getOtpCode() == null || request.getOtpCode().trim().isEmpty()) {
             return RegisterResponse.fail("Vui lòng nhập đầy đủ thông tin và mã OTP");
         }
+
+        String passwordError = new PasswordValidator().getValidationError(request.getPassword());
+        if (passwordError != null) return RegisterResponse.fail(passwordError);
 
         if (!phoneOtpService.verifyOtp(request.getPhoneNumber(), request.getOtpCode())) {
             return RegisterResponse.fail("Mã OTP số điện thoại không chính xác hoặc đã hết hạn");

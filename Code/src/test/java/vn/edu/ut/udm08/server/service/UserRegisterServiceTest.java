@@ -28,25 +28,25 @@ public class UserRegisterServiceTest {
     public void testRegisterSuccessHashesPassword() {
         service.getPhoneOtpService().sendOtp("0901234567");
         String otp = service.getPhoneOtpService().getLatestOtpForTesting("0901234567");
-        RegisterRequest request = new RegisterRequest("ThanhUser", "0901234567", "pass123", otp, "PRESET", "01.png");
+        RegisterRequest request = new RegisterRequest("ThanhUser", "0901234567", "Pass123@", otp, "PRESET", "01.png");
         RegisterResponse response = service.register(request);
         assertTrue(response.isSuccess());
         assertNotNull(response.getUser());
         assertEquals("ThanhUser", response.getUser().getUsername());
-        assertNotEquals("pass123", response.getUser().getPasswordHash());
-        assertTrue(passwordEncoder.matches("pass123", response.getUser().getPasswordHash()));
+        assertNotEquals("Pass123@", response.getUser().getPasswordHash());
+        assertTrue(passwordEncoder.matches("Pass123@", response.getUser().getPasswordHash()));
     }
 
     @Test
     public void testRegisterRejectsDuplicateUsername() {
         service.getPhoneOtpService().sendOtp("0901234567");
         String otp1 = service.getPhoneOtpService().getLatestOtpForTesting("0901234567");
-        RegisterRequest request1 = new RegisterRequest("ThanhUser", "0901234567", "pass123", otp1, "PRESET", "01.png");
+        RegisterRequest request1 = new RegisterRequest("ThanhUser", "0901234567", "Pass123@", otp1, "PRESET", "01.png");
         service.register(request1);
 
         service.getPhoneOtpService().sendOtp("0909999999");
         String otp2 = service.getPhoneOtpService().getLatestOtpForTesting("0909999999");
-        RegisterRequest request2 = new RegisterRequest("thanhuser", "0909999999", "pass123", otp2, "PRESET", "01.png");
+        RegisterRequest request2 = new RegisterRequest("thanhuser", "0909999999", "Pass123@", otp2, "PRESET", "01.png");
         RegisterResponse response = service.register(request2);
         assertFalse(response.isSuccess());
         assertEquals("Tên đăng nhập đã được sử dụng", response.getMessage());
@@ -56,12 +56,12 @@ public class UserRegisterServiceTest {
     public void testRegisterRejectsDuplicatePhone() {
         service.getPhoneOtpService().sendOtp("0901234567");
         String otp1 = service.getPhoneOtpService().getLatestOtpForTesting("0901234567");
-        RegisterRequest request1 = new RegisterRequest("User1", "0901234567", "pass123", otp1, "PRESET", "01.png");
+        RegisterRequest request1 = new RegisterRequest("User1", "0901234567", "Pass123@", otp1, "PRESET", "01.png");
         service.register(request1);
 
         service.getPhoneOtpService().sendOtp("0901234567");
         String otp2 = service.getPhoneOtpService().getLatestOtpForTesting("0901234567");
-        RegisterRequest request2 = new RegisterRequest("User2", "0901234567", "pass123", otp2, "PRESET", "01.png");
+        RegisterRequest request2 = new RegisterRequest("User2", "0901234567", "Pass123@", otp2, "PRESET", "01.png");
         RegisterResponse response = service.register(request2);
         assertFalse(response.isSuccess());
         assertEquals("Số điện thoại đã được đăng ký", response.getMessage());
