@@ -17,6 +17,7 @@ public class ProtocolMessage {
     public String kind;
     public String errorCode;
     public String errorMessage;
+    public String requestId;
     public ProtocolMessage() {}
     public ProtocolMessage(MessageType type) {
         this.type = type;

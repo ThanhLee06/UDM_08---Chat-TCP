@@ -63,4 +63,25 @@ public class JavaFXChatListenerWrapper implements ChatListener {
             Platform.runLater(() -> delegate.onConnectionLost(cause));
         }
     }
+
+    @Override
+    public void onLogoutSuccess() {
+        if (delegate != null) {
+            Platform.runLater(delegate::onLogoutSuccess);
+        }
+    }
+
+    @Override
+    public void onSessionExpired(String errorCode, String errorMessage) {
+        if (delegate != null) {
+            Platform.runLater(() -> delegate.onSessionExpired(errorCode, errorMessage));
+        }
+    }
+
+    @Override
+    public void onRequestCancelled(String requestId, String reason) {
+        if (delegate != null) {
+            Platform.runLater(() -> delegate.onRequestCancelled(requestId, reason));
+        }
+    }
 }

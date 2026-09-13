@@ -7,7 +7,10 @@ import java.io.PrintWriter;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.io.IOException;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import vn.edu.ut.udm08.shared.model.MessageType;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
@@ -17,13 +20,20 @@ import vn.edu.ut.udm08.shared.protocol.JsonUtil;
  * Lớp ChatClient quản lý kết nối TCP đến Server và gửi/nhận thông điệp.
  */
 public class ChatClient {
+    private static final String ERROR_SESSION_INVALID = "SESSION_INVALID";
+    private static final String ERROR_SESSION_EXPIRED = "SESSION_EXPIRED";
+    private static final String ERROR_UNAUTHORIZED = "UNAUTHORIZED";
+
     private Socket socket;
     private BufferedReader reader;
     private PrintWriter writer;
     private ChatReceiver receiver;
+    private ChatListener listener;
     
     private String username;
     private String avatarId;
+    private final AtomicLong sessionEpoch = new AtomicLong(0);
+    private final Map<String, PendingRequest> pendingRequests = new ConcurrentHashMap<>();
 
     /**
      * Kết nối đến TCP Server, thiết lập luồng đọc ngầm nhận tin nhắn và gửi gói tin chào hỏi (HELLO).
@@ -64,6 +74,9 @@ public class ChatClient {
             throw new IllegalArgumentException("AvatarId không được để trống");
         }
 
+        long epoch = sessionEpoch.incrementAndGet();
+        cancelPendingRequests("NEW_SESSION");
+
         // 1. Thiết lập kết nối Socket TCP
         this.socket = new Socket(config.getHost(), config.getPort());
         
@@ -78,6 +91,7 @@ public class ChatClient {
 //        ChatListener safeListener = new JavaFXChatListenerWrapper(listener);
         ChatListener safeListener = listener;
 
+        this.listener = safeListener;
         this.receiver = new ChatReceiver(this, reader, safeListener);
         Thread receiverThread = new Thread(this.receiver, "ChatReceiverThread");
         receiverThread.setDaemon(true); // Đảm bảo thread tự tắt khi app JavaFX chính dừng
@@ -88,6 +102,7 @@ public class ChatClient {
         helloMessage.sender = username;
         helloMessage.avatarId = avatarId;
         helloMessage.timestamp = System.currentTimeMillis();
+        helloMessage.requestId = "HELLO-" + epoch;
 
         // 5. Chuyển đổi gói tin sang dạng JSON
         String json = JsonUtil.toJson(helloMessage);
@@ -171,8 +186,99 @@ public class ChatClient {
             }
         } finally {
             // Đảm bảo đóng tất cả tài nguyên và đặt lại trạng thái dù có lỗi xảy ra
-            closeResources();
+            clearLocalSession("DISCONNECT", listener);
         }
+    }
+
+    /**
+     * Đăng xuất chủ động: gửi LOGOUT lên Server rồi dọn sạch phiên Client.
+     */
+    public synchronized void logout() {
+        ChatListener activeListener = listener;
+        try {
+            if (writer != null && socket != null && !socket.isClosed()) {
+                ProtocolMessage logoutMessage = new ProtocolMessage(MessageType.LOGOUT);
+                logoutMessage.sender = this.username;
+                logoutMessage.requestId = UUID.randomUUID().toString();
+                logoutMessage.timestamp = System.currentTimeMillis();
+                writer.println(JsonUtil.toJson(logoutMessage));
+            }
+        } catch (Exception ignored) {
+            // Dù gửi LOGOUT thất bại vẫn phải dọn local để bảo vệ phiên hiện tại.
+        } finally {
+            clearLocalSession("LOGOUT", activeListener);
+            if (activeListener != null) {
+                activeListener.onLogoutSuccess();
+            }
+        }
+    }
+
+    /**
+     * Ghi nhận một request đang chờ phản hồi trong phiên hiện tại.
+     *
+     * @param requestId ID request do Client tạo.
+     * @return epoch của phiên tại thời điểm đăng ký request.
+     */
+    public long registerPendingRequest(String requestId) {
+        if (requestId == null || requestId.isBlank()) {
+            throw new IllegalArgumentException("RequestId không được để trống");
+        }
+        long epoch = sessionEpoch.get();
+        pendingRequests.put(requestId, new PendingRequest(requestId, epoch));
+        return epoch;
+    }
+
+    /**
+     * Hoàn tất request nếu request đó vẫn thuộc đúng phiên hiện tại.
+     */
+    public boolean completePendingRequest(String requestId, long expectedEpoch) {
+        if (!isCurrentEpoch(expectedEpoch) || requestId == null || requestId.isBlank()) {
+            return false;
+        }
+        return pendingRequests.remove(requestId) != null;
+    }
+
+    /**
+     * Kiểm tra phản hồi đến muộn có còn thuộc phiên hiện tại không.
+     */
+    public boolean isCurrentEpoch(long epoch) {
+        return sessionEpoch.get() == epoch;
+    }
+
+    public long getSessionEpoch() {
+        return sessionEpoch.get();
+    }
+
+    public int getPendingRequestCount() {
+        return pendingRequests.size();
+    }
+
+    /**
+     * Xử lý khi Server xác nhận đăng xuất.
+     */
+    void handleLogoutOk(ChatListener fallbackListener) {
+        ChatListener activeListener = listener != null ? listener : fallbackListener;
+        clearLocalSession("LOGOUT_OK", activeListener);
+        if (activeListener != null) {
+            activeListener.onLogoutSuccess();
+        }
+    }
+
+    /**
+     * Xử lý khi Server báo phiên không hợp lệ hoặc hết hạn.
+     */
+    void handleSessionExpired(String errorCode, String errorMessage, ChatListener fallbackListener) {
+        ChatListener activeListener = listener != null ? listener : fallbackListener;
+        clearLocalSession("SESSION_EXPIRED", activeListener);
+        if (activeListener != null) {
+            activeListener.onSessionExpired(errorCode, errorMessage);
+        }
+    }
+
+    boolean isSessionInvalidError(String errorCode) {
+        return ERROR_SESSION_INVALID.equals(errorCode)
+                || ERROR_SESSION_EXPIRED.equals(errorCode)
+                || ERROR_UNAUTHORIZED.equals(errorCode);
     }
 
     /**
@@ -216,6 +322,30 @@ public class ChatClient {
         this.avatarId = null;
     }
 
+    private void clearLocalSession(String reason, ChatListener cancelListener) {
+        sessionEpoch.incrementAndGet();
+        cancelPendingRequests(reason, cancelListener);
+        closeResources();
+        listener = null;
+    }
+
+    private void cancelPendingRequests(String reason) {
+        cancelPendingRequests(reason, listener);
+    }
+
+    private void cancelPendingRequests(String reason, ChatListener cancelListener) {
+        if (pendingRequests.isEmpty()) {
+            return;
+        }
+
+        for (PendingRequest request : pendingRequests.values()) {
+            if (cancelListener != null) {
+                cancelListener.onRequestCancelled(request.requestId, reason);
+            }
+        }
+        pendingRequests.clear();
+    }
+
     /**
      * Kiểm tra trạng thái kết nối của Client.
      *
@@ -231,5 +361,15 @@ public class ChatClient {
 
     public String getAvatarId() {
         return avatarId;
+    }
+
+    private static class PendingRequest {
+        private final String requestId;
+        private final long epoch;
+
+        private PendingRequest(String requestId, long epoch) {
+            this.requestId = requestId;
+            this.epoch = epoch;
+        }
     }
 }
