@@ -52,4 +52,25 @@ public interface ChatListener {
      * @param cause Ngoại lệ nguyên nhân gây mất kết nối.
      */
     void onConnectionLost(Throwable cause);
+
+    /**
+     * Kích hoạt khi Client đăng xuất xong hoặc Server xác nhận đăng xuất.
+     */
+    default void onLogoutSuccess() {}
+
+    /**
+     * Kích hoạt khi phiên đăng nhập hiện tại không còn hợp lệ.
+     *
+     * @param errorCode Mã lỗi phiên từ Server.
+     * @param errorMessage Thông báo chi tiết từ Server.
+     */
+    default void onSessionExpired(String errorCode, String errorMessage) {}
+
+    /**
+     * Kích hoạt khi một request đang chờ bị hủy do logout hoặc session kết thúc.
+     *
+     * @param requestId ID của request bị hủy.
+     * @param reason Lý do hủy request.
+     */
+    default void onRequestCancelled(String requestId, String reason) {}
 }
