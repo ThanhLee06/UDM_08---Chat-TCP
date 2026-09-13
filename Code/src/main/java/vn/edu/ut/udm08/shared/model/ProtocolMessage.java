@@ -11,6 +11,10 @@ public class ProtocolMessage {
     public String avatarId;
     public Long timestamp;
     public List<UserProfile> users;
+    public String convId;
+    public String replyTo;
+    public String fwdFrom;
+    public String kind;
     public String errorCode;
     public String errorMessage;
     public ProtocolMessage() {}
