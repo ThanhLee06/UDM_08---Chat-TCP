@@ -51,6 +51,13 @@ public class JavaFXChatListenerWrapper implements ChatListener {
     }
 
     @Override
+    public void onMessageStatusUpdated(ProtocolMessage message) {
+        if (delegate != null) {
+            Platform.runLater(() -> delegate.onMessageStatusUpdated(message));
+        }
+    }
+
+    @Override
     public void onErrorReceived(String errorCode, String errorMessage) {
         if (delegate != null) {
             Platform.runLater(() -> delegate.onErrorReceived(errorCode, errorMessage));
@@ -61,6 +68,27 @@ public class JavaFXChatListenerWrapper implements ChatListener {
     public void onConnectionLost(Throwable cause) {
         if (delegate != null) {
             Platform.runLater(() -> delegate.onConnectionLost(cause));
+        }
+    }
+
+    @Override
+    public void onLogoutSuccess() {
+        if (delegate != null) {
+            Platform.runLater(delegate::onLogoutSuccess);
+        }
+    }
+
+    @Override
+    public void onSessionExpired(String errorCode, String errorMessage) {
+        if (delegate != null) {
+            Platform.runLater(() -> delegate.onSessionExpired(errorCode, errorMessage));
+        }
+    }
+
+    @Override
+    public void onRequestCancelled(String requestId, String reason) {
+        if (delegate != null) {
+            Platform.runLater(() -> delegate.onRequestCancelled(requestId, reason));
         }
     }
 }

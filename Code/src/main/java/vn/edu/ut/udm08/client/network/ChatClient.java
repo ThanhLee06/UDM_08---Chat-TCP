@@ -1,55 +1,43 @@
 package vn.edu.ut.udm08.client.network;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.io.IOException;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
+import vn.edu.ut.udm08.shared.model.MessageSendStatus;
 import vn.edu.ut.udm08.shared.model.MessageType;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
 import vn.edu.ut.udm08.shared.protocol.JsonUtil;
 
-/**
- * Lớp ChatClient quản lý kết nối TCP đến Server và gửi/nhận thông điệp.
- */
 public class ChatClient {
+    private static final String ERROR_SESSION_INVALID = "SESSION_INVALID";
+    private static final String ERROR_SESSION_EXPIRED = "SESSION_EXPIRED";
+    private static final String ERROR_UNAUTHORIZED = "UNAUTHORIZED";
+
     private Socket socket;
     private BufferedReader reader;
     private PrintWriter writer;
     private ChatReceiver receiver;
-    
+    private ChatListener listener;
+
     private String username;
     private String avatarId;
+    private final AtomicLong sessionEpoch = new AtomicLong(0);
+    private final Map<String, PendingRequest> pendingRequests = new ConcurrentHashMap<>();
+    private final Map<String, ProtocolMessage> outboundMessages = new ConcurrentHashMap<>();
 
-    /**
-     * Kết nối đến TCP Server, thiết lập luồng đọc ngầm nhận tin nhắn và gửi gói tin chào hỏi (HELLO).
-     *
-     * @param host Địa chỉ IP hoặc tên miền của Server.
-     * @param port Cổng dịch vụ của Server.
-     * @param username Tên người dùng kết nối.
-     * @param avatarId ID ảnh đại diện người dùng chọn.
-     * @param listener Callback để chuyển tiếp sự kiện mạng lên giao diện.
-     * @throws IOException Nếu xảy ra lỗi kết nối mạng hoặc lỗi định dạng JSON.
-     * @throws IllegalArgumentException Nếu host hoặc port không hợp lệ.
-     */
     public void connect(String host, int port, String username, String avatarId, ChatListener listener) throws IOException {
         connect(new ClientConfig(host, port), username, avatarId, listener);
     }
 
-    /**
-     * Kết nối đến TCP Server dựa trên cấu hình ClientConfig.
-     *
-     * @param config Cấu hình kết nối chứa Host và Port hợp lệ.
-     * @param username Tên người dùng kết nối.
-     * @param avatarId ID ảnh đại diện người dùng chọn.
-     * @param listener Callback để chuyển tiếp sự kiện mạng lên giao diện.
-     * @throws IOException Nếu xảy ra lỗi kết nối mạng hoặc lỗi định dạng JSON.
-     * @throws IllegalArgumentException Nếu config là null.
-     */
     public void connect(ClientConfig config, String username, String avatarId, ChatListener listener) throws IOException {
         if (isConnected()) {
             throw new IllegalStateException("ChatClient đã được kết nối trước đó");
@@ -64,64 +52,41 @@ public class ChatClient {
             throw new IllegalArgumentException("AvatarId không được để trống");
         }
 
-        // 1. Thiết lập kết nối Socket TCP
+        long epoch = sessionEpoch.incrementAndGet();
+        cancelPendingRequests("NEW_SESSION");
+
         this.socket = new Socket(config.getHost(), config.getPort());
-        
-        // 2. Khởi tạo các luồng đọc/ghi dữ liệu sử dụng UTF-8
         this.reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
         this.writer = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
-        
         this.username = username.trim();
         this.avatarId = avatarId.trim();
 
-        // 3. Khởi chạy luồng nhận tin nhắn chạy ngầm (bọc JavaFX wrapper để an toàn luồng)
-//        ChatListener safeListener = new JavaFXChatListenerWrapper(listener);
         ChatListener safeListener = listener;
-
+        this.listener = safeListener;
         this.receiver = new ChatReceiver(this, reader, safeListener);
         Thread receiverThread = new Thread(this.receiver, "ChatReceiverThread");
-        receiverThread.setDaemon(true); // Đảm bảo thread tự tắt khi app JavaFX chính dừng
+        receiverThread.setDaemon(true);
         receiverThread.start();
 
-        // 4. Đóng gói gói tin chào hỏi HELLO
         ProtocolMessage helloMessage = new ProtocolMessage(MessageType.HELLO);
         helloMessage.sender = username;
         helloMessage.avatarId = avatarId;
         helloMessage.timestamp = System.currentTimeMillis();
+        helloMessage.requestId = "HELLO-" + epoch;
 
-        // 5. Chuyển đổi gói tin sang dạng JSON
-        String json = JsonUtil.toJson(helloMessage);
-
-        // 6. Gửi gói tin JSON qua luồng TCP tới Server
-        sendRawMessage(json);
+        sendRawMessage(JsonUtil.toJson(helloMessage));
     }
 
-    /**
-     * Gửi chuỗi tin nhắn thô qua luồng TCP đến Server.
-     *
-     * @param rawMessage Chuỗi tin nhắn (thường là định dạng JSON).
-     */
     public void sendRawMessage(String rawMessage) {
         if (writer != null) {
             writer.println(rawMessage);
         }
     }
 
-    /**
-     * Đóng gói và gửi gói tin CHAT đến một đối tượng nhận (target).
-     *
-     * @param target Tên người nhận tin nhắn (username nhận tin hoặc tên phòng/kênh).
-     * @param content Nội dung tin nhắn cần gửi (tối đa 5000 ký tự).
-     * @throws IOException Nếu kết nối bị ngắt hoặc xảy ra lỗi luồng ghi.
-     * @throws IllegalArgumentException Nếu target hoặc content rỗng, hoặc content vượt quá 5000 ký tự.
-     */
     public void sendMessage(String target, String content) throws IOException {
-        // 1. Kiểm tra trạng thái kết nối
         if (!isConnected()) {
             throw new IOException("Không thể gửi tin nhắn: Chưa kết nối đến Server hoặc kết nối đã bị đóng.");
         }
-
-        // 2. Kiểm tra tính hợp lệ của dữ liệu đầu vào
         if (target == null || target.isBlank()) {
             throw new IllegalArgumentException("Người nhận (target) không được để trống");
         }
@@ -132,60 +97,175 @@ public class ChatClient {
             throw new IllegalArgumentException("Nội dung tin nhắn quá dài (tối đa 5000 ký tự)");
         }
 
-        // 3. Tạo đối tượng tin nhắn CHAT với ID duy nhất
         ProtocolMessage chatMessage = new ProtocolMessage(MessageType.CHAT);
         chatMessage.messageId = UUID.randomUUID().toString();
         chatMessage.sender = this.username;
         chatMessage.target = target.trim();
         chatMessage.content = content.trim();
         chatMessage.timestamp = System.currentTimeMillis();
+        sendMessage(chatMessage);
+    }
 
-        // 4. Chuyển đổi đối tượng tin nhắn thành chuỗi JSON Lines
-        String json = JsonUtil.toJson(chatMessage);
+    public void sendMessage(ProtocolMessage chatMessage) throws IOException {
+        if (!isConnected()) {
+            throw new IOException("Không thể gửi tin nhắn: Chưa kết nối đến Server hoặc kết nối đã bị đóng.");
+        }
+        if (chatMessage == null) {
+            throw new IllegalArgumentException("Tin nhắn không được để null");
+        }
+        if (chatMessage.target == null || chatMessage.target.isBlank()) {
+            throw new IllegalArgumentException("Người nhận (target) không được để trống");
+        }
+        if (chatMessage.content == null || chatMessage.content.isBlank()) {
+            throw new IllegalArgumentException("Nội dung tin nhắn không được để trống");
+        }
+        if (chatMessage.content.length() > 5000) {
+            throw new IllegalArgumentException("Nội dung tin nhắn quá dài (tối đa 5000 ký tự)");
+        }
 
-        // 5. Gửi chuỗi JSON qua Socket
-        sendRawMessage(json);
+        chatMessage.type = MessageType.CHAT;
+        if (chatMessage.messageId == null || chatMessage.messageId.isBlank()) {
+            chatMessage.messageId = UUID.randomUUID().toString();
+        }
+        chatMessage.sender = this.username;
+        chatMessage.target = chatMessage.target.trim();
+        chatMessage.content = chatMessage.content.trim();
+        if (chatMessage.timestamp == null) {
+            chatMessage.timestamp = System.currentTimeMillis();
+        }
+        chatMessage.sendStatus = MessageSendStatus.PENDING;
 
-        // 6. Kiểm tra lỗi vật lý trên luồng ghi dữ liệu
+        outboundMessages.put(chatMessage.messageId, chatMessage);
+        notifyMessageStatusUpdated(chatMessage);
+        sendRawMessage(JsonUtil.toJson(chatMessage));
+
         if (writer != null && writer.checkError()) {
+            markOutboundMessageFailed(chatMessage.messageId, "WRITE_FAILED", "Không thể ghi dữ liệu vào Socket");
             throw new IOException("Không thể gửi tin nhắn: Gặp lỗi vật lý trên luồng truyền dữ liệu TCP Socket.");
         }
     }
 
-    /**
-     * Ngắt kết nối TCP và đóng toàn bộ luồng dữ liệu an toàn (Idempotent).
-     */
     public synchronized void disconnect() {
         try {
-            // Gửi gói tin thông báo ngắt kết nối (DISCONNECT) trước khi đóng socket
             if (writer != null && socket != null && !socket.isClosed()) {
                 ProtocolMessage disconnectMessage = new ProtocolMessage(MessageType.DISCONNECT);
                 disconnectMessage.sender = this.username;
                 disconnectMessage.timestamp = System.currentTimeMillis();
                 try {
-                    String json = JsonUtil.toJson(disconnectMessage);
-                    writer.println(json);
+                    writer.println(JsonUtil.toJson(disconnectMessage));
                 } catch (Exception ignored) {
-                    // Bỏ qua lỗi JSON khi đang đóng kết nối
                 }
             }
         } finally {
-            // Đảm bảo đóng tất cả tài nguyên và đặt lại trạng thái dù có lỗi xảy ra
-            closeResources();
+            clearLocalSession("DISCONNECT", listener);
         }
     }
 
-    /**
-     * Đóng an toàn các luồng dữ liệu, socket và đặt lại trạng thái client.
-     */
+    public synchronized void logout() {
+        ChatListener activeListener = listener;
+        try {
+            if (writer != null && socket != null && !socket.isClosed()) {
+                ProtocolMessage logoutMessage = new ProtocolMessage(MessageType.LOGOUT);
+                logoutMessage.sender = this.username;
+                logoutMessage.requestId = UUID.randomUUID().toString();
+                logoutMessage.timestamp = System.currentTimeMillis();
+                writer.println(JsonUtil.toJson(logoutMessage));
+            }
+        } catch (Exception ignored) {
+        } finally {
+            clearLocalSession("LOGOUT", activeListener);
+            if (activeListener != null) {
+                activeListener.onLogoutSuccess();
+            }
+        }
+    }
+
+    public long registerPendingRequest(String requestId) {
+        if (requestId == null || requestId.isBlank()) {
+            throw new IllegalArgumentException("RequestId không được để trống");
+        }
+        long epoch = sessionEpoch.get();
+        pendingRequests.put(requestId, new PendingRequest(requestId, epoch));
+        return epoch;
+    }
+
+    public boolean completePendingRequest(String requestId, long expectedEpoch) {
+        if (!isCurrentEpoch(expectedEpoch) || requestId == null || requestId.isBlank()) {
+            return false;
+        }
+        return pendingRequests.remove(requestId) != null;
+    }
+
+    public boolean isCurrentEpoch(long epoch) {
+        return sessionEpoch.get() == epoch;
+    }
+
+    public long getSessionEpoch() {
+        return sessionEpoch.get();
+    }
+
+    public int getPendingRequestCount() {
+        return pendingRequests.size();
+    }
+
+    void handleLogoutOk(ChatListener fallbackListener) {
+        ChatListener activeListener = listener != null ? listener : fallbackListener;
+        clearLocalSession("LOGOUT_OK", activeListener);
+        if (activeListener != null) {
+            activeListener.onLogoutSuccess();
+        }
+    }
+
+    void handleSessionExpired(String errorCode, String errorMessage, ChatListener fallbackListener) {
+        ChatListener activeListener = listener != null ? listener : fallbackListener;
+        markAllPendingOutboundUnknown(activeListener);
+        clearLocalSession("SESSION_EXPIRED", activeListener);
+        if (activeListener != null) {
+            activeListener.onSessionExpired(errorCode, errorMessage);
+        }
+    }
+
+    boolean isSessionInvalidError(String errorCode) {
+        return ERROR_SESSION_INVALID.equals(errorCode)
+                || ERROR_SESSION_EXPIRED.equals(errorCode)
+                || ERROR_UNAUTHORIZED.equals(errorCode);
+    }
+
+    void handleChatOk(ProtocolMessage ackMessage) {
+        if (ackMessage == null || ackMessage.messageId == null || ackMessage.messageId.isBlank()) {
+            return;
+        }
+        ProtocolMessage pending = outboundMessages.remove(ackMessage.messageId);
+        if (pending == null) {
+            return;
+        }
+        if (ackMessage.timestamp != null) {
+            pending.timestamp = ackMessage.timestamp;
+        }
+        pending.sendStatus = MessageSendStatus.SENT;
+        notifyMessageStatusUpdated(pending);
+    }
+
+    boolean handleMessageError(ProtocolMessage errorMessage) {
+        if (errorMessage == null || errorMessage.messageId == null || errorMessage.messageId.isBlank()) {
+            return false;
+        }
+        ProtocolMessage pending = outboundMessages.remove(errorMessage.messageId);
+        if (pending == null) {
+            return false;
+        }
+        pending.errorCode = errorMessage.errorCode;
+        pending.errorMessage = errorMessage.errorMessage;
+        pending.sendStatus = MessageSendStatus.FAILED;
+        notifyMessageStatusUpdated(pending);
+        return true;
+    }
+
     private void closeResources() {
-        // 1. Dừng cờ luồng đọc ngầm trước
         if (receiver != null) {
             receiver.stop();
             receiver = null;
         }
-
-        // 2. Đóng Socket trước để ngắt ngay lập tức mọi thao tác đọc/ghi đang chờ (blocking I/O)
         try {
             if (socket != null && !socket.isClosed()) {
                 socket.close();
@@ -194,8 +274,6 @@ public class ChatClient {
         } finally {
             socket = null;
         }
-
-        // 3. Đóng luồng đọc
         try {
             if (reader != null) {
                 reader.close();
@@ -204,23 +282,68 @@ public class ChatClient {
         } finally {
             reader = null;
         }
-
-        // 4. Đóng luồng ghi
         if (writer != null) {
             writer.close();
             writer = null;
         }
-
-        // 5. Đặt lại thông tin người dùng để sẵn sàng cho lần kết nối sau
         this.username = null;
         this.avatarId = null;
     }
 
-    /**
-     * Kiểm tra trạng thái kết nối của Client.
-     *
-     * @return true nếu kết nối vẫn đang mở, ngược lại false.
-     */
+    private void clearLocalSession(String reason, ChatListener cancelListener) {
+        sessionEpoch.incrementAndGet();
+        markAllPendingOutboundUnknown(cancelListener);
+        cancelPendingRequests(reason, cancelListener);
+        closeResources();
+        listener = null;
+    }
+
+    private void cancelPendingRequests(String reason) {
+        cancelPendingRequests(reason, listener);
+    }
+
+    private void cancelPendingRequests(String reason, ChatListener cancelListener) {
+        if (pendingRequests.isEmpty()) {
+            return;
+        }
+        for (PendingRequest request : pendingRequests.values()) {
+            if (cancelListener != null) {
+                cancelListener.onRequestCancelled(request.requestId, reason);
+            }
+        }
+        pendingRequests.clear();
+    }
+
+    private void markOutboundMessageFailed(String messageId, String errorCode, String errorMessage) {
+        ProtocolMessage pending = outboundMessages.remove(messageId);
+        if (pending == null) {
+            return;
+        }
+        pending.errorCode = errorCode;
+        pending.errorMessage = errorMessage;
+        pending.sendStatus = MessageSendStatus.FAILED;
+        notifyMessageStatusUpdated(pending);
+    }
+
+    private void markAllPendingOutboundUnknown(ChatListener targetListener) {
+        if (outboundMessages.isEmpty()) {
+            return;
+        }
+        for (ProtocolMessage pending : outboundMessages.values()) {
+            pending.sendStatus = MessageSendStatus.UNKNOWN;
+            if (targetListener != null) {
+                targetListener.onMessageStatusUpdated(pending);
+            }
+        }
+        outboundMessages.clear();
+    }
+
+    private void notifyMessageStatusUpdated(ProtocolMessage message) {
+        if (listener != null) {
+            listener.onMessageStatusUpdated(message);
+        }
+    }
+
     public boolean isConnected() {
         return socket != null && !socket.isClosed();
     }
@@ -231,5 +354,15 @@ public class ChatClient {
 
     public String getAvatarId() {
         return avatarId;
+    }
+
+    private static class PendingRequest {
+        private final String requestId;
+        private final long epoch;
+
+        private PendingRequest(String requestId, long epoch) {
+            this.requestId = requestId;
+            this.epoch = epoch;
+        }
     }
 }

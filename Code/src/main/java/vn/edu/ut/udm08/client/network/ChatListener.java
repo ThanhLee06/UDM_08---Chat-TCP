@@ -37,6 +37,13 @@ public interface ChatListener {
      * @param messageId ID của tin nhắn gửi thành công.
      */
     void onMessageSentSuccess(String messageId);
+
+    /**
+     * Kích hoạt khi trạng thái gửi của một tin nhắn thay đổi.
+     *
+     * @param message Tin nhắn đã được cập nhật trạng thái gửi.
+     */
+    default void onMessageStatusUpdated(ProtocolMessage message) {}
     
     /**
      * Kích hoạt khi nhận được tin nhắn báo lỗi từ Server (gói tin ERROR).
@@ -52,4 +59,25 @@ public interface ChatListener {
      * @param cause Ngoại lệ nguyên nhân gây mất kết nối.
      */
     void onConnectionLost(Throwable cause);
+
+    /**
+     * Kích hoạt khi Client đăng xuất xong hoặc Server xác nhận đăng xuất.
+     */
+    default void onLogoutSuccess() {}
+
+    /**
+     * Kích hoạt khi phiên đăng nhập hiện tại không còn hợp lệ.
+     *
+     * @param errorCode Mã lỗi phiên từ Server.
+     * @param errorMessage Thông báo chi tiết từ Server.
+     */
+    default void onSessionExpired(String errorCode, String errorMessage) {}
+
+    /**
+     * Kích hoạt khi một request đang chờ bị hủy do logout hoặc session kết thúc.
+     *
+     * @param requestId ID của request bị hủy.
+     * @param reason Lý do hủy request.
+     */
+    default void onRequestCancelled(String requestId, String reason) {}
 }

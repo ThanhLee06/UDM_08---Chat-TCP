@@ -99,10 +99,34 @@ public class ChatReceiver implements Runnable {
                 listener.onMessageReceived(message);
                 break;
             case CHAT_OK:
+                if (client != null) {
+                    client.handleChatOk(message);
+                }
                 listener.onMessageSentSuccess(message.messageId);
                 break;
             case ERROR:
+                if (client != null && client.isSessionInvalidError(message.errorCode)) {
+                    client.handleSessionExpired(message.errorCode, message.errorMessage, listener);
+                    break;
+                }
+                if (client != null && client.handleMessageError(message)) {
+                    break;
+                }
                 listener.onErrorReceived(message.errorCode, message.errorMessage);
+                break;
+            case LOGOUT_OK:
+                if (client != null) {
+                    client.handleLogoutOk(listener);
+                } else {
+                    listener.onLogoutSuccess();
+                }
+                break;
+            case SESSION_EXPIRED:
+                if (client != null) {
+                    client.handleSessionExpired(message.errorCode, message.errorMessage, listener);
+                } else {
+                    listener.onSessionExpired(message.errorCode, message.errorMessage);
+                }
                 break;
             default:
                 // Gói tin không xác định / chưa hỗ trợ
