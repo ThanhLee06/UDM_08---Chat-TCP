@@ -39,6 +39,7 @@ public class ChatClient {
     private final AtomicLong sessionEpoch = new AtomicLong(0);
     private final Map<String, PendingRequest> pendingRequests = new ConcurrentHashMap<>();
     private final Map<String, PendingHistoryRequest> pendingHistoryRequests = new ConcurrentHashMap<>();
+    private final Map<String, PendingConversationListRequest> pendingConversationListRequests = new ConcurrentHashMap<>();
     private final Map<String, ProtocolMessage> outboundMessages = new ConcurrentHashMap<>();
     private final ScheduledExecutorService timeoutExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread thread = new Thread(r, "ChatClientTimeoutThread");
@@ -67,6 +68,7 @@ public class ChatClient {
         long epoch = sessionEpoch.incrementAndGet();
         cancelPendingRequests("NEW_SESSION");
         cancelPendingHistoryRequests("NEW_SESSION", "Phiên mới đã bắt đầu");
+        cancelPendingConversationListRequests("NEW_SESSION", "Phiên mới đã bắt đầu");
         markAllPendingOutboundUnknown(listener);
 
         this.socket = new Socket(config.getHost(), config.getPort());
@@ -197,6 +199,44 @@ public class ChatClient {
         return requestId;
     }
 
+    public String requestConversationList(ConversationListCallback callback) throws IOException {
+        return requestConversationList(DEFAULT_HISTORY_TIMEOUT_SECONDS, callback);
+    }
+
+    public String requestConversationList(int timeoutSeconds, ConversationListCallback callback) throws IOException {
+        if (!isConnected()) {
+            throw new IOException("Không thể tải danh sách hội thoại: Chưa kết nối đến Server hoặc kết nối đã bị đóng.");
+        }
+        if (callback == null) {
+            throw new IllegalArgumentException("Callback danh sách hội thoại không được để null");
+        }
+
+        String requestId = UUID.randomUUID().toString();
+        long epoch = registerPendingRequest(requestId);
+        int safeTimeoutSeconds = timeoutSeconds <= 0 ? DEFAULT_HISTORY_TIMEOUT_SECONDS : timeoutSeconds;
+
+        PendingConversationListRequest pending = new PendingConversationListRequest(requestId, epoch, callback);
+        ScheduledFuture<?> timeoutTask = timeoutExecutor.schedule(new Runnable() {
+            @Override
+            public void run() {
+                failConversationListRequest(requestId, "TIMEOUT", "Server không phản hồi danh sách hội thoại đúng hạn");
+            }
+        }, safeTimeoutSeconds, TimeUnit.SECONDS);
+        pending.timeoutTask = timeoutTask;
+        pendingConversationListRequests.put(requestId, pending);
+
+        ProtocolMessage request = new ProtocolMessage(MessageType.CONVERSATION_LIST_REQUEST);
+        request.requestId = requestId;
+        request.sender = username;
+        request.timestamp = System.currentTimeMillis();
+
+        sendRawMessage(JsonUtil.toJson(request));
+        if (writer != null && writer.checkError()) {
+            failConversationListRequest(requestId, "WRITE_FAILED", "Không thể gửi yêu cầu tải danh sách hội thoại qua Socket");
+            throw new IOException("Không thể tải danh sách hội thoại: Gặp lỗi vật lý trên luồng truyền dữ liệu TCP Socket.");
+        }
+        return requestId;
+    }
     public synchronized void disconnect() {
         try {
             if (writer != null && socket != null && !socket.isClosed()) {
@@ -358,6 +398,45 @@ public class ChatClient {
         }
     }
 
+    void handleConversationListResponse(ProtocolMessage response) {
+        if (response == null || response.requestId == null || response.requestId.isBlank()) {
+            return;
+        }
+        PendingConversationListRequest pending = pendingConversationListRequests.remove(response.requestId);
+        if (pending == null) {
+            return;
+        }
+        cancelTimeout(pending);
+        if (!completePendingRequest(response.requestId, pending.epoch)) {
+            return;
+        }
+        ConversationListResult result = new ConversationListResult(response.requestId, response.conversations);
+        pending.callback.onSuccess(result);
+    }
+
+    boolean handleConversationListError(ProtocolMessage errorMessage) {
+        if (errorMessage == null || errorMessage.requestId == null || errorMessage.requestId.isBlank()) {
+            return false;
+        }
+        return failConversationListRequest(errorMessage.requestId, errorMessage.errorCode, errorMessage.errorMessage);
+    }
+
+    private boolean failConversationListRequest(String requestId, String errorCode, String errorMessage) {
+        PendingConversationListRequest pending = pendingConversationListRequests.remove(requestId);
+        if (pending == null) {
+            return false;
+        }
+        cancelTimeout(pending);
+        pendingRequests.remove(requestId);
+        pending.callback.onFailure(requestId, errorCode, errorMessage);
+        return true;
+    }
+
+    private void cancelTimeout(PendingConversationListRequest pending) {
+        if (pending.timeoutTask != null) {
+            pending.timeoutTask.cancel(false);
+        }
+    }
     private void closeResources() {
         if (receiver != null) {
             receiver.stop();
@@ -391,6 +470,7 @@ public class ChatClient {
         sessionEpoch.incrementAndGet();
         markAllPendingOutboundUnknown(cancelListener);
         cancelPendingHistoryRequests(reason, "Phiên kết thúc trước khi Server trả lịch sử");
+        cancelPendingConversationListRequests(reason, "Phiên kết thúc trước khi Server trả danh sách hội thoại");
         cancelPendingRequests(reason, cancelListener);
         closeResources();
         listener = null;
@@ -423,6 +503,16 @@ public class ChatClient {
         pendingHistoryRequests.clear();
     }
 
+    private void cancelPendingConversationListRequests(String errorCode, String errorMessage) {
+        if (pendingConversationListRequests.isEmpty()) {
+            return;
+        }
+        for (PendingConversationListRequest request : pendingConversationListRequests.values()) {
+            cancelTimeout(request);
+            request.callback.onFailure(request.requestId, errorCode, errorMessage);
+        }
+        pendingConversationListRequests.clear();
+    }
     private void markOutboundMessageFailed(String messageId, String errorCode, String errorMessage) {
         ProtocolMessage pending = outboundMessages.remove(messageId);
         if (pending == null) {
@@ -475,6 +565,19 @@ public class ChatClient {
         }
     }
 
+    private static class PendingConversationListRequest {
+        private final String requestId;
+        private final long epoch;
+        private final ConversationListCallback callback;
+        private ScheduledFuture<?> timeoutTask;
+
+        private PendingConversationListRequest(String requestId, long epoch,
+                                               ConversationListCallback callback) {
+            this.requestId = requestId;
+            this.epoch = epoch;
+            this.callback = callback;
+        }
+    }
     private static class PendingHistoryRequest {
         private final String requestId;
         private final String convId;
@@ -491,3 +594,6 @@ public class ChatClient {
         }
     }
 }
+
+
+
