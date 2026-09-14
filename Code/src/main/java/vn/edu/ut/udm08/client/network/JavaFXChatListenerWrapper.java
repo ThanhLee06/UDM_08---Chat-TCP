@@ -65,6 +65,13 @@ public class JavaFXChatListenerWrapper implements ChatListener {
     }
 
     @Override
+    public void onMessageStatusUpdated(ProtocolMessage message) {
+        if (delegate != null) {
+            Platform.runLater(() -> delegate.onMessageStatusUpdated(message));
+        }
+    }
+
+    @Override
     public void onLogoutSuccess() {
         if (delegate != null) {
             Platform.runLater(delegate::onLogoutSuccess);
@@ -85,3 +92,4 @@ public class JavaFXChatListenerWrapper implements ChatListener {
         }
     }
 }
+

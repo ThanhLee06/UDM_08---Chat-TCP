@@ -150,7 +150,7 @@ public class LoginController {
                 @Override
                 public void onSendMessage(ProtocolMessage message) {
                     try {
-                        client.sendMessage(message.target, message.content);
+                        client.sendMessage(message);
                     } catch (Exception e) {
                     }
                 }
@@ -186,3 +186,4 @@ public class LoginController {
         statusLabel.setText(message);
     }
 }
+
