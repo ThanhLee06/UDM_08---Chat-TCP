@@ -20,6 +20,12 @@ public class ProtocolMessage {
     public String kind;
     public Long sequence;
     public String status;
+    public String requestId;
+    public String cursor;
+    public Integer limit;
+    public String nextCursor;
+    public Boolean hasMore;
+    public List<ProtocolMessage> history;
     public ProtocolMessage() {}
     public ProtocolMessage(MessageType type) {
         this.type = type;

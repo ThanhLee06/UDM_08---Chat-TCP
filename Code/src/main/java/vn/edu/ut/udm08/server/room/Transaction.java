@@ -11,10 +11,16 @@ import java.util.concurrent.atomic.AtomicLong;
 public class Transaction {
 
     private final MessageDao messageDao;
+    private final ConversationDao conversationDao;
     private final AtomicLong sequenceGenerator = new AtomicLong(1);
 
     public Transaction(MessageDao messageDao) {
+        this(messageDao, null);
+    }
+
+    public Transaction(MessageDao messageDao, ConversationDao conversationDao) {
         this.messageDao = messageDao != null ? messageDao : new InMemoryMessageDao();
+        this.conversationDao = conversationDao;
     }
 
     /**
@@ -30,11 +36,16 @@ public class Transaction {
 
         // Cấp timestamp và sequence chính thức từ hệ thống DB Server
         message.timestamp = System.currentTimeMillis();
-        message.sequence = sequenceGenerator.getAndIncrement();
+        if (message.sequence == null) {
+            message.sequence = sequenceGenerator.getAndIncrement();
+        }
         message.status = "SENT";
 
-        // Thực hiện lưu vào DB thông qua MessageDao
+        // Thực hiện lưu vào DB thông qua MessageDao & ConversationDao
         messageDao.save(message);
+        if (conversationDao != null) {
+            conversationDao.saveMessage(message);
+        }
 
         return message;
     }

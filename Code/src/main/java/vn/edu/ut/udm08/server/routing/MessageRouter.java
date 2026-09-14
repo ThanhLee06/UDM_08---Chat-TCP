@@ -11,6 +11,9 @@ import vn.edu.ut.udm08.server.session.OnlineUserRegistry;
 import vn.edu.ut.udm08.shared.model.MessageType;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
 
+import java.util.Collections;
+import java.util.List;
+
 // Lớp định tuyến tin nhắn giữa Client và Server
 public class MessageRouter {
     private final OnlineUserRegistry registry;
@@ -28,14 +31,14 @@ public class MessageRouter {
     }
 
     public MessageRouter(OnlineUserRegistry registry, MessageDao messageDao, ConversationDao conversationDao) {
-        this(registry, messageDao, conversationDao, new Transaction(messageDao));
+        this(registry, messageDao, conversationDao, new Transaction(messageDao, conversationDao));
     }
 
     public MessageRouter(OnlineUserRegistry registry, MessageDao messageDao, ConversationDao conversationDao, Transaction transaction) {
         this.registry = registry;
         this.messageDao = messageDao;
         this.conversationDao = conversationDao;
-        this.transaction = transaction != null ? transaction : new Transaction(messageDao);
+        this.transaction = transaction != null ? transaction : new Transaction(messageDao, conversationDao);
         this.forwardHandler = new ForwardMessageHandler(registry, messageDao);
     }
 
@@ -43,7 +46,7 @@ public class MessageRouter {
         this.registry = registry;
         this.messageDao = new InMemoryMessageDao();
         this.conversationDao = new InMemoryConversationDao();
-        this.transaction = new Transaction(this.messageDao);
+        this.transaction = new Transaction(this.messageDao, this.conversationDao);
         this.forwardHandler = forwardHandler;
     }
 
@@ -165,6 +168,71 @@ public class MessageRouter {
         } catch (Exception e) {
             System.err.println("Lỗi hệ thống định tuyến tin nhắn: " + e.getMessage());
             sendErrorMessage(senderSession, msg != null ? msg.messageId : null, "ERROR", "Lỗi hệ thống định tuyến");
+        }
+    }
+
+    // Xử lý API lấy lịch sử tin nhắn theo cursor (ST-094 & ST-102)
+    public void handleGetHistoryMessage(ClientSession session, ProtocolMessage request) {
+        try {
+            if (request == null) {
+                sendErrorMessage(session, null, "INVALID_MESSAGE", "Bản tin không hợp lệ");
+                return;
+            }
+
+            if (session == null || session.getUsername() == null) {
+                sendErrorMessage(session, request.requestId, "UNAUTHORIZED", "Chưa đăng nhập");
+                return;
+            }
+
+            String userId = session.getUsername();
+            String convId = request.convId;
+            if (convId == null || convId.trim().isEmpty()) {
+                sendErrorMessage(session, request.requestId, "INVALID_TARGET", "Mã hội thoại không được để trống");
+                return;
+            }
+
+            // Kiểm tra quyền: User có thuộc cuộc trò chuyện này không
+            if (!conversationDao.isMember(convId, userId)) {
+                sendErrorMessage(session, request.requestId, "FORBIDDEN", "Người dùng không có quyền truy cập lịch sử cuộc trò chuyện này");
+                return;
+            }
+
+            // Áp dụng limit (mặc định 30, tối đa 100)
+            int effectiveLimit = (request.limit != null && request.limit > 0) ? request.limit : 30;
+            if (effectiveLimit > 100) {
+                effectiveLimit = 100;
+            }
+
+            // Truy vấn danh sách tin nhắn từ ConversationDao
+            List<ProtocolMessage> historyMessages;
+            try {
+                historyMessages = conversationDao.getMessages(convId, request.cursor, effectiveLimit);
+            } catch (IllegalArgumentException e) {
+                sendErrorMessage(session, request.requestId, "BAD_REQUEST", "Cursor không hợp lệ");
+                return;
+            }
+
+            // Tạo bản tin phản hồi GET_HISTORY_OK
+            ProtocolMessage response = new ProtocolMessage(MessageType.GET_HISTORY_OK);
+            response.requestId = request.requestId;
+            response.convId = convId;
+            response.history = historyMessages != null ? historyMessages : Collections.emptyList();
+
+            if (response.history.isEmpty()) {
+                response.nextCursor = null;
+                response.hasMore = false;
+            } else {
+                // Tin nhắn cũ nhất trong trang ở vị trí index 0 (vì danh sách từ cũ đến mới)
+                ProtocolMessage oldestMsgInPage = response.history.get(0);
+                response.nextCursor = oldestMsgInPage.sequence != null ? String.valueOf(oldestMsgInPage.sequence) : oldestMsgInPage.messageId;
+                response.hasMore = (response.history.size() == effectiveLimit);
+            }
+
+            session.sendMessage(response);
+
+        } catch (Exception e) {
+            System.err.println("Lỗi xử lý lấy lịch sử tin nhắn: " + e.getMessage());
+            sendErrorMessage(session, request != null ? request.requestId : null, "ERROR", "Lỗi hệ thống khi truy vấn lịch sử tin nhắn");
         }
     }
 
