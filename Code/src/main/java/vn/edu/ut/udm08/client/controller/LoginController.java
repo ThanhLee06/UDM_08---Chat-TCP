@@ -21,6 +21,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import vn.edu.ut.udm08.client.cache.ConversationCache;
 import vn.edu.ut.udm08.client.network.ChatClient;
 import vn.edu.ut.udm08.client.network.ChatListener;
 import vn.edu.ut.udm08.integration.ClientLoginService;
@@ -122,6 +123,7 @@ public class LoginController {
     private UserRepository userRepository;
     private ChatController activeChatController;
     private volatile List<UserProfile> pendingUserList;
+    private final ConversationCache conversationCache = new ConversationCache();
     private EmailOtpService sharedOtpService;
     private String currentRegistrationId;
     private String currentRegistrationEmail;
@@ -389,6 +391,7 @@ public class LoginController {
                 clientLoginService.connectAndLogin(host, port, finalSenderName, finalAvatarId, new ChatListener() {
                     @Override
                     public void onLoginSuccess(ProtocolMessage message) {
+                        conversationCache.setCurrentUser(finalSenderName);
                         Platform.runLater(() -> openChatWindow(clientLoginService.getChatClient(), finalSenderName));
                     }
 
@@ -402,6 +405,7 @@ public class LoginController {
 
                     @Override
                     public void onMessageReceived(ProtocolMessage message) {
+                        conversationCache.addRealtimeMessage(message);
                         if (activeChatController != null) {
                             activeChatController.receiveMessage(message);
                         }
@@ -409,6 +413,11 @@ public class LoginController {
 
                     @Override
                     public void onMessageSentSuccess(String messageId) {
+                    }
+
+                    @Override
+                    public void onMessageStatusUpdated(ProtocolMessage message) {
+                        conversationCache.updateMessageStatus(message);
                     }
 
                     @Override
@@ -425,6 +434,7 @@ public class LoginController {
 
                     @Override
                     public void onConnectionLost(Throwable cause) {
+                        conversationCache.clear();
                         Platform.runLater(() -> {
                             if (activeChatController != null) {
                                 handleKickedSession("Tài khoản của bạn vừa đăng nhập ở một thiết bị khác");
@@ -433,6 +443,17 @@ public class LoginController {
                                 if (statusLabel != null) showError(statusLabel, "Không thể kết nối đến Server (" + host + ":" + port + ") vui lòng bật ServerApp");
                             }
                         });
+                    }
+
+                    @Override
+                    public void onSessionExpired(String errorCode, String errorMessage) {
+                        conversationCache.clear();
+                        Platform.runLater(() -> handleKickedSession("Phiên đăng nhập hết hạn: " + errorMessage));
+                    }
+
+                    @Override
+                    public void onLogoutSuccess() {
+                        conversationCache.clear();
                     }
                 });
             } catch (Exception e) {
@@ -585,6 +606,7 @@ public class LoginController {
             chatController.setCurrentUsername(username);
             chatController.setSendListener(message -> {
                 try {
+                    conversationCache.addRealtimeMessage(message);
                     client.sendMessage(message.target, message.content);
                 } catch (Exception ignored) {
                 }
