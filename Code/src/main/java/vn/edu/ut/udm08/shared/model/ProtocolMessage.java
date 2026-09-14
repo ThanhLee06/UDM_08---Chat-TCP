@@ -10,12 +10,15 @@ public class ProtocolMessage {
     public String requestId;
     public String sender;
     public String target;
+    public String targetUserId;
     public String content;
+    public String keyword;
     public String avatarId;
     public Long timestamp;
     public List<UserProfile> users;
     public List<ProtocolMessage> messages;
     public List<ConversationSummary> conversations;
+    public ConversationSummary conversation;
     public String convId;
     public String cursor;
     public Integer limit;
@@ -34,5 +37,6 @@ public class ProtocolMessage {
         this.type = type;
     }
 }
+
 
 

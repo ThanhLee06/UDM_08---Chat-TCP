@@ -40,6 +40,8 @@ public class ChatClient {
     private final Map<String, PendingRequest> pendingRequests = new ConcurrentHashMap<>();
     private final Map<String, PendingHistoryRequest> pendingHistoryRequests = new ConcurrentHashMap<>();
     private final Map<String, PendingConversationListRequest> pendingConversationListRequests = new ConcurrentHashMap<>();
+    private final Map<String, PendingUserSearchRequest> pendingUserSearchRequests = new ConcurrentHashMap<>();
+    private final Map<String, PendingOpenDmRequest> pendingOpenDmRequests = new ConcurrentHashMap<>();
     private final Map<String, ProtocolMessage> outboundMessages = new ConcurrentHashMap<>();
     private final ScheduledExecutorService timeoutExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread thread = new Thread(r, "ChatClientTimeoutThread");
@@ -69,6 +71,8 @@ public class ChatClient {
         cancelPendingRequests("NEW_SESSION");
         cancelPendingHistoryRequests("NEW_SESSION", "Phiên mới đã bắt đầu");
         cancelPendingConversationListRequests("NEW_SESSION", "Phiên mới đã bắt đầu");
+        cancelPendingUserSearchRequests("NEW_SESSION", "Phiên mới đã bắt đầu");
+        cancelPendingOpenDmRequests("NEW_SESSION", "Phiên mới đã bắt đầu");
         markAllPendingOutboundUnknown(listener);
 
         this.socket = new Socket(config.getHost(), config.getPort());
@@ -234,6 +238,102 @@ public class ChatClient {
         if (writer != null && writer.checkError()) {
             failConversationListRequest(requestId, "WRITE_FAILED", "Không thể gửi yêu cầu tải danh sách hội thoại qua Socket");
             throw new IOException("Không thể tải danh sách hội thoại: Gặp lỗi vật lý trên luồng truyền dữ liệu TCP Socket.");
+        }
+        return requestId;
+    }
+    public String searchUsers(String keyword, UserSearchCallback callback) throws IOException {
+        return searchUsers(keyword, 20, DEFAULT_HISTORY_TIMEOUT_SECONDS, callback);
+    }
+
+    public String searchUsers(String keyword, int limit, int timeoutSeconds,
+                              UserSearchCallback callback) throws IOException {
+        if (!isConnected()) {
+            throw new IOException("Không thể tìm người dùng: Chưa kết nối đến Server hoặc kết nối đã bị đóng.");
+        }
+        if (keyword == null || keyword.isBlank()) {
+            throw new IllegalArgumentException("Từ khóa tìm kiếm không được để trống");
+        }
+        if (limit <= 0) {
+            throw new IllegalArgumentException("Limit phải lớn hơn 0");
+        }
+        if (limit > 20) {
+            throw new IllegalArgumentException("Limit tìm kiếm tối đa là 20 kết quả");
+        }
+        if (callback == null) {
+            throw new IllegalArgumentException("Callback tìm kiếm không được để null");
+        }
+
+        String requestId = UUID.randomUUID().toString();
+        long epoch = registerPendingRequest(requestId);
+        String cleanKeyword = keyword.trim();
+        int safeTimeoutSeconds = timeoutSeconds <= 0 ? DEFAULT_HISTORY_TIMEOUT_SECONDS : timeoutSeconds;
+
+        PendingUserSearchRequest pending = new PendingUserSearchRequest(requestId, cleanKeyword, epoch, callback);
+        ScheduledFuture<?> timeoutTask = timeoutExecutor.schedule(new Runnable() {
+            @Override
+            public void run() {
+                failUserSearchRequest(requestId, "TIMEOUT", "Server không phản hồi tìm kiếm người dùng đúng hạn");
+            }
+        }, safeTimeoutSeconds, TimeUnit.SECONDS);
+        pending.timeoutTask = timeoutTask;
+        pendingUserSearchRequests.put(requestId, pending);
+
+        ProtocolMessage request = new ProtocolMessage(MessageType.USER_SEARCH_REQUEST);
+        request.requestId = requestId;
+        request.keyword = cleanKeyword;
+        request.limit = limit;
+        request.sender = username;
+        request.timestamp = System.currentTimeMillis();
+
+        sendRawMessage(JsonUtil.toJson(request));
+        if (writer != null && writer.checkError()) {
+            failUserSearchRequest(requestId, "WRITE_FAILED", "Không thể gửi yêu cầu tìm kiếm qua Socket");
+            throw new IOException("Không thể tìm người dùng: Gặp lỗi vật lý trên luồng truyền dữ liệu TCP Socket.");
+        }
+        return requestId;
+    }
+
+    public String openDirectMessage(String targetUserId, OpenDmCallback callback) throws IOException {
+        return openDirectMessage(targetUserId, DEFAULT_HISTORY_TIMEOUT_SECONDS, callback);
+    }
+
+    public String openDirectMessage(String targetUserId, int timeoutSeconds,
+                                    OpenDmCallback callback) throws IOException {
+        if (!isConnected()) {
+            throw new IOException("Không thể mở hội thoại riêng: Chưa kết nối đến Server hoặc kết nối đã bị đóng.");
+        }
+        if (targetUserId == null || targetUserId.isBlank()) {
+            throw new IllegalArgumentException("TargetUserId không được để trống");
+        }
+        if (callback == null) {
+            throw new IllegalArgumentException("Callback mở DM không được để null");
+        }
+
+        String requestId = UUID.randomUUID().toString();
+        long epoch = registerPendingRequest(requestId);
+        String cleanTargetUserId = targetUserId.trim();
+        int safeTimeoutSeconds = timeoutSeconds <= 0 ? DEFAULT_HISTORY_TIMEOUT_SECONDS : timeoutSeconds;
+
+        PendingOpenDmRequest pending = new PendingOpenDmRequest(requestId, cleanTargetUserId, epoch, callback);
+        ScheduledFuture<?> timeoutTask = timeoutExecutor.schedule(new Runnable() {
+            @Override
+            public void run() {
+                failOpenDmRequest(requestId, "TIMEOUT", "Server không phản hồi mở hội thoại riêng đúng hạn");
+            }
+        }, safeTimeoutSeconds, TimeUnit.SECONDS);
+        pending.timeoutTask = timeoutTask;
+        pendingOpenDmRequests.put(requestId, pending);
+
+        ProtocolMessage request = new ProtocolMessage(MessageType.OPEN_DM_REQUEST);
+        request.requestId = requestId;
+        request.targetUserId = cleanTargetUserId;
+        request.sender = username;
+        request.timestamp = System.currentTimeMillis();
+
+        sendRawMessage(JsonUtil.toJson(request));
+        if (writer != null && writer.checkError()) {
+            failOpenDmRequest(requestId, "WRITE_FAILED", "Không thể gửi yêu cầu mở hội thoại riêng qua Socket");
+            throw new IOException("Không thể mở hội thoại riêng: Gặp lỗi vật lý trên luồng truyền dữ liệu TCP Socket.");
         }
         return requestId;
     }
@@ -437,6 +537,85 @@ public class ChatClient {
             pending.timeoutTask.cancel(false);
         }
     }
+    void handleUserSearchResponse(ProtocolMessage response) {
+        if (response == null || response.requestId == null || response.requestId.isBlank()) {
+            return;
+        }
+        PendingUserSearchRequest pending = pendingUserSearchRequests.remove(response.requestId);
+        if (pending == null) {
+            return;
+        }
+        cancelTimeout(pending);
+        if (!completePendingRequest(response.requestId, pending.epoch)) {
+            return;
+        }
+        UserSearchResult result = new UserSearchResult(response.requestId, pending.keyword, response.users);
+        pending.callback.onSuccess(result);
+    }
+
+    boolean handleUserSearchError(ProtocolMessage errorMessage) {
+        if (errorMessage == null || errorMessage.requestId == null || errorMessage.requestId.isBlank()) {
+            return false;
+        }
+        return failUserSearchRequest(errorMessage.requestId, errorMessage.errorCode, errorMessage.errorMessage);
+    }
+
+    private boolean failUserSearchRequest(String requestId, String errorCode, String errorMessage) {
+        PendingUserSearchRequest pending = pendingUserSearchRequests.remove(requestId);
+        if (pending == null) {
+            return false;
+        }
+        cancelTimeout(pending);
+        pendingRequests.remove(requestId);
+        pending.callback.onFailure(requestId, errorCode, errorMessage);
+        return true;
+    }
+
+    private void cancelTimeout(PendingUserSearchRequest pending) {
+        if (pending.timeoutTask != null) {
+            pending.timeoutTask.cancel(false);
+        }
+    }
+
+    void handleOpenDmResponse(ProtocolMessage response) {
+        if (response == null || response.requestId == null || response.requestId.isBlank()) {
+            return;
+        }
+        PendingOpenDmRequest pending = pendingOpenDmRequests.remove(response.requestId);
+        if (pending == null) {
+            return;
+        }
+        cancelTimeout(pending);
+        if (!completePendingRequest(response.requestId, pending.epoch)) {
+            return;
+        }
+        OpenDmResult result = new OpenDmResult(response.requestId, pending.targetUserId, response.conversation);
+        pending.callback.onSuccess(result);
+    }
+
+    boolean handleOpenDmError(ProtocolMessage errorMessage) {
+        if (errorMessage == null || errorMessage.requestId == null || errorMessage.requestId.isBlank()) {
+            return false;
+        }
+        return failOpenDmRequest(errorMessage.requestId, errorMessage.errorCode, errorMessage.errorMessage);
+    }
+
+    private boolean failOpenDmRequest(String requestId, String errorCode, String errorMessage) {
+        PendingOpenDmRequest pending = pendingOpenDmRequests.remove(requestId);
+        if (pending == null) {
+            return false;
+        }
+        cancelTimeout(pending);
+        pendingRequests.remove(requestId);
+        pending.callback.onFailure(requestId, errorCode, errorMessage);
+        return true;
+    }
+
+    private void cancelTimeout(PendingOpenDmRequest pending) {
+        if (pending.timeoutTask != null) {
+            pending.timeoutTask.cancel(false);
+        }
+    }
     private void closeResources() {
         if (receiver != null) {
             receiver.stop();
@@ -471,6 +650,8 @@ public class ChatClient {
         markAllPendingOutboundUnknown(cancelListener);
         cancelPendingHistoryRequests(reason, "Phiên kết thúc trước khi Server trả lịch sử");
         cancelPendingConversationListRequests(reason, "Phiên kết thúc trước khi Server trả danh sách hội thoại");
+        cancelPendingUserSearchRequests(reason, "Phiên kết thúc trước khi Server trả kết quả tìm kiếm");
+        cancelPendingOpenDmRequests(reason, "Phiên kết thúc trước khi Server trả hội thoại riêng");
         cancelPendingRequests(reason, cancelListener);
         closeResources();
         listener = null;
@@ -512,6 +693,27 @@ public class ChatClient {
             request.callback.onFailure(request.requestId, errorCode, errorMessage);
         }
         pendingConversationListRequests.clear();
+    }
+    private void cancelPendingUserSearchRequests(String errorCode, String errorMessage) {
+        if (pendingUserSearchRequests.isEmpty()) {
+            return;
+        }
+        for (PendingUserSearchRequest request : pendingUserSearchRequests.values()) {
+            cancelTimeout(request);
+            request.callback.onFailure(request.requestId, errorCode, errorMessage);
+        }
+        pendingUserSearchRequests.clear();
+    }
+
+    private void cancelPendingOpenDmRequests(String errorCode, String errorMessage) {
+        if (pendingOpenDmRequests.isEmpty()) {
+            return;
+        }
+        for (PendingOpenDmRequest request : pendingOpenDmRequests.values()) {
+            cancelTimeout(request);
+            request.callback.onFailure(request.requestId, errorCode, errorMessage);
+        }
+        pendingOpenDmRequests.clear();
     }
     private void markOutboundMessageFailed(String messageId, String errorCode, String errorMessage) {
         ProtocolMessage pending = outboundMessages.remove(messageId);
@@ -565,6 +767,37 @@ public class ChatClient {
         }
     }
 
+    private static class PendingUserSearchRequest {
+        private final String requestId;
+        private final String keyword;
+        private final long epoch;
+        private final UserSearchCallback callback;
+        private ScheduledFuture<?> timeoutTask;
+
+        private PendingUserSearchRequest(String requestId, String keyword, long epoch,
+                                         UserSearchCallback callback) {
+            this.requestId = requestId;
+            this.keyword = keyword;
+            this.epoch = epoch;
+            this.callback = callback;
+        }
+    }
+
+    private static class PendingOpenDmRequest {
+        private final String requestId;
+        private final String targetUserId;
+        private final long epoch;
+        private final OpenDmCallback callback;
+        private ScheduledFuture<?> timeoutTask;
+
+        private PendingOpenDmRequest(String requestId, String targetUserId, long epoch,
+                                     OpenDmCallback callback) {
+            this.requestId = requestId;
+            this.targetUserId = targetUserId;
+            this.epoch = epoch;
+            this.callback = callback;
+        }
+    }
     private static class PendingConversationListRequest {
         private final String requestId;
         private final long epoch;
@@ -594,6 +827,9 @@ public class ChatClient {
         }
     }
 }
+
+
+
 
 
 

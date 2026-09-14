@@ -92,9 +92,23 @@ public class ChatReceiver implements Runnable {
                     client.handleConversationListResponse(message);
                 }
                 break;
+            case USER_SEARCH_RESPONSE:
+                if (client != null) {
+                    client.handleUserSearchResponse(message);
+                }
+                break;
+            case OPEN_DM_RESPONSE:
+                if (client != null) {
+                    client.handleOpenDmResponse(message);
+                }
+                break;
             case ERROR:
                 if (client != null && client.isSessionInvalidError(message.errorCode)) {
                     client.handleSessionExpired(message.errorCode, message.errorMessage, listener);
+                } else if (client != null && client.handleUserSearchError(message)) {
+                    break;
+                } else if (client != null && client.handleOpenDmError(message)) {
+                    break;
                 } else if (client != null && client.handleConversationListError(message)) {
                     break;
                 } else if (client != null && client.handleHistoryError(message)) {
@@ -134,5 +148,9 @@ public class ChatReceiver implements Runnable {
         }
     }
 }
+
+
+
+
 
 
