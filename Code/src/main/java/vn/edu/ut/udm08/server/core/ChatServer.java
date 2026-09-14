@@ -36,7 +36,7 @@ public class ChatServer {
         this.configuredPort = config.getPort();
         this.registry = new OnlineUserRegistry();
         this.conversationRegistry = new ConversationRegistry();
-        this.loginHandler = new LoginHandler(registry);
+        this.loginHandler = new LoginHandler(registry, conversationRegistry);
         this.messageRouter = new MessageRouter(registry, conversationRegistry);
         this.clientExecutor = Executors.newCachedThreadPool();
         this.boundPort = configuredPort;
@@ -108,7 +108,6 @@ public class ChatServer {
         session.setMessageHandler(message -> dispatch(session, message));
         session.setDisconnectHandler(() -> {
             loginHandler.handleDisconnect(session);
-            conversationRegistry.removeSessionFromAll(session);
         });
 
         clientExecutor.submit(session);
@@ -124,7 +123,6 @@ public class ChatServer {
             case CHAT -> messageRouter.handleChatMessage(session, message);
             case DISCONNECT -> {
                 loginHandler.handleDisconnect(session);
-                conversationRegistry.removeSessionFromAll(session);
             }
             default -> {
             }
