@@ -87,9 +87,16 @@ public class ChatReceiver implements Runnable {
                     client.handleHistoryResponse(message);
                 }
                 break;
+            case CONVERSATION_LIST_RESPONSE:
+                if (client != null) {
+                    client.handleConversationListResponse(message);
+                }
+                break;
             case ERROR:
                 if (client != null && client.isSessionInvalidError(message.errorCode)) {
                     client.handleSessionExpired(message.errorCode, message.errorMessage, listener);
+                } else if (client != null && client.handleConversationListError(message)) {
+                    break;
                 } else if (client != null && client.handleHistoryError(message)) {
                     break;
                 } else if (client != null && client.handleMessageError(message)) {
@@ -127,3 +134,5 @@ public class ChatReceiver implements Runnable {
         }
     }
 }
+
+

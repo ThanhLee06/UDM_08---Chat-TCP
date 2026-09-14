@@ -15,6 +15,7 @@ public class ProtocolMessage {
     public Long timestamp;
     public List<UserProfile> users;
     public List<ProtocolMessage> messages;
+    public List<ConversationSummary> conversations;
     public String convId;
     public String cursor;
     public Integer limit;
@@ -33,3 +34,5 @@ public class ProtocolMessage {
         this.type = type;
     }
 }
+
+
