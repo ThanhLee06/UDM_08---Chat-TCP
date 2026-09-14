@@ -18,6 +18,8 @@ public class ProtocolMessage {
     public String convId;
     public String fwdFrom;
     public String kind;
+    public Long sequence;
+    public String status;
     public ProtocolMessage() {}
     public ProtocolMessage(MessageType type) {
         this.type = type;

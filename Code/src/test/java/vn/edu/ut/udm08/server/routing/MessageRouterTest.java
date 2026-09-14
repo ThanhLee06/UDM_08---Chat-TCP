@@ -71,11 +71,12 @@ public class MessageRouterTest {
         assertEquals("Bob", receivedByBob.target);
         assertEquals("Chao Bob!", receivedByBob.content);
 
-        // Alice nhan duoc phan hoi CHAT_OK
+        // Alice nhan duoc phan hoi MESSAGE_ACK
         ProtocolMessage receivedByAlice = aliceConnection.readMessage();
         assertNotNull(receivedByAlice);
-        assertEquals(MessageType.CHAT_OK, receivedByAlice.type);
+        assertEquals(MessageType.MESSAGE_ACK, receivedByAlice.type);
         assertEquals("msg-101", receivedByAlice.messageId);
+        assertEquals("SENT", receivedByAlice.status);
     }
 
     @Test
@@ -96,11 +97,12 @@ public class MessageRouterTest {
         assertEquals("Bob", receivedByAlice.sender);
         assertEquals("Alice", receivedByAlice.target);
 
-        // Bob nhan duoc CHAT_OK
+        // Bob nhan duoc MESSAGE_ACK
         ProtocolMessage receivedByBob = bobConnection.readMessage();
         assertNotNull(receivedByBob);
-        assertEquals(MessageType.CHAT_OK, receivedByBob.type);
+        assertEquals(MessageType.MESSAGE_ACK, receivedByBob.type);
         assertEquals("msg-102", receivedByBob.messageId);
+        assertEquals("SENT", receivedByBob.status);
     }
 
     @Test
@@ -235,8 +237,9 @@ public class MessageRouterTest {
         assertNull(receivedByBob.forwardOf);
 
         ProtocolMessage receivedByAlice = aliceConnection.readMessage();
-        assertEquals(MessageType.CHAT_OK, receivedByAlice.type);
+        assertEquals(MessageType.MESSAGE_ACK, receivedByAlice.type);
         assertEquals("msg-201", receivedByAlice.messageId);
+        assertEquals("SENT", receivedByAlice.status);
     }
 
     @Test
@@ -260,8 +263,9 @@ public class MessageRouterTest {
         assertNull(receivedByBob.replyTo);
 
         ProtocolMessage receivedByAlice = aliceConnection.readMessage();
-        assertEquals(MessageType.CHAT_OK, receivedByAlice.type);
+        assertEquals(MessageType.MESSAGE_ACK, receivedByAlice.type);
         assertEquals("msg-202", receivedByAlice.messageId);
+        assertEquals("SENT", receivedByAlice.status);
     }
 
     @Test
@@ -367,7 +371,7 @@ public class MessageRouterTest {
 
         ProtocolMessage okToAlice = aliceConnection.readMessage();
         assertNotNull(okToAlice);
-        assertEquals(MessageType.CHAT_OK, okToAlice.type);
+        assertEquals(MessageType.MESSAGE_ACK, okToAlice.type);
     }
 
 
