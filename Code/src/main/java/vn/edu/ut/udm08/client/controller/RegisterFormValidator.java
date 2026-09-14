@@ -33,7 +33,7 @@ public class RegisterFormValidator {
             return "Mật khẩu phải có ít nhất 8 ký tự";
         }
         if (!containsUpperLowerDigit(password)) {
-            return "Mật khẩu phải chứa ít nhất 1 chữ hoa, 1 chữ thường và 1 chữ số";
+            return "Mật khẩu phải chứa ít nhất 1 chữ hoa 1 chữ thường và 1 chữ số";
         }
 
         if (confirmPassword == null || !confirmPassword.equals(password)) {
@@ -41,6 +41,16 @@ public class RegisterFormValidator {
         }
 
         return null;
+    }
+    public String validate(String username, String phoneNumber, String email, String password, String confirmPassword) {
+        String error = validate(username, phoneNumber, password, confirmPassword);
+        if (error != null) {
+            return error;
+        }
+        if (!new vn.edu.ut.udm08.shared.validation.EmailValidator().isValidEmail(email)) {
+            return "Email không hợp lệ";
+        }
+        return new vn.edu.ut.udm08.shared.validation.PasswordValidator().getValidationError(password);
     }
 
     private boolean isDummyPhoneNumber(String phone) {

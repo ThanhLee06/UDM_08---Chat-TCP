@@ -6,6 +6,7 @@ import java.net.URL;
 import java.util.List;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
+import javafx.geometry.Rectangle2D;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
@@ -16,13 +17,15 @@ import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import vn.edu.ut.udm08.client.network.ChatClient;
 import vn.edu.ut.udm08.client.network.ChatListener;
 import vn.edu.ut.udm08.integration.ClientLoginService;
-import vn.edu.ut.udm08.server.auth.PhoneOtpService;
+import vn.edu.ut.udm08.server.auth.EmailOtpService;
+import vn.edu.ut.udm08.server.auth.SmtpOtpEmailSender;
 import vn.edu.ut.udm08.server.repository.UserRepository;
 import vn.edu.ut.udm08.server.service.UserLoginService;
 import vn.edu.ut.udm08.server.service.UserRegisterService;
@@ -35,7 +38,8 @@ import vn.edu.ut.udm08.shared.model.UserProfile;
 public class LoginController {
 
     @FXML
-    private Button tabLoginBtn;
+    private HBox topTabBox;
+    @FXML private Button tabLoginBtn;
     @FXML
     private Button tabRegisterBtn;
 
@@ -45,6 +49,7 @@ public class LoginController {
     private VBox registerPane;
     @FXML
     private VBox forgotPane;
+    @FXML private VBox otpPane;
 
     @FXML
     private TextField phoneField;
@@ -73,9 +78,7 @@ public class LoginController {
     @FXML
     private TextField regPhoneField;
     @FXML
-    private TextField regOtpField;
-    @FXML
-    private Button sendOtpBtn;
+    private TextField regEmailField;
     @FXML
     private PasswordField regPasswordField;
     @FXML
@@ -84,6 +87,16 @@ public class LoginController {
     private Label regStatusLabel;
     @FXML
     private Button registerBtn;
+    @FXML private Label otpTargetLabel;
+    @FXML private TextField otp1;
+    @FXML private TextField otp2;
+    @FXML private TextField otp3;
+    @FXML private TextField otp4;
+    @FXML private TextField otp5;
+    @FXML private TextField otp6;
+    @FXML private Label otpStatusLabel;
+    @FXML private Button otpResendBtn;
+    @FXML private Button otpBackBtn;
 
     @FXML
     private TextField forgotPhoneField;
@@ -109,11 +122,17 @@ public class LoginController {
     private UserRepository userRepository;
     private ChatController activeChatController;
     private volatile List<UserProfile> pendingUserList;
-    private final PhoneOtpService sharedOtpService = new PhoneOtpService();
+    private EmailOtpService sharedOtpService;
+    private String currentRegistrationId;
+    private String currentRegistrationEmail;
+    private String currentRegistrationPhone;
+    private OtpInputController otpInputController;
+    private int registrationVersion;
 
     @FXML
     private void initialize() {
         try {
+            sharedOtpService = new EmailOtpService(new SmtpOtpEmailSender());
             userRepository = new UserRepository();
             userRegisterService = new UserRegisterService(userRepository, new vn.edu.ut.udm08.shared.security.PasswordEncoder(), sharedOtpService);
             userLoginService = new UserLoginService(userRepository);
@@ -128,42 +147,144 @@ public class LoginController {
         updateRegAvatarImage();
 
         passwordVisibleField.textProperty().bindBidirectional(passwordField.textProperty());
+        otpInputController = new OtpInputController(
+                List.of(otp1, otp2, otp3, otp4, otp5, otp6), otpResendBtn, otpBackBtn,
+                this::verifyOtpCode, this::resendOtp);
+        otpPane.visibleProperty().addListener((observable, oldValue, visible) -> {
+            if (!visible) {
+                endOtpSession();
+            }
+        });
+    }
+    private void endOtpSession() {
+        registrationVersion++;
+        currentRegistrationId = null;
+        otpInputController.stop();
+    }
+    private void verifyOtpCode(String code) {
+        final String registrationId = currentRegistrationId;
+        final String registeredPhone = currentRegistrationPhone;
+        final int version = registrationVersion;
+        if (registrationId == null || userRegisterService == null) {
+            otpInputController.stop();
+            showError(otpStatusLabel, "Phiên đăng ký không còn hiệu lực. Vui lòng quay lại đăng ký.");
+            return;
+        }
+        otpStatusLabel.setStyle("-fx-text-fill: #0068ff;");
+        otpStatusLabel.setText("Đang xác thực mã OTP...");
+        AccountTaskRunner.run(() -> userRegisterService.verifyRegistration(registrationId, code), response -> {
+            if (version != registrationVersion) {
+                return;
+            }
+            otpInputController.setBusy(false);
+            if (response.isSuccess()) {
+                otpInputController.stop();
+                showInfoAlert("Đăng ký thành công", "Tài khoản của bạn đã được đăng ký thành công");
+                phoneField.setText(registeredPhone);
+                passwordField.clear();
+                showLoginTab();
+            } else {
+                showOtpFailure(response);
+            }
+        }, error -> {
+            if (version == registrationVersion) {
+                otpInputController.setBusy(false);
+                showError(otpStatusLabel, error);
+                otpInputController.clear();
+            }
+        });
+    }
+    private void showOtpFailure(RegisterResponse response) {
+        showError(otpStatusLabel, response.getMessage());
+        otpInputController.clear();
+        if (response.isRegistrationRestartRequired()) {
+            endOtpSession();
+        }
+    }
+    @FXML
+    private void onOtpResendClick() {
+        otpInputController.requestResend();
+    }
+    private void resendOtp() {
+        final String registrationId = currentRegistrationId;
+        final int version = registrationVersion;
+        otpStatusLabel.setStyle("-fx-text-fill: #0068ff;");
+        otpStatusLabel.setText("Đang gửi lại mã OTP...");
+        AccountTaskRunner.run(() -> userRegisterService.resendOtp(registrationId), response -> {
+            if (version != registrationVersion) {
+                return;
+            }
+            otpInputController.setBusy(false);
+            if (response.isSuccess()) {
+                otpStatusLabel.setStyle("-fx-text-fill: #16a34a;");
+                otpStatusLabel.setText("Đã gửi lại mã OTP mới tới " + currentRegistrationEmail);
+                otpInputController.clear();
+                otpInputController.restartCooldown();
+            } else {
+                showOtpFailure(response);
+            }
+        }, error -> {
+            if (version == registrationVersion) {
+                otpInputController.setBusy(false);
+                showError(otpStatusLabel, error);
+            }
+        });
+    }
+    @FXML
+    private void onOtpBackClick() {
+        showRegisterTab();
     }
 
     @FXML
     private void showLoginTab() {
+        topTabBox.setVisible(true);
         loginPane.setVisible(true);
         registerPane.setVisible(false);
         forgotPane.setVisible(false);
-        tabLoginBtn.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #0068ff; -fx-font-weight: bold; -fx-background-radius: 6px; -fx-cursor: hand;");
-        tabRegisterBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: #64748b; -fx-font-weight: bold; -fx-background-radius: 6px; -fx-cursor: hand;");
+        otpPane.setVisible(false);
+        tabLoginBtn.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #0068ff; -fx-font-weight: bold; -fx-background-radius: 8px; -fx-cursor: hand; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.05), 4, 0, 0, 1);");
+        tabRegisterBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: #64748b; -fx-font-weight: bold; -fx-background-radius: 8px; -fx-cursor: hand;");
         clearStatusLabels();
     }
 
     @FXML
     private void showRegisterTab() {
+        topTabBox.setVisible(true);
         loginPane.setVisible(false);
         registerPane.setVisible(true);
         forgotPane.setVisible(false);
-        tabRegisterBtn.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #0068ff; -fx-font-weight: bold; -fx-background-radius: 6px; -fx-cursor: hand;");
-        tabLoginBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: #64748b; -fx-font-weight: bold; -fx-background-radius: 6px; -fx-cursor: hand;");
+        otpPane.setVisible(false);
+        tabRegisterBtn.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #0068ff; -fx-font-weight: bold; -fx-background-radius: 8px; -fx-cursor: hand; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.05), 4, 0, 0, 1);");
+        tabLoginBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: #64748b; -fx-font-weight: bold; -fx-background-radius: 8px; -fx-cursor: hand;");
         clearStatusLabels();
     }
 
     @FXML
     private void showForgotTab() {
+        topTabBox.setVisible(true);
         loginPane.setVisible(false);
         registerPane.setVisible(false);
         forgotPane.setVisible(true);
-        tabLoginBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: #64748b; -fx-font-weight: bold; -fx-background-radius: 6px; -fx-cursor: hand;");
-        tabRegisterBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: #64748b; -fx-font-weight: bold; -fx-background-radius: 6px; -fx-cursor: hand;");
+        otpPane.setVisible(false);
+        tabLoginBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: #64748b; -fx-font-weight: bold; -fx-background-radius: 8px; -fx-cursor: hand;");
+        tabRegisterBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: #64748b; -fx-font-weight: bold; -fx-background-radius: 8px; -fx-cursor: hand;");
         clearStatusLabels();
+    }
+    private void showOtpPane() {
+        topTabBox.setVisible(false);
+        loginPane.setVisible(false);
+        registerPane.setVisible(false);
+        forgotPane.setVisible(false);
+        otpPane.setVisible(true);
+        otpStatusLabel.setText("");
+        otpInputController.start();
     }
 
     private void clearStatusLabels() {
         if (statusLabel != null) statusLabel.setText("");
         if (regStatusLabel != null) regStatusLabel.setText("");
         if (forgotStatusLabel != null) forgotStatusLabel.setText("");
+        if (otpStatusLabel != null) otpStatusLabel.setText("");
     }
 
     @FXML
@@ -202,7 +323,7 @@ public class LoginController {
             File selectedFile = fileChooser.showOpenDialog(stage);
             if (selectedFile != null) {
                 Image img = new Image(selectedFile.toURI().toString());
-                regAvatarImage.setImage(img);
+                setCroppedAvatarImage(regAvatarImage, img);
                 customAvatarPath = selectedFile.getAbsolutePath();
                 if (!regAvatarChoiceBox.getItems().contains("Tự chọn từ máy")) {
                     regAvatarChoiceBox.getItems().add("Tự chọn từ máy");
@@ -218,7 +339,7 @@ public class LoginController {
     @FXML
     private void onLoginClick() {
         String phoneOrUsername = phoneField.getText() != null ? phoneField.getText().trim() : "";
-        String password = passwordField.getText() != null ? passwordField.getText().trim() : "";
+        String password = passwordField.getText() != null ? passwordField.getText() : "";
         final String host = "127.0.0.1";
         final int port = 8080;
 
@@ -229,15 +350,18 @@ public class LoginController {
         }
 
         if (password.isEmpty()) {
-            showError(statusLabel, "Vui lòng nhập mật khẩu!");
+            showError(statusLabel, "Vui lòng nhập mật khẩu");
             return;
         }
 
         String avatarId = "avatar1";
         String loginSenderName = phoneOrUsername;
 
-        if (userLoginService != null) {
-            vn.edu.ut.udm08.shared.dto.LoginResponse loginRes = userLoginService.login(new vn.edu.ut.udm08.shared.dto.LoginRequest(phoneOrUsername, password));
+        if (userLoginService == null) {
+            showError(statusLabel, "Không thể kết nối cơ sở dữ liệu tài khoản");
+            return;
+        }
+        vn.edu.ut.udm08.shared.dto.LoginResponse loginRes = userLoginService.login(new vn.edu.ut.udm08.shared.dto.LoginRequest(phoneOrUsername, password));
             if (!loginRes.isSuccess()) {
                 showError(statusLabel, loginRes.getMessage());
                 return;
@@ -253,15 +377,11 @@ public class LoginController {
                             : authenticatedUser.getAvatarType();
                 }
             }
-        }
-
         final String finalSenderName = loginSenderName;
         final String finalAvatarId = avatarId;
 
         loginBtn.setDisable(true);
-        statusLabel.setStyle("-fx-text-fill: #0068ff;");
-        statusLabel.setText("Đang kết nối tới Server Chat TCP...");
-
+        if (statusLabel != null) statusLabel.setText(""); // Don't show status text on success
         clientLoginService = new ClientLoginService();
 
         Thread connectThread = new Thread(() -> {
@@ -298,7 +418,7 @@ public class LoginController {
                                 handleKickedSession(errorMessage);
                             } else {
                                 if (loginBtn != null) loginBtn.setDisable(false);
-                                if (statusLabel != null) showError(statusLabel, "Đăng nhập thất bại: " + errorMessage);
+                                if (statusLabel != null) showError(statusLabel, "Đăng nhập thất bại " + errorMessage);
                             }
                         });
                     }
@@ -307,10 +427,10 @@ public class LoginController {
                     public void onConnectionLost(Throwable cause) {
                         Platform.runLater(() -> {
                             if (activeChatController != null) {
-                                handleKickedSession("Tài khoản của bạn vừa đăng nhập ở một thiết bị khác.");
+                                handleKickedSession("Tài khoản của bạn vừa đăng nhập ở một thiết bị khác");
                             } else {
                                 if (loginBtn != null) loginBtn.setDisable(false);
-                                if (statusLabel != null) showError(statusLabel, "Không thể kết nối đến Server (" + host + ":" + port + "). Vui lòng bật ServerApp!");
+                                if (statusLabel != null) showError(statusLabel, "Không thể kết nối đến Server (" + host + ":" + port + ") vui lòng bật ServerApp");
                             }
                         });
                     }
@@ -318,7 +438,7 @@ public class LoginController {
             } catch (Exception e) {
                 Platform.runLater(() -> {
                     if (loginBtn != null) loginBtn.setDisable(false);
-                    if (statusLabel != null) showError(statusLabel, "Không thể kết nối đến Server (" + host + ":" + port + "). Vui lòng bật ServerApp!");
+                    if (statusLabel != null) showError(statusLabel, "Không thể kết nối đến Server (" + host + ":" + port + ") vui lòng bật ServerApp");
                 });
             }
         });
@@ -327,39 +447,25 @@ public class LoginController {
     }
 
     @FXML
-    private void onSendOtpClick() {
-        String phone = regPhoneField.getText() != null ? regPhoneField.getText().trim() : "";
-        if (phone.isEmpty() || !phone.matches("^0(3[2-9]|5[25689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}$")) {
-            showError(regStatusLabel, "Vui lòng nhập SĐT hợp lệ (10 số đầu 03/05/07/08/09) trước khi lấy OTP");
-            return;
-        }
-
-        PhoneOtpService otpSvc = (userRegisterService != null && userRegisterService.getPhoneOtpService() != null)
-                ? userRegisterService.getPhoneOtpService()
-                : sharedOtpService;
-
-        otpSvc.generateOtp(phone);
-        regStatusLabel.setText("");
-
-        startOtpResendCountdown(sendOtpBtn, 30);
-    }
-
-    @FXML
     private void onForgotSendOtpClick() {
-        String phone = forgotPhoneField.getText() != null ? forgotPhoneField.getText().trim() : "";
-        if (phone.isEmpty() || !phone.matches("^0(3[2-9]|5[25689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}$")) {
-            showError(forgotStatusLabel, "Vui lòng nhập SĐT hợp lệ trước khi lấy OTP");
+        if (userLoginService == null || sharedOtpService == null) {
+            showError(forgotStatusLabel, "Không thể kết nối dịch vụ tài khoản");
             return;
         }
+        String identifier = forgotPhoneField.getText().trim();
+        forgotSendOtpBtn.setDisable(true);
+        forgotStatusLabel.setText("loading...");
+        AccountTaskRunner.run(() -> {
+            userLoginService.requestPasswordReset(identifier, sharedOtpService);
+            return true;
+        }, result -> {
+            forgotStatusLabel.setText("Đã gửi mã xác thực tới email mã có hiệu lực 5 phút");
 
-        PhoneOtpService otpSvc = (userRegisterService != null && userRegisterService.getPhoneOtpService() != null)
-                ? userRegisterService.getPhoneOtpService()
-                : sharedOtpService;
-
-        otpSvc.generateOtp(phone);
-        forgotStatusLabel.setText("");
-
-        startOtpResendCountdown(forgotSendOtpBtn, 30);
+        startOtpResendCountdown(forgotSendOtpBtn, 60);
+        }, error -> {
+            forgotSendOtpBtn.setDisable(false);
+            showError(forgotStatusLabel, error);
+        });
     }
 
     @FXML
@@ -381,26 +487,21 @@ public class LoginController {
             showError(forgotStatusLabel, "Mật khẩu mới phải từ 8 ký tự");
             return;
         }
-
-        PhoneOtpService otpSvc = (userRegisterService != null && userRegisterService.getPhoneOtpService() != null)
-                ? userRegisterService.getPhoneOtpService()
-                : sharedOtpService;
-
         if (userLoginService != null) {
-            boolean success = userLoginService.resetPassword(phone, otpCode, newPassword, otpSvc);
+            boolean success = userLoginService.resetPassword(phone, otpCode, newPassword, sharedOtpService);
             if (success) {
                 Platform.runLater(() -> {
                     phoneField.setText(phone);
                     passwordField.setText(newPassword);
                     clearStatusLabels();
-                    showInfoAlert("Đổi mật khẩu thành công", "🎉 Mật khẩu đã được cập nhật thành công! Vui lòng đăng nhập.");
+                    showInfoAlert("Đổi mật khẩu thành công", "Mật khẩu đã được cập nhật thành công vui lòng đăng nhập");
                     showLoginTab();
                 });
             } else {
-                showError(forgotStatusLabel, "Đặt lại mật khẩu thất bại. Mã OTP không đúng hoặc SĐT chưa đăng ký!");
+                showError(forgotStatusLabel, "Đặt lại mật khẩu thất bại mã OTP không đúng hết hạn hoặc tài khoản không hợp lệ");
             }
         } else {
-            showError(forgotStatusLabel, "Lỗi kết nối cơ sở dữ liệu. Vui lòng thử lại sau.");
+            showError(forgotStatusLabel, "Lỗi kết nối cơ sở dữ liệu vui lòng thử lại sau");
         }
     }
 
@@ -427,58 +528,53 @@ public class LoginController {
 
     @FXML
     private void onRegisterClick() {
-        String username = regUsernameField.getText() != null ? regUsernameField.getText().trim() : "";
-        String phone = regPhoneField.getText() != null ? regPhoneField.getText().trim() : "";
-        String password = regPasswordField.getText() != null ? regPasswordField.getText() : "";
-        String confirmPassword = regConfirmPasswordField.getText() != null ? regConfirmPasswordField.getText() : "";
-        String otpCode = regOtpField.getText() != null ? regOtpField.getText().trim() : "";
-
-        String avatarType;
-        String avatarPath;
-        if (customAvatarPath != null && !customAvatarPath.isBlank()) {
-            avatarType = "custom";
-            avatarPath = customAvatarPath;
-        } else {
-            avatarType = regAvatarChoiceBox.getValue() != null ? regAvatarChoiceBox.getValue() : "avatar1";
-            avatarPath = avatarType + ".jpg";
-        }
-
-        String validationError = registerValidator.validate(username, phone, password, confirmPassword);
-        if (validationError != null) {
-            showError(regStatusLabel, validationError);
+        String username = regUsernameField.getText().trim();
+        String phone = regPhoneField.getText().trim();
+        String email = regEmailField.getText().trim();
+        String password = regPasswordField.getText();
+        String confirm = regConfirmPasswordField.getText();
+        String error = registerValidator.validate(username, phone, email, password, confirm);
+        if (error != null) {
+            showError(regStatusLabel, error);
             return;
         }
 
-        if (otpCode.isEmpty()) {
-            showError(regStatusLabel, "Vui lòng nhập mã OTP (6 chữ số)");
+        if (userRegisterService == null) {
+            showError(regStatusLabel, "Không thể kết nối dịch vụ tài khoản");
             return;
         }
-
-        registerBtn.setDisable(true);
+        String avatarType = customAvatarPath != null ? "custom" : regAvatarChoiceBox.getValue();
+        String avatarPath = customAvatarPath != null ? customAvatarPath : avatarType + ".jpg";
+        RegisterRequest request = new RegisterRequest(username, phone, email, password, avatarType, avatarPath);
+        setRegistrationBusy(true);
         regStatusLabel.setStyle("-fx-text-fill: #0068ff;");
-        regStatusLabel.setText("Đang đăng ký tài khoản...");
+        regStatusLabel.setText("loading...");
+        AccountTaskRunner.run(() -> userRegisterService.register(request), response -> {
+            setRegistrationBusy(false);
 
-        if (userRegisterService != null) {
-            RegisterRequest request = new RegisterRequest(username, phone, password, avatarType, avatarPath, otpCode);
-            RegisterResponse response = userRegisterService.register(request);
-
-            if (response.isSuccess()) {
-                Platform.runLater(() -> {
-                    registerBtn.setDisable(false);
-                    phoneField.setText(phone);
-                    passwordField.setText(password);
-                    clearStatusLabels();
-                    showInfoAlert("Đăng ký thành công", "🎉 Chúc mừng bạn đã đăng ký tài khoản thành công! Hãy đăng nhập ngay.");
-                    showLoginTab();
-                });
-            } else {
-                registerBtn.setDisable(false);
-                showError(regStatusLabel, "Đăng ký thất bại: " + response.getMessage());
+            if (!response.isSuccess()) {
+                showError(regStatusLabel, response.getMessage());
+                return;
             }
-        } else {
-            registerBtn.setDisable(false);
-            showError(regStatusLabel, "Lỗi kết nối cơ sở dữ liệu. Vui lòng thử lại sau.");
-        }
+            currentRegistrationId = response.getRegistrationId();
+            currentRegistrationEmail = email;
+            currentRegistrationPhone = phone;
+            regPasswordField.clear();
+            regConfirmPasswordField.clear();
+            regStatusLabel.setText("");
+            if (otpTargetLabel != null) {
+                otpTargetLabel.setText("Nhập mã OTP gồm 6 chữ số đã được gửi tới " + email);
+            }
+            showOtpPane();
+                }, message -> {
+            setRegistrationBusy(false);
+                showError(regStatusLabel, message);
+            });
+    }
+    private void setRegistrationBusy(boolean busy) {
+        registerPane.setDisable(busy);
+        tabLoginBtn.setDisable(busy);
+        tabRegisterBtn.setDisable(busy);
     }
 
     private void openChatWindow(ChatClient client, String username) {
@@ -503,7 +599,7 @@ public class LoginController {
             stage.setResizable(true);
         } catch (Exception e) {
             if (loginBtn != null) loginBtn.setDisable(false);
-            if (statusLabel != null) showError(statusLabel, "Không thể tải giao diện Chat: " + e.getMessage());
+            if (statusLabel != null) showError(statusLabel, "Không thể tải giao diện Chat " + e.getMessage());
         }
     }
 
@@ -536,7 +632,7 @@ public class LoginController {
     }
 
     public void showKickedWarning(String reason) {
-        String msg = (reason != null && !reason.isBlank()) ? reason : "Tài khoản của bạn vừa đăng nhập ở một thiết bị khác.";
+        String msg = (reason != null && !reason.isBlank()) ? reason : "Tài khoản của bạn vừa đăng nhập ở một thiết bị khác";
         if (statusLabel != null) {
             showError(statusLabel, msg);
         }
@@ -557,7 +653,30 @@ public class LoginController {
         }
         URL imageUrl = LoginController.class.getResource("/images/" + avatarId + ".jpg");
         if (imageUrl != null) {
-            regAvatarImage.setImage(new Image(imageUrl.toExternalForm()));
+            setCroppedAvatarImage(regAvatarImage, new Image(imageUrl.toExternalForm()));
+        }
+    }
+    private void setCroppedAvatarImage(ImageView imageView, Image image) {
+        if (imageView == null || image == null) return;
+        imageView.setImage(image);
+        Runnable applyViewport = () -> {
+            double w = image.getWidth();
+            double h = image.getHeight();
+            if (w > 0 && h > 0) {
+                double minDim = Math.min(w, h);
+                double x = (w - minDim) / 2.0;
+                double y = (h - minDim) / 2.0;
+                imageView.setViewport(new Rectangle2D(x, y, minDim, minDim));
+            }
+        };
+        if (image.getWidth() > 0 && image.getHeight() > 0) {
+            applyViewport.run();
+        } else {
+            image.widthProperty().addListener((obs, oldVal, newVal) -> {
+                if (newVal.doubleValue() > 0) {
+                    applyViewport.run();
+                }
+            });
         }
     }
 

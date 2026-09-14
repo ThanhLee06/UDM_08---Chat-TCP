@@ -3,29 +3,29 @@ package vn.edu.ut.udm08.client.controller;
 public class LoginFormValidator {
     public String validate(String username, String host, String portText) {
         if (!isValidUsername(username)) {
-            return "Username phải có 1-20 chữ cái hoặc chữ số!";
+            return "Username phải có 1-20 chữ cái hoặc chữ số";
         }
         if (host == null || host.isBlank()) {
-            return "Vui lòng nhập địa chỉ Server!";
+            return "Vui lòng nhập địa chỉ Server";
         }
         if (portText == null || portText.isBlank()) {
-            return "Vui lòng nhập Port!";
+            return "Vui lòng nhập Port";
         }
         int port;
         try {
             port = Integer.parseInt(portText);
         } catch (NumberFormatException e) {
-            return "Port phải là số hợp lệ!";
+            return "Port phải là số hợp lệ";
         }
         if (port < 1 || port > 65535) {
-            return "Port phải từ 1 đến 65535!";
+            return "Port phải từ 1 đến 65535";
         }
         return null;
     }
 
     public String validate(String usernameOrPhone) {
         if (usernameOrPhone == null || usernameOrPhone.trim().isEmpty()) {
-            return "Vui lòng nhập Tên tài khoản hoặc Số điện thoại!";
+            return "Vui lòng nhập Email hoặc Số điện thoại";
         }
         return null;
     }
