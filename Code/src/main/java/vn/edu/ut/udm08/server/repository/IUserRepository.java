@@ -6,6 +6,8 @@ import java.util.Optional;
 public interface IUserRepository {
     boolean existsByUsername(String username);
     boolean existsByPhoneNumber(String phoneNumber);
+    boolean existsByEmail(String email);
+    Optional<User> findByEmail(String email);
     User save(User user);
     Optional<User> findByPhoneNumber(String phoneNumber);
     boolean updatePassword(String phoneNumber, String newPasswordHash);

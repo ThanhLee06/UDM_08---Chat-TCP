@@ -5,8 +5,12 @@ import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.Optional;
 public class UserRepository implements IUserRepository {
-    private final String dbUrl = "jdbc:sqlite:udm08_chat.db";
+    private final String dbUrl;
     public UserRepository() {
+        this(System.getProperty("udm08.db.url", "jdbc:sqlite:udm08_chat.db"));
+    }
+    public UserRepository(String dbUrl) {
+        this.dbUrl = dbUrl;
         initDatabase();
     }
     private Connection getConnection() throws SQLException {
@@ -15,19 +19,42 @@ public class UserRepository implements IUserRepository {
     private void initDatabase() {
         try (InputStream is = getClass().getResourceAsStream("/db/migration/V2__auth.sql")) {
             if (is == null) {
-                return;
+                throw new IllegalStateException("Thiếu schema tài khoản");
             }
             String sql = new String(is.readAllBytes(), StandardCharsets.UTF_8);
             try (Connection conn = getConnection();
                  Statement stmt = conn.createStatement()) {
-                try {
-                    stmt.execute("ALTER TABLE users DROP COLUMN email");
-                } catch (SQLException ignored) {
-                }
                 stmt.execute(sql);
+                boolean hasEmail = false;
+                try (ResultSet columns = stmt.executeQuery("PRAGMA table_info(users)")) {
+                    while (columns.next()) {
+                        if ("email".equalsIgnoreCase(columns.getString("name"))) hasEmail = true;
+                    }
+                }
+                if (!hasEmail) stmt.execute("ALTER TABLE users ADD COLUMN email TEXT");
+                stmt.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_users_email ON users(lower(email)) WHERE email IS NOT NULL");
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            throw new IllegalStateException("Không thể khởi tạo cơ sở dữ liệu tài khoản", e);
+        }
+    }
+    @Override
+    public boolean existsByEmail(String email) {
+        return findByEmail(email).isPresent();
+    }
+    @Override
+    public Optional<User> findByEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return Optional.empty();
+        }
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement("SELECT * FROM users WHERE lower(email) = ?")) {
+            stmt.setString(1, email.trim().toLowerCase(java.util.Locale.ROOT));
+            try (ResultSet rows = stmt.executeQuery()) {
+                return rows.next() ? Optional.of(mapResultSetToUser(rows)) : Optional.empty();
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Không thể tra cứu email", e);
         }
     }
     @Override
@@ -70,8 +97,8 @@ public class UserRepository implements IUserRepository {
             return null;
         }
         String sql = """
-                INSERT INTO users (username, phone_number, password_hash, avatar_type, avatar_path)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO users (username, phone_number, password_hash, avatar_type, avatar_path, email)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """;
         try (Connection conn = getConnection();
             PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -80,6 +107,7 @@ public class UserRepository implements IUserRepository {
             pstmt.setString(3, user.getPasswordHash());
             pstmt.setString(4, user.getAvatarType());
             pstmt.setString(5, user.getAvatarPath());
+            pstmt.setString(6, user.getEmail() == null ? null : user.getEmail().trim().toLowerCase(java.util.Locale.ROOT));
             int affected = pstmt.executeUpdate();
             if (affected > 0) {
                 ResultSet rs = pstmt.getGeneratedKeys();
@@ -151,7 +179,9 @@ public class UserRepository implements IUserRepository {
     }
     @Override
     public boolean deleteByPhoneNumber(String phoneNumber) {
-        if (phoneNumber == null) return false;
+        if (phoneNumber == null) {
+            return false;
+        }
         String sql = "DELETE FROM users WHERE phone_number = ?";
         try (Connection conn = getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -190,6 +220,7 @@ public class UserRepository implements IUserRepository {
         user.setId(rs.getLong("id"));
         user.setUsername(rs.getString("username"));
         user.setPhoneNumber(rs.getString("phone_number"));
+        user.setEmail(rs.getString("email"));
         user.setPasswordHash(rs.getString("password_hash"));
         user.setAvatarType(rs.getString("avatar_type"));
         user.setAvatarPath(rs.getString("avatar_path"));

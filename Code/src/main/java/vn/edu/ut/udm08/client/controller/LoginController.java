@@ -14,6 +14,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.stage.Stage;
+import vn.edu.ut.udm08.client.cache.ConversationCache;
 import vn.edu.ut.udm08.client.network.ChatClient;
 import vn.edu.ut.udm08.client.network.ChatListener;
 import vn.edu.ut.udm08.integration.ClientLoginService;
@@ -46,6 +47,7 @@ public class LoginController {
     private ClientLoginService clientLoginService;
     private ChatController activeChatController;
     private List<UserProfile> pendingUserList;
+    private final ConversationCache conversationCache = new ConversationCache();
 
     @FXML
     private void initialize() {
@@ -85,6 +87,7 @@ public class LoginController {
             clientLoginService.connectAndLogin(host, port, username, avatarId, new ChatListener() {
                 @Override
                 public void onLoginSuccess(ProtocolMessage message) {
+                    conversationCache.setCurrentUser(username);
                     Platform.runLater(new Runnable() {
                         @Override
                         public void run() {
@@ -103,6 +106,7 @@ public class LoginController {
 
                 @Override
                 public void onMessageReceived(ProtocolMessage message) {
+                    conversationCache.addRealtimeMessage(message);
                     if (activeChatController != null) {
                         activeChatController.receiveMessage(message);
                     }
@@ -110,6 +114,11 @@ public class LoginController {
 
                 @Override
                 public void onMessageSentSuccess(String messageId) {
+                }
+
+                @Override
+                public void onMessageStatusUpdated(ProtocolMessage message) {
+                    conversationCache.updateMessageStatus(message);
                 }
 
                 @Override
@@ -125,6 +134,7 @@ public class LoginController {
 
                 @Override
                 public void onConnectionLost(Throwable cause) {
+                    conversationCache.clear();
                     Platform.runLater(new Runnable() {
                         @Override
                         public void run() {
@@ -132,6 +142,23 @@ public class LoginController {
                             showError("Mat ket noi toi Server");
                         }
                     });
+                }
+
+                @Override
+                public void onSessionExpired(String errorCode, String errorMessage) {
+                    conversationCache.clear();
+                    Platform.runLater(new Runnable() {
+                        @Override
+                        public void run() {
+                            connectButton.setDisable(false);
+                            showError("Phien dang nhap het han: " + errorMessage);
+                        }
+                    });
+                }
+
+                @Override
+                public void onLogoutSuccess() {
+                    conversationCache.clear();
                 }
             });
         } catch (Exception e) {
@@ -150,7 +177,8 @@ public class LoginController {
                 @Override
                 public void onSendMessage(ProtocolMessage message) {
                     try {
-                        client.sendMessage(message.target, message.content);
+                        conversationCache.addRealtimeMessage(message);
+                        client.sendMessage(message);
                     } catch (Exception e) {
                     }
                 }
@@ -174,8 +202,7 @@ public class LoginController {
             return;
         }
 
-        URL imageUrl = LoginController.class.getResource(
-                "/images/" + avatarId + ".jpg");
+        URL imageUrl = LoginController.class.getResource("/images/" + avatarId + ".jpg");
         if (imageUrl != null) {
             avatarImage.setImage(new Image(imageUrl.toExternalForm()));
         }

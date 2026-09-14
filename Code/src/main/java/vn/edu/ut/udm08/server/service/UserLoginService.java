@@ -9,8 +9,11 @@ import vn.edu.ut.udm08.shared.security.PasswordEncoder;
 import vn.edu.ut.udm08.server.session.ClientSession;
 import vn.edu.ut.udm08.server.session.LoginHandler;
 import java.util.Optional;
-
+import vn.edu.ut.udm08.server.auth.IOtpService;
+import vn.edu.ut.udm08.shared.validation.IPasswordValidator;
+import vn.edu.ut.udm08.shared.validation.PasswordValidator;
 public class UserLoginService {
+    private final IPasswordValidator passwordValidator;
     private final IUserRepository userRepository;
     private final IPasswordEncoder passwordEncoder;
 
@@ -19,6 +22,11 @@ public class UserLoginService {
     }
 
     public UserLoginService(IUserRepository userRepository, IPasswordEncoder passwordEncoder) {
+        this(userRepository, passwordEncoder, new PasswordValidator());
+    }
+    public UserLoginService(IUserRepository userRepository, IPasswordEncoder passwordEncoder,
+                            IPasswordValidator passwordValidator) {
+        this.passwordValidator = passwordValidator;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
     }
@@ -28,14 +36,12 @@ public class UserLoginService {
             return LoginResponse.fail("Thông tin đăng nhập không hợp lệ");
         }
         if (request.getPhoneNumber() == null || request.getPhoneNumber().trim().isEmpty() || request.getPassword() == null || request.getPassword().trim().isEmpty()) {
-            return LoginResponse.fail("Vui lòng nhập số điện thoại và mật khẩu");
+            return LoginResponse.fail("Vui lòng nhập email hoặc số điện thoại và mật khẩu");
         }
-        Optional<User> optionalUser = userRepository.findByPhoneNumber(request.getPhoneNumber());
-        if (optionalUser.isEmpty()) {
-            optionalUser = userRepository.findAll().stream()
-                    .filter(u -> u != null && u.getUsername() != null && request.getPhoneNumber().equalsIgnoreCase(u.getUsername()))
-                    .findFirst();
-        }
+        String identifier = request.getPhoneNumber().trim();
+        Optional<User> optionalUser = identifier.contains("@")
+                ? userRepository.findByEmail(identifier)
+                : userRepository.findByPhoneNumber(identifier);
         if (optionalUser.isEmpty()) {
             return LoginResponse.fail("Tài khoản không tồn tại");
         }
@@ -57,17 +63,33 @@ public class UserLoginService {
         return response;
     }
 
-    public boolean resetPassword(String phoneNumber, String otpCode, String newPassword, vn.edu.ut.udm08.server.auth.PhoneOtpService otpService) {
-        if (phoneNumber == null || otpCode == null || newPassword == null || otpService == null) {
+    public void requestPasswordReset(String identifier, IOtpService otpService) {
+        User user = findAccount(identifier).orElseThrow(() -> new IllegalStateException("Tài khoản không tồn tại"));
+        if (user.getEmail() == null || user.getEmail().isBlank()) {
+            throw new IllegalStateException("Tài khoản cũ chưa có email xác thực không thể đặt lại qua email");
+        }
+        otpService.sendOtp("reset:" + user.getEmail(), user.getEmail());
+    }
+    public boolean resetPassword(String identifier, String otpCode, String newPassword,
+                                 IOtpService otpService) {
+        if (identifier == null || otpCode == null || otpService == null || passwordValidator.getValidationError(newPassword) != null) {
             return false;
         }
-        if (!otpService.verifyOtp(phoneNumber, otpCode)) {
+        Optional<User> account = findAccount(identifier);
+        if (account.isEmpty() || account.get().getEmail() == null) {
             return false;
         }
-        if (!userRepository.existsByPhoneNumber(phoneNumber)) {
+        User user = account.get();
+        if (!otpService.verifyOtp("reset:" + user.getEmail(), otpCode)) {
             return false;
         }
-        String newHash = passwordEncoder.encode(newPassword);
-        return userRepository.updatePassword(phoneNumber, newHash);
+        return userRepository.updatePassword(user.getPhoneNumber(), passwordEncoder.encode(newPassword));
+    }
+    private Optional<User> findAccount(String identifier) {
+        if (identifier == null || identifier.isBlank()) {
+            return Optional.empty();
+        }
+        return identifier.contains("@") ? userRepository.findByEmail(identifier.trim())
+                : userRepository.findByPhoneNumber(identifier.trim());
     }
 }

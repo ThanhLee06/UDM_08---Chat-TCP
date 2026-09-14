@@ -3,24 +3,27 @@ package vn.edu.ut.udm08.shared.dto;
 public class RegisterRequest {
     private String username;
     private String phoneNumber;
+    private String email;
     private String password;
-    private String otpCode;
     private String avatarType;
     private String avatarPath;
 
     public RegisterRequest() {}
 
-    public RegisterRequest(String username, String phoneNumber, String password, String otpCode, String avatarType, String avatarPath) {
+    public RegisterRequest(String username, String phoneNumber, String email, String password, String avatarType, String avatarPath) {
         this.username = username;
         this.phoneNumber = phoneNumber;
+        this.email = email;
         this.password = password;
-        this.otpCode = otpCode;
         this.avatarType = avatarType;
         this.avatarPath = avatarPath;
     }
 
-    public RegisterRequest(String username, String phoneNumber, String password, String avatarType, String avatarPath) {
-        this(username, phoneNumber, password, null, avatarType, avatarPath);
+    public String getEmail() {
+        return email;
+    }
+    public void setEmail(String email) {
+        this.email = email;
     }
 
     public String getUsername() {
@@ -45,14 +48,6 @@ public class RegisterRequest {
 
     public void setPassword(String password) {
         this.password = password;
-    }
-
-    public String getOtpCode() {
-        return otpCode;
-    }
-
-    public void setOtpCode(String otpCode) {
-        this.otpCode = otpCode;
     }
 
     public String getAvatarType() {

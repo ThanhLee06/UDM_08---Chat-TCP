@@ -4,6 +4,20 @@ public class RegisterResponse {
     private boolean success;
     private String message;
     private User user;
+    private String registrationId;
+    private boolean registrationRestartRequired;
+    public boolean isRegistrationRestartRequired() {
+        return registrationRestartRequired;
+    }
+    public void setRegistrationRestartRequired(boolean registrationRestartRequired) {
+        this.registrationRestartRequired = registrationRestartRequired;
+    }
+    public String getRegistrationId() {
+        return registrationId;
+    }
+    public void setRegistrationId(String registrationId) {
+        this.registrationId = registrationId;
+    }
     public RegisterResponse() {}
     public RegisterResponse(boolean success, String message, User user) {
         this.success = success;
