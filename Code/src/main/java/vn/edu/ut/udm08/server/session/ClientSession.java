@@ -9,14 +9,18 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.function.Consumer;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
+import vn.edu.ut.udm08.shared.model.User;
 import vn.edu.ut.udm08.shared.protocol.JsonUtil;
 
 public class ClientSession implements Runnable {
+
+    public static final String ANONYMOUS_USER_ID = "anonymous";
 
     private final Socket socket;
 
     private BufferedReader reader;
     private PrintWriter writer;
+    private User user;
     private String username;
     private String avatarId;
     private Consumer<ProtocolMessage> messageHandler;
@@ -68,11 +72,12 @@ public class ClientSession implements Runnable {
             }
         }
         catch (IOException e) {
-            System.err.println("Client session I/O error: " + e.getMessage());
+            if (isAuthenticated() && running) {
+                System.err.println("Client session I/O error (" + getUsername() + "): " + e.getMessage());
+            }
         }
         finally {
             close();
-            System.out.println("Client session disconnected");
             if (disconnectHandler != null) {
                 disconnectHandler.run();
             }
@@ -84,7 +89,26 @@ public class ClientSession implements Runnable {
     }
 
     public boolean isAuthenticated() {
-        return username != null;
+        return user != null || username != null;
+    }
+
+    public boolean authenticate(User user) {
+        if (user == null || user.getId() == null || user.getUsername() == null || user.getUsername().isBlank()) {
+            return false;
+        }
+
+        if (isAuthenticated() && this.user != null) {
+            return false;
+        }
+
+        this.user = user;
+        this.username = user.getUsername();
+        this.avatarId = user.getAvatarType() != null && !user.getAvatarType().isBlank() ? user.getAvatarType() : user.getAvatarPath();
+        if (this.avatarId == null) {
+            this.avatarId = "default";
+        }
+
+        return true;
     }
 
     public boolean authenticate(String username, String avatarId) {
@@ -144,6 +168,18 @@ public class ClientSession implements Runnable {
         }
     }
 
+    public void sendError(String errorCode, String errorMessage) {
+        ProtocolMessage msg = new ProtocolMessage(vn.edu.ut.udm08.shared.model.MessageType.ERROR);
+        msg.sender = "SERVER";
+        msg.errorCode = errorCode;
+        msg.errorMessage = errorMessage;
+        msg.timestamp = System.currentTimeMillis();
+        try {
+            sendMessage(msg);
+        } catch (IOException ignored) {
+        }
+    }
+
     public boolean isConnected() {
         return socket.isConnected() && !socket.isClosed();
     }
@@ -157,7 +193,6 @@ public class ClientSession implements Runnable {
             }
         }
         catch (IOException ignored) {
-            //
         } finally {
             reader = null;
         }
@@ -173,7 +208,6 @@ public class ClientSession implements Runnable {
             }
         }
         catch (IOException ignored) {
-            //
         }
     }
 
@@ -183,5 +217,19 @@ public class ClientSession implements Runnable {
 
     public String getAvatarId() {
         return avatarId;
+    }
+
+    public String getUserId() {
+        if (user != null && user.getId() != null) {
+            return user.getId().toString();
+        }
+        if (username != null && !username.isBlank()) {
+            return username;
+        }
+        return ANONYMOUS_USER_ID;
+    }
+
+    public User getUser() {
+        return user;
     }
 }

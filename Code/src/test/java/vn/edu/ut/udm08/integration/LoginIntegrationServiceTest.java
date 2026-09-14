@@ -64,7 +64,7 @@ public class LoginIntegrationServiceTest {
         }
     }
     @Test
-    void testProcessLoginRejectsDuplicateUsername() throws Exception {
+    void testProcessLoginKicksPreviousSessionOnDuplicate() throws Exception {
         LoginIntegrationService service = new LoginIntegrationService();
         try (TestSocketConnection conn1 = new TestSocketConnection();
              TestSocketConnection conn2 = new TestSocketConnection()) {
@@ -72,10 +72,7 @@ public class LoginIntegrationServiceTest {
             conn1.readMessage();
             conn1.readMessage();
             boolean secondLogin = service.processLogin(conn2.session, createHelloMessage("USERA", "avatar2"));
-            assertFalse(secondLogin);
-            ProtocolMessage error = conn2.readMessage();
-            assertEquals(MessageType.ERROR, error.type);
-            assertEquals("USERNAME_TAKEN", error.errorCode);
+            assertTrue(secondLogin);
         }
     }
     @Test

@@ -43,6 +43,31 @@ public class OnlineUserRegistry {
     }
     return result;
   }
+  public boolean kickSession(String usernameOrPhone, String reason) {
+    if (usernameOrPhone == null || usernameOrPhone.isBlank()) {
+        return false;
+    }
+    String targetKey = normalizeKey(usernameOrPhone);
+    ClientSession targetSession = sessions.get(targetKey);
+    if (targetSession == null) {
+        for (ClientSession session : sessions.values()) {
+            if (session.getUser() != null && session.getUser().getPhoneNumber() != null) {
+                if (usernameOrPhone.trim().equalsIgnoreCase(session.getUser().getPhoneNumber().trim())) {
+                    targetSession = session;
+                    targetKey = normalizeKey(session.getUsername());
+                    break;
+                }
+            }
+        }
+    }
+    if (targetSession != null) {
+        sessions.remove(targetKey, targetSession);
+        targetSession.sendError("FORCE_LOGOUT", reason != null ? reason : "Tài khoản của bạn vừa đăng nhập ở một thiết bị khác.");
+        targetSession.close();
+        return true;
+    }
+    return false;
+  }
   private String normalizeKey(String username) {
     return Normalizer.normalize(username, Normalizer.Form.NFC).toLowerCase(Locale.ROOT);
   }
