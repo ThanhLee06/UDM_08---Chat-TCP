@@ -7,6 +7,7 @@ public class User {
     private Long id;
     private String username;
     private String phoneNumber;
+    private String email;
     private String passwordHash;
     private String avatarType;
     private String avatarPath;
@@ -56,6 +57,12 @@ public class User {
         this.phoneNumber = phoneNumber;
     }
 
+    public String getEmail() {
+        return email;
+    }
+    public void setEmail(String email) {
+        this.email = email;
+    }
     public String getPasswordHash() {
         return passwordHash;
     }

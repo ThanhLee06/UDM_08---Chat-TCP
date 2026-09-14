@@ -18,7 +18,9 @@ public class UserMapper {
         if (request.getPhoneNumber() != null) {
             user.setPhoneNumber(request.getPhoneNumber().trim());
         }
-        user.setPasswordHash(request.getPassword());
+        if (request.getEmail() != null) {
+            user.setEmail(request.getEmail().trim().toLowerCase(java.util.Locale.ROOT));
+        }
         if (request.getAvatarType() != null) {
             user.setAvatarType(request.getAvatarType());
         } else {
