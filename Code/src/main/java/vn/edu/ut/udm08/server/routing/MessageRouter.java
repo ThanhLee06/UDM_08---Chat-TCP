@@ -70,6 +70,26 @@ public class MessageRouter implements IMessageRouter {
                 }
             }
 
+            if (msg.replyTo != null) {
+                if (msg.replyTo.isBlank()) {
+                    sendErrorMessage(senderSession, msg.messageId, "INVALID_REPLY_TARGET", "Tin goc khong ton tai hoac khong thuoc hoi thoai nay");
+                    return;
+                }
+                if (msg.kind == null || msg.kind.isBlank()) {
+                    msg.kind = "reply";
+                }
+            }
+
+            if (msg.fwdFrom != null) {
+                if (msg.fwdFrom.isBlank()) {
+                    sendErrorMessage(senderSession, msg.messageId, "INVALID_FORWARD_SOURCE", "Tin nguon khong ton tai hoac khong co quyen doc");
+                    return;
+                }
+                if (msg.kind == null || msg.kind.isBlank()) {
+                    msg.kind = "forward";
+                }
+            }
+
             // 5. Tim ClientSession cua nguoi nhan trong OnlineUserRegistry
             List<ClientSession> targets = findTargetSessions(convId, targetUser);
             List<ClientSession> recipients = new ArrayList<>();

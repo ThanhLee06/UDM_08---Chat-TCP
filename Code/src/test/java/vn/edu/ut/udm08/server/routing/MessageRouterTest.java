@@ -236,6 +236,80 @@ class MessageRouterTest {
         assertEquals("106", error.messageId);
     }
 
+    @Test
+    void shouldSetKindToReplyWhenReplyToIsProvided() throws Exception {
+        convRegistry.join("GENERAL", alice);
+        convRegistry.join("GENERAL", bob);
+
+        ProtocolMessage msg = new ProtocolMessage(MessageType.CHAT);
+        msg.messageId = "107";
+        msg.sender = "alice";
+        msg.convId = "GENERAL";
+        msg.content = "Tra loi tin nhan";
+        msg.replyTo = "msg-100";
+
+        router.handleChatMessage(alice, msg);
+
+        ProtocolMessage bobReceived = readMessage(bobReader);
+        assertEquals("reply", bobReceived.kind);
+        assertEquals("msg-100", bobReceived.replyTo);
+    }
+
+    @Test
+    void shouldRejectInvalidReplyTargetWhenReplyToIsBlank() throws Exception {
+        convRegistry.join("GENERAL", alice);
+
+        ProtocolMessage msg = new ProtocolMessage(MessageType.CHAT);
+        msg.messageId = "108";
+        msg.sender = "alice";
+        msg.convId = "GENERAL";
+        msg.content = "Tra loi loi";
+        msg.replyTo = "  ";
+
+        router.handleChatMessage(alice, msg);
+
+        ProtocolMessage error = readMessage(aliceReader);
+        assertEquals(MessageType.ERROR, error.type);
+        assertEquals("INVALID_REPLY_TARGET", error.errorCode);
+    }
+
+    @Test
+    void shouldSetKindToForwardWhenFwdFromIsProvided() throws Exception {
+        convRegistry.join("GENERAL", alice);
+        convRegistry.join("GENERAL", bob);
+
+        ProtocolMessage msg = new ProtocolMessage(MessageType.CHAT);
+        msg.messageId = "109";
+        msg.sender = "alice";
+        msg.convId = "GENERAL";
+        msg.content = "Chuyen tiep tin nhan";
+        msg.fwdFrom = "room:public";
+
+        router.handleChatMessage(alice, msg);
+
+        ProtocolMessage bobReceived = readMessage(bobReader);
+        assertEquals("forward", bobReceived.kind);
+        assertEquals("room:public", bobReceived.fwdFrom);
+    }
+
+    @Test
+    void shouldRejectInvalidForwardSourceWhenFwdFromIsBlank() throws Exception {
+        convRegistry.join("GENERAL", alice);
+
+        ProtocolMessage msg = new ProtocolMessage(MessageType.CHAT);
+        msg.messageId = "110";
+        msg.sender = "alice";
+        msg.convId = "GENERAL";
+        msg.content = "Chuyen tiep loi";
+        msg.fwdFrom = "";
+
+        router.handleChatMessage(alice, msg);
+
+        ProtocolMessage error = readMessage(aliceReader);
+        assertEquals(MessageType.ERROR, error.type);
+        assertEquals("INVALID_FORWARD_SOURCE", error.errorCode);
+    }
+
     private ProtocolMessage readMessage(BufferedReader reader) throws Exception {
         String json = reader.readLine();
         assertNotNull(json, "Expected a message from the server");
