@@ -122,3 +122,8 @@ release/
 .cache/
 tmp/
 temp/
+
+# Local SMTP credentials
+smtp.properties
+Code/udm08_chat.db
+Code/udm08_chat.db-*

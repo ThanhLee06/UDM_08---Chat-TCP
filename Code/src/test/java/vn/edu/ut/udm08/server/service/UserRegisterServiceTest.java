@@ -1,113 +1,173 @@
 package vn.edu.ut.udm08.server.service;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import vn.edu.ut.udm08.server.repository.IUserRepository;
-import vn.edu.ut.udm08.shared.dto.RegisterRequest;
-import vn.edu.ut.udm08.shared.dto.RegisterResponse;
-import vn.edu.ut.udm08.shared.model.User;
-import vn.edu.ut.udm08.shared.security.IPasswordEncoder;
+import org.junit.jupiter.api.io.TempDir;
+import java.nio.file.Path;
+import java.time.*;
+import java.util.*;
+import vn.edu.ut.udm08.server.auth.EmailOtpService;
+import vn.edu.ut.udm08.server.repository.UserRepository;
+import vn.edu.ut.udm08.shared.dto.*;
 import vn.edu.ut.udm08.shared.security.PasswordEncoder;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 import static org.junit.jupiter.api.Assertions.*;
-public class UserRegisterServiceTest {
-    private UserRegisterService service;
-    private IPasswordEncoder passwordEncoder;
-    @BeforeEach
-    public void setUp() {
-        passwordEncoder = new PasswordEncoder();
-        service = new UserRegisterService(new TestUserRepository(), passwordEncoder);
+class UserRegisterServiceTest {
+    @TempDir Path temp;
+    UserRepository repository;
+    UserRegisterService service;
+    Map<String, String> mailbox;
+    TestClock clock;
+
+    @BeforeEach void setup() {
+        repository = new UserRepository("jdbc:sqlite:" + temp.resolve("accounts.db"));
+        mailbox = new HashMap<>();
+        clock = new TestClock();
+        service = new UserRegisterService(repository, new PasswordEncoder(),
+                new EmailOtpService(mailbox::put, clock), clock);
     }
-    @Test
-    public void testRegisterSuccessHashesPassword() {
-        RegisterRequest request = new RegisterRequest("ThanhUser", "0901234567", "thanh@gmail.com", "Pass123@", "PRESET", "01.png");
-        RegisterResponse response = service.register(request);
-        assertTrue(response.isSuccess());
-        assertNotNull(response.getUser());
-        assertEquals("ThanhUser", response.getUser().getUsername());
-        assertNotEquals("Pass123@", response.getUser().getPasswordHash());
-        assertTrue(passwordEncoder.matches("Pass123@", response.getUser().getPasswordHash()));
+    RegisterRequest request() {
+        return new RegisterRequest("ThanhUser", "0901234567", "thanh@gmail.com", "Pass123@", "PRESET", "01.png");
     }
-    @Test
-    public void testRegisterRejectsInvalidEmail() {
-        RegisterRequest request = new RegisterRequest("ThanhUser", "0901234567", "invalid-email-format", "Pass123@", "PRESET", "01.png");
-        RegisterResponse response = service.register(request);
+    RegisterResponse confirm(RegisterResponse started) {
+        return service.verifyRegistration(started.getRegistrationId(), mailbox.get("thanh@gmail.com"));
+    }
+    @Test void accountIsInsertedOnlyAfterValidEmailOtp() {
+        RegisterResponse started = service.register(request());
+        assertTrue(started.isSuccess());
+        assertNull(started.getUser());
+        assertNotNull(started.getRegistrationId());
+        assertTrue(repository.findAll().isEmpty());
+        assertTrue(mailbox.get("thanh@gmail.com").matches("[0-9]{6}"));
+        assertFalse(new UserLoginService(repository).login(new LoginRequest("0901234567", "Pass123@")).isSuccess());
+        RegisterResponse verified = confirm(started);
+        assertTrue(verified.isSuccess(), verified.getMessage());
+        assertEquals(1, repository.findAll().size());
+        assertEquals("thanh@gmail.com", verified.getUser().getEmail());
+        assertNotEquals("Pass123@", verified.getUser().getPasswordHash());
+        assertTrue(new PasswordEncoder().matches("Pass123@", verified.getUser().getPasswordHash()));
+        assertFalse(confirm(started).isSuccess());
+        assertEquals(1, repository.findAll().size());
+    }
+
+    @Test void wrongOrMissingCodeNeverCreatesAccount() {
+        var started = service.register(request());
+        assertFalse(service.verifyRegistration(started.getRegistrationId(), "wrong").isSuccess());
+        assertFalse(service.verifyRegistration(started.getRegistrationId(), null).isSuccess());
+        assertTrue(repository.findAll().isEmpty());
+    }
+    @Test void expiredRegistrationCannotCreateAccount() {
+        var started = service.register(request());
+        clock.advance(301);
+        assertFalse(confirm(started).isSuccess());
+        assertTrue(repository.findAll().isEmpty());
+    }
+    @Test void tooManyWrongAttemptsRejectEvenCorrectCode() {
+        var started = service.register(request());
+        for (int i = 0; i < 5; i++) service.verifyRegistration(started.getRegistrationId(), "wrong");
+        assertFalse(confirm(started).isSuccess());
+        assertTrue(repository.findAll().isEmpty());
+    }
+    @Test void resendHasCooldownAndOldCodeIsInvalidated() {
+        var started = service.register(request());
+        String old = mailbox.get("thanh@gmail.com");
+        assertFalse(service.resendOtp(started.getRegistrationId()).isSuccess());
+        clock.advance(61);
+        assertTrue(service.resendOtp(started.getRegistrationId()).isSuccess());
+        String fresh = mailbox.get("thanh@gmail.com");
+        if (!old.equals(fresh)) assertFalse(service.verifyRegistration(started.getRegistrationId(), old).isSuccess());
+        assertTrue(confirm(started).isSuccess());
+    }
+    @Test void submittedDetailsCannotBeChangedAfterEmailWasSent() {
+        var request = request();
+        var started = service.register(request);
+        request.setEmail("attacker@gmail.com");
+        request.setPhoneNumber("0909999999");
+        request.setPassword("Other123@");
+        assertTrue(confirm(started).isSuccess());
+        assertTrue(repository.findByEmail("attacker@gmail.com").isEmpty());
+        assertTrue(repository.findByPhoneNumber("0901234567").isPresent());
+        assertTrue(new UserLoginService(repository).login(new LoginRequest("thanh@gmail.com", "Pass123@")).isSuccess());
+    }
+    @Test void smtpFailureDoesNotCreateAccountOrChallenge() {
+        service = new UserRegisterService(repository, new PasswordEncoder(), new EmailOtpService((email, code) -> {
+            throw new java.io.IOException("SMTP unavailable");
+        }));
+        var response = service.register(request());
         assertFalse(response.isSuccess());
-        assertEquals("Email không hợp lệ", response.getMessage());
+        assertNull(response.getRegistrationId());
+        assertTrue(repository.findAll().isEmpty());
     }
-    @Test
-    public void testRegisterRejectsWeakPasswordShort() {
-        RegisterRequest request = new RegisterRequest("ThanhUser", "0901234567", "thanh@gmail.com", "P1@", "PRESET", "01.png");
-        RegisterResponse response = service.register(request);
-        assertFalse(response.isSuccess());
-        assertEquals("Mật khẩu phải có ít nhất 8 ký tự", response.getMessage());
+    @Test void bothLoginIdentifiersWorkAfterRestart() {
+        assertTrue(confirm(service.register(request())).isSuccess());
+        var reopened = new UserRepository("jdbc:sqlite:" + temp.resolve("accounts.db"));
+        var login = new UserLoginService(reopened);
+        assertTrue(login.login(new LoginRequest("0901234567", "Pass123@")).isSuccess());
+        assertTrue(login.login(new LoginRequest("+84901234567", "Pass123@")).isSuccess());
+        assertTrue(login.login(new LoginRequest("  THANH@gmail.com  ", "Pass123@")).isSuccess());
+        assertFalse(login.login(new LoginRequest("thanh@gmail.com", "wrong")).isSuccess());
     }
-    @Test
-    public void testRegisterRejectsWeakPasswordNoSpecialChar() {
-        RegisterRequest request = new RegisterRequest("ThanhUser", "0901234567", "thanh@gmail.com", "Password123", "PRESET", "01.png");
-        RegisterResponse response = service.register(request);
-        assertFalse(response.isSuccess());
-        assertEquals("Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt", response.getMessage());
+    @Test void rejectsDuplicateEmailPhoneAndUsername() {
+        assertTrue(confirm(service.register(request())).isSuccess());
+        var duplicate = request();
+        assertEquals("Tên đăng nhập đã được sử dụng", service.register(duplicate).getMessage());
+        duplicate.setUsername("AnotherUser");
+        assertEquals("Số điện thoại đã được đăng ký", service.register(duplicate).getMessage());
+        duplicate.setPhoneNumber("0909999999");
+        duplicate.setEmail("THANH@gmail.com");
+        assertEquals("Email đã được sử dụng", service.register(duplicate).getMessage());
     }
-    @Test
-    public void testRegisterRejectsDuplicateUsername() {
-        RegisterRequest request1 = new RegisterRequest("ThanhUser", "0901234567", "thanh1@gmail.com", "Pass123@", "PRESET", "01.png");
-        service.register(request1);
-        RegisterRequest request2 = new RegisterRequest("thanhuser", "0909999999", "thanh2@gmail.com", "Pass123@", "PRESET", "01.png");
-        RegisterResponse response = service.register(request2);
-        assertFalse(response.isSuccess());
-        assertEquals("Tên đăng nhập đã được sử dụng", response.getMessage());
+
+    @Test void checksDuplicatesAgainAtConfirmation() {
+        var started = service.register(request());
+        var other = request();
+        other.setEmail("other@gmail.com");
+        var otherStarted = service.register(other);
+        assertTrue(service.verifyRegistration(otherStarted.getRegistrationId(), mailbox.get("other@gmail.com")).isSuccess());
+        assertFalse(confirm(started).isSuccess());
+        assertEquals(1, repository.findAll().size());
     }
-    @Test
-    public void testRegisterRejectsDuplicatePhone() {
-        RegisterRequest request1 = new RegisterRequest("User1", "0901234567", "thanh1@gmail.com", "Pass123@", "PRESET", "01.png");
-        service.register(request1);
-        RegisterRequest request2 = new RegisterRequest("User2", "0901234567", "thanh2@gmail.com", "Pass123@", "PRESET", "01.png");
-        RegisterResponse response = service.register(request2);
-        assertFalse(response.isSuccess());
-        assertEquals("Số điện thoại đã được đăng ký", response.getMessage());
-    }
-    @Test
-    public void testRegisterRejectsDuplicateEmail() {
-        RegisterRequest request1 = new RegisterRequest("User1", "0901234567", "thanh@gmail.com", "Pass123@", "PRESET", "01.png");
-        service.register(request1);
-        RegisterRequest request2 = new RegisterRequest("User2", "0909999999", "THANH@gmail.com", "Pass123@", "PRESET", "01.png");
-        RegisterResponse response = service.register(request2);
-        assertFalse(response.isSuccess());
-        assertEquals("Email đã được sử dụng", response.getMessage());
-    }
-    private static class TestUserRepository implements IUserRepository {
-        private final Map<String, User> usersByUsername = new ConcurrentHashMap<>();
-        private final Map<String, User> usersByPhone = new ConcurrentHashMap<>();
-        private final Map<String, User> usersByEmail = new ConcurrentHashMap<>();
-        private final AtomicLong idGenerator = new AtomicLong(1);
-        @Override
-        public boolean existsByUsername(String username) {
-            return username != null && usersByUsername.containsKey(username.trim().toLowerCase());
+    @Test void validatesEmailAndPasswordBeforeSending() {
+        var request = request();
+        request.setEmail("invalid");
+        assertEquals("Email không hợp lệ", service.register(request).getMessage());
+        request.setEmail("thanh@gmail.com"); request.setPassword("P1@");
+        assertEquals("Mật khẩu phải có ít nhất 8 ký tự", service.register(request).getMessage());
+        request.setPassword("Password123");
+        assertEquals("Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt", service.register(request).getMessage());
+        assertTrue(mailbox.isEmpty());
+        assertTrue(repository.findAll().isEmpty());
         }
-        @Override
-        public boolean existsByPhoneNumber(String phoneNumber) {
-            return phoneNumber != null && usersByPhone.containsKey(phoneNumber.trim());
+
+        @Test void invalidChallengeCannotCreateAccount() {
+        assertFalse(service.verifyRegistration("unknown", "123456").isSuccess());
+        assertFalse(service.verifyRegistration(null, "123456").isSuccess());
+        assertFalse(service.register(null).isSuccess());
         }
-        @Override
-        public boolean existsByEmail(String email) {
-            return email != null && usersByEmail.containsKey(email.trim().toLowerCase());
+
+        @Test void resetUsesEmailAndCodeCannotBeReused() {
+        assertTrue(confirm(service.register(request())).isSuccess());
+        var resetOtp = new EmailOtpService(mailbox::put, clock);
+        var login = new UserLoginService(repository);
+        login.requestPasswordReset("0901234567", resetOtp);
+        String code = mailbox.get("thanh@gmail.com");
+        assertTrue(login.resetPassword("THANH@gmail.com", code, "NewPass123@", resetOtp));
+        assertFalse(login.resetPassword("0901234567", code, "Again123@", resetOtp));
+        assertTrue(login.login(new LoginRequest("0901234567", "NewPass123@")).isSuccess());
+        assertFalse(login.login(new LoginRequest("thanh@gmail.com", "Pass123@")).isSuccess());
         }
-        @Override
-        public User save(User user) {
-            if (user == null) return null;
-            user.setId(idGenerator.getAndIncrement());
-            if (user.getUsername() != null) usersByUsername.put(user.getUsername().trim().toLowerCase(), user);
-            if (user.getPhoneNumber() != null) usersByPhone.put(user.getPhoneNumber().trim(), user);
-            if (user.getEmail() != null) usersByEmail.put(user.getEmail().trim().toLowerCase(), user);
-            return user;
+    static class TestClock extends Clock {
+        Instant now = Instant.parse("2026-09-13T00:00:00Z");
+        void advance(long seconds) {
+            now = now.plusSeconds(seconds);
         }
-        @Override
-        public Optional<User> findByPhoneNumber(String phoneNumber) {
-            if (phoneNumber == null) return Optional.empty();
-            return Optional.ofNullable(usersByPhone.get(phoneNumber.trim()));
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+        public Instant instant() {
+            return now;
         }
     }
 }
