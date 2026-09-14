@@ -69,7 +69,7 @@ public class UserLoginServiceTest {
         LoginRequest request = new LoginRequest("", "pass123");
         LoginResponse response = loginService.login(request);
         assertFalse(response.isSuccess());
-        assertEquals("Vui lòng nhập số điện thoại và mật khẩu", response.getMessage());
+        assertEquals("Vui lòng nhập email hoặc số điện thoại và mật khẩu", response.getMessage());
     }
 
     @Test
@@ -77,7 +77,7 @@ public class UserLoginServiceTest {
         LoginRequest request = new LoginRequest("0901234567", "");
         LoginResponse response = loginService.login(request);
         assertFalse(response.isSuccess());
-        assertEquals("Vui lòng nhập số điện thoại và mật khẩu", response.getMessage());
+        assertEquals("Vui lòng nhập email hoặc số điện thoại và mật khẩu", response.getMessage());
     }
 
     private static class TestUserRepository implements IUserRepository {
@@ -96,8 +96,18 @@ public class UserLoginServiceTest {
         }
 
         @Override
+        public Optional<User> findByEmail(String email) {
+            return usersByPhone.values().stream().filter(u -> email != null && email.equalsIgnoreCase(u.getEmail())).findFirst();
+        }
+        @Override
+        public boolean existsByEmail(String email) {
+            return findByEmail(email).isPresent();
+        }
+        @Override
         public User save(User user) {
-            if (user == null) return null;
+            if (user == null) {
+                return null;
+            }
             user.setId(idGenerator.getAndIncrement());
             if (user.getUsername() != null) usersByUsername.put(user.getUsername().trim().toLowerCase(), user);
             if (user.getPhoneNumber() != null) usersByPhone.put(user.getPhoneNumber().trim(), user);
@@ -106,7 +116,9 @@ public class UserLoginServiceTest {
 
         @Override
         public Optional<User> findByPhoneNumber(String phoneNumber) {
-            if (phoneNumber == null) return Optional.empty();
+            if (phoneNumber == null) {
+                return Optional.empty();
+            }
             return Optional.ofNullable(usersByPhone.get(phoneNumber.trim()));
         }
 
