@@ -217,6 +217,25 @@ class MessageRouterTest {
         assertEquals("105", error.messageId);
     }
 
+    @Test
+    void shouldRejectMessageWhenSenderIsNotMemberOfConvId() throws Exception {
+        convRegistry.join("GENERAL", bob);
+
+        ProtocolMessage msg = new ProtocolMessage(MessageType.CHAT);
+        msg.messageId = "106";
+        msg.sender = "alice";
+        msg.convId = "GENERAL";
+        msg.content = "Xin chao";
+
+        router.handleChatMessage(alice, msg);
+
+        ProtocolMessage error = readMessage(aliceReader);
+
+        assertEquals(MessageType.ERROR, error.type);
+        assertEquals("NOT_A_MEMBER", error.errorCode);
+        assertEquals("106", error.messageId);
+    }
+
     private ProtocolMessage readMessage(BufferedReader reader) throws Exception {
         String json = reader.readLine();
         assertNotNull(json, "Expected a message from the server");

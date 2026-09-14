@@ -4,6 +4,7 @@ import vn.edu.ut.udm08.server.session.ClientSession;
 import vn.edu.ut.udm08.server.session.OnlineUserRegistry;
 import vn.edu.ut.udm08.shared.model.MessageType;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
+import vn.edu.ut.udm08.shared.protocol.ConvId;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -60,6 +61,13 @@ public class MessageRouter implements IMessageRouter {
             if (msg.content.length() > 5000) {
                 sendErrorMessage(senderSession, msg.messageId, "CONTENT_TOO_LONG", "Noi dung tin nhan qua dai (toi da 5000 ky tu)");
                 return;
+            }
+
+            if (convId != null && !convId.isBlank() && conversationRegistry != null) {
+                if (!ConvId.isDm(convId) && !conversationRegistry.isMember(convId, senderSession)) {
+                    sendErrorMessage(senderSession, msg.messageId, "NOT_A_MEMBER", "Khong co quyen gui tin vao hoi thoai nay");
+                    return;
+                }
             }
 
             // 5. Tim ClientSession cua nguoi nhan trong OnlineUserRegistry
