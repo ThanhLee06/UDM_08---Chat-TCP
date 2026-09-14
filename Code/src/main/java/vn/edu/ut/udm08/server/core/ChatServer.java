@@ -5,6 +5,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import vn.edu.ut.udm08.server.conversation.ConversationRegistry;
+import vn.edu.ut.udm08.server.conversation.IConversationRegistry;
 import vn.edu.ut.udm08.server.routing.MessageRouter;
 import vn.edu.ut.udm08.server.session.ClientSession;
 import vn.edu.ut.udm08.server.session.LoginHandler;
@@ -17,6 +19,7 @@ public class ChatServer {
     private final int configuredPort;
 
     private final OnlineUserRegistry registry;
+    private final ConversationRegistry conversationRegistry;
     private final LoginHandler loginHandler;
     private final MessageRouter messageRouter;
     private final ExecutorService clientExecutor;
@@ -32,8 +35,9 @@ public class ChatServer {
 
         this.configuredPort = config.getPort();
         this.registry = new OnlineUserRegistry();
+        this.conversationRegistry = new ConversationRegistry();
         this.loginHandler = new LoginHandler(registry);
-        this.messageRouter = new MessageRouter(registry);
+        this.messageRouter = new MessageRouter(registry, conversationRegistry);
         this.clientExecutor = Executors.newCachedThreadPool();
         this.boundPort = configuredPort;
     }
@@ -102,7 +106,10 @@ public class ChatServer {
         }
 
         session.setMessageHandler(message -> dispatch(session, message));
-        session.setDisconnectHandler(() -> loginHandler.handleDisconnect(session));
+        session.setDisconnectHandler(() -> {
+            loginHandler.handleDisconnect(session);
+            conversationRegistry.removeSessionFromAll(session);
+        });
 
         clientExecutor.submit(session);
     }
@@ -115,7 +122,10 @@ public class ChatServer {
         switch (message.type) {
             case HELLO -> loginHandler.handleHello(session, message);
             case CHAT -> messageRouter.handleChatMessage(session, message);
-            case DISCONNECT -> loginHandler.handleDisconnect(session);
+            case DISCONNECT -> {
+                loginHandler.handleDisconnect(session);
+                conversationRegistry.removeSessionFromAll(session);
+            }
             default -> {
             }
         }
@@ -140,6 +150,10 @@ public class ChatServer {
 
     public OnlineUserRegistry getRegistry() {
         return registry;
+    }
+
+    public IConversationRegistry getConversationRegistry() {
+        return conversationRegistry;
     }
 
     private void closeSocket(Socket socket) {

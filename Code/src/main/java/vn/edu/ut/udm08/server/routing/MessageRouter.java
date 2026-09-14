@@ -1,22 +1,35 @@
 package vn.edu.ut.udm08.server.routing;
-
+import vn.edu.ut.udm08.server.conversation.IConversationRegistry;
 import vn.edu.ut.udm08.server.session.ClientSession;
 import vn.edu.ut.udm08.server.session.OnlineUserRegistry;
 import vn.edu.ut.udm08.shared.model.MessageType;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
+import java.util.ArrayList;
+import java.util.List;
 
 // Lop dinh tuyen tin nhan giua Client va Server
-public class MessageRouter {
+public class MessageRouter implements IMessageRouter {
     private final OnlineUserRegistry registry;
+    private final IConversationRegistry conversationRegistry;
 
     public MessageRouter(OnlineUserRegistry registry) {
-        if(registry == null){
+        if (registry == null) {
             throw new IllegalArgumentException("Registry must not be null!");
         }
         this.registry = registry;
+        this.conversationRegistry = null;
+    }
+    public MessageRouter(IConversationRegistry conversationRegistry) {
+        this.registry = null;
+        this.conversationRegistry = conversationRegistry;
+    }
+    public MessageRouter(OnlineUserRegistry registry, IConversationRegistry conversationRegistry) {
+        this.registry = registry;
+        this.conversationRegistry = conversationRegistry;
     }
 
     // Xu ly dinh tuyen tin nhan CHAT rieng tu nguoi gui den nguoi nhan
+    @Override
     public void handleChatMessage(ClientSession senderSession, ProtocolMessage msg) {
         try {
             // 1. Kiem tra phien lam viec nguoi gui
@@ -26,14 +39,16 @@ public class MessageRouter {
             }
 
             // 2. Kiem tra nguoi gui (sender) co khop voi session hien tai hay khong
-            if (msg.sender == null || !msg.sender.equals(senderSession.getUsername())) {
-                sendErrorMessage(senderSession, msg.messageId, "INVALID_SENDER", "Nguoi gui khong khop voi phien lam viec");
+            if (msg == null || msg.sender == null || !msg.sender.equals(senderSession.getUsername())) {
+                sendErrorMessage(senderSession, msg != null ? msg.messageId : null, "INVALID_SENDER", "Nguoi gui khong khop voi phien lam viec");
                 return;
             }
 
             // 3. Kiem tra nguoi nhan (target) co bi rong khong
-            if (msg.target == null || msg.target.trim().isEmpty()) {
-                sendErrorMessage(senderSession, msg.messageId, "INVALID_TARGET", "Nguoi nhan khong duoc de trong");
+            String convId = msg.convId;
+            String targetUser = msg.target;
+            if ((convId == null || convId.isBlank()) && (targetUser == null || targetUser.isBlank())) {
+                sendErrorMessage(senderSession, msg.messageId, "INVALID_TARGET", "Hoi thoai (convId) hoac nguoi nhan khong duoc de trong");
                 return;
             }
 
@@ -48,18 +63,32 @@ public class MessageRouter {
             }
 
             // 5. Tim ClientSession cua nguoi nhan trong OnlineUserRegistry
-            ClientSession targetSession = registry.find(msg.target);
-            if (targetSession == null || !targetSession.isConnected()) {
+            List<ClientSession> targets = findTargetSessions(convId, targetUser);
+            List<ClientSession> recipients = new ArrayList<>();
+            for (ClientSession session : targets) {
+                if (session != null && session.isConnected() && !session.equals(senderSession)) {
+                    recipients.add(session);
+                }
+            }
+
+            if (recipients.isEmpty()) {
                 // Nguoi nhan khong ton tai hoac da offline
-                sendErrorMessage(senderSession, msg.messageId, "USER_OFFLINE", "Nguoi nhan khong ton tai hoac da offline");
+                sendErrorMessage(senderSession, msg.messageId, "USER_OFFLINE", "Nguoi nhan khong ton tai hoac da offline trong hoi thoai");
                 return;
             }
 
             // 6. Chuyen tiep nguyen ven goi tin CHAT sang nguoi nhan
-            try {
-                targetSession.sendMessage(msg);
-            } catch (Exception e) {
-                sendErrorMessage(senderSession, msg.messageId, "DELIVERY_FAILED", "Khong the gui tin nhan toi nguoi nhan");
+            boolean anyDelivered = false;
+            for (ClientSession recipient : recipients) {
+                try {
+                    recipient.sendMessage(msg);
+                    anyDelivered = true;
+                } catch (Exception ignored) {
+                }
+            }
+
+            if (!anyDelivered) {
+                sendErrorMessage(senderSession, msg.messageId, "DELIVERY_FAILED", "Khong the gui tin nhan toi hoi thoai");
                 return;
             }
 
@@ -68,6 +97,7 @@ public class MessageRouter {
             okMsg.messageId = msg.messageId;
             okMsg.sender = "SERVER";
             okMsg.target = msg.sender;
+            okMsg.convId = msg.convId;
             okMsg.timestamp = System.currentTimeMillis();
 
             senderSession.sendMessage(okMsg);
@@ -78,7 +108,28 @@ public class MessageRouter {
             sendErrorMessage(senderSession, msg != null ? msg.messageId : null, "ERROR", "Loi he thong dinh tuyen");
         }
     }
-
+    private List<ClientSession> findTargetSessions(String convId, String targetUser) {
+        List<ClientSession> result = new ArrayList<>();
+        if (convId != null && !convId.isBlank() && conversationRegistry != null) {
+            List<ClientSession> convSessions = conversationRegistry.getSessions(convId);
+            if (convSessions != null && !convSessions.isEmpty()) {
+                result.addAll(convSessions);
+            }
+        }
+        if (result.isEmpty() && targetUser != null && !targetUser.isBlank() && registry != null) {
+            ClientSession userSession = registry.find(targetUser);
+            if (userSession != null && userSession.isConnected()) {
+                result.add(userSession);
+            }
+        }
+        if (result.isEmpty() && convId != null && !convId.isBlank() && registry != null) {
+            ClientSession userSession = registry.find(convId);
+            if (userSession != null && userSession.isConnected()) {
+                result.add(userSession);
+            }
+        }
+        return result;
+    }
     // Ham phu ho tro gui goi tin ERROR ve cho client
     private void sendErrorMessage(ClientSession session, String messageId, String errorCode, String errorMessage) {
         if (session == null) {
