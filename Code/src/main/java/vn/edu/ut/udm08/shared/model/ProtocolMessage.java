@@ -14,7 +14,12 @@ public class ProtocolMessage {
     public String avatarId;
     public Long timestamp;
     public List<UserProfile> users;
+    public List<ProtocolMessage> messages;
     public String convId;
+    public String cursor;
+    public Integer limit;
+    public String nextCursor;
+    public Boolean hasMore;
     public String replyTo;
     public String fwdFrom;
     public String kind;
