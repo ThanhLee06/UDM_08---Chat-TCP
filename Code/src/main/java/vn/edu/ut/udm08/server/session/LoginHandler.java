@@ -1,16 +1,23 @@
 package vn.edu.ut.udm08.server.session;
 import java.io.IOException;
 import java.util.List;
+import vn.edu.ut.udm08.server.conversation.IConversationRegistry;
 import vn.edu.ut.udm08.shared.model.MessageType;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
 import vn.edu.ut.udm08.shared.model.UserProfile;
+import vn.edu.ut.udm08.shared.protocol.ConvId;
 public class LoginHandler {
     private OnlineUserRegistry registry;
+    private IConversationRegistry conversationRegistry;
     public LoginHandler(OnlineUserRegistry registry) {
+        this(registry, null);
+    }
+    public LoginHandler(OnlineUserRegistry registry, IConversationRegistry conversationRegistry) {
         if (registry == null) {
             throw new IllegalArgumentException("Registry != null");
         }
         this.registry = registry;
+        this.conversationRegistry = conversationRegistry;
     }
     public boolean handleLoginSuccess(ClientSession session, vn.edu.ut.udm08.shared.model.User user) {
         if (session == null || user == null || user.getId() == null) {
@@ -37,6 +44,9 @@ public class LoginHandler {
         if (!registered) {
             sendError(session, "USERNAME_TAKEN", "Tai khoan da dang nhap tren thiet bi khac");
             return false;
+        }
+        if (conversationRegistry != null) {
+            conversationRegistry.join(ConvId.PUBLIC_ROOM_ID, session);
         }
         broadcastUserList();
         return true;
@@ -79,12 +89,18 @@ public class LoginHandler {
             registry.remove(session);
             return false;
         }
+        if (conversationRegistry != null) {
+            conversationRegistry.join(ConvId.PUBLIC_ROOM_ID, session);
+        }
         broadcastUserList();
         return true;
     }
     public void handleDisconnect(ClientSession session) {
         if (session == null) {
             return;
+        }
+        if (conversationRegistry != null) {
+            conversationRegistry.removeSessionFromAll(session);
         }
         boolean removed = registry.remove(session);
         session.close();
