@@ -6,20 +6,10 @@
 <BorderPane xmlns="http://javafx.com/javafx"
             xmlns:fx="http://javafx.com/fxml"
             fx:controller="vn.edu.ut.udm08.client.controller.ChatController"
-            prefWidth="960" prefHeight="620" styleClass="root-pane" stylesheets="@../css/chat.css">
+            prefWidth="960" prefHeight="620" styleClass="root-pane" stylesheets="@../css/base.css,@../css/sidebar.css,@../css/chat.css">
 
     <left>
-        <VBox styleClass="user-list-pane" prefWidth="290">
-            <VBox styleClass="user-list-header">
-                <HBox alignment="CENTER_LEFT" spacing="8">
-                    <Label text="💬" styleClass="app-logo"/>
-                    <Label text="Chat TCP" styleClass="app-title"/>
-                </HBox>
-                <TextField promptText="Tìm kiếm" styleClass="search-field"/>
-            </VBox>
-            <Label text="ĐANG ONLINE" styleClass="pane-title"/>
-            <ListView fx:id="onlineUsersList" styleClass="user-list" VBox.vgrow="ALWAYS"/>
-        </VBox>
+        <fx:include fx:id="sidebar" source="sidebar.fxml"/>
     </left>
 
     <center>

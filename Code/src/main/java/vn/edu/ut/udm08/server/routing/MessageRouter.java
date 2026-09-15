@@ -91,7 +91,7 @@ public class MessageRouter implements IMessageRouter {
             }
 
             // 5. Tim ClientSession cua nguoi nhan trong OnlineUserRegistry
-            List<ClientSession> targets = findTargetSessions(convId, targetUser);
+            List<ClientSession> targets = findTargetSessions(senderSession, convId, targetUser);
             List<ClientSession> recipients = new ArrayList<>();
             for (ClientSession session : targets) {
                 if (session != null && session.isConnected() && !session.equals(senderSession)) {
@@ -136,8 +136,20 @@ public class MessageRouter implements IMessageRouter {
             sendErrorMessage(senderSession, msg != null ? msg.messageId : null, "ERROR", "Loi he thong dinh tuyen");
         }
     }
-    private List<ClientSession> findTargetSessions(String convId, String targetUser) {
+    private List<ClientSession> findTargetSessions(ClientSession senderSession, String convId, String targetUser) {
         List<ClientSession> result = new ArrayList<>();
+        if (ConvId.isPublicRoom(convId) || "PUBLIC".equalsIgnoreCase(targetUser)) {
+            if (conversationRegistry != null) {
+                List<ClientSession> convSessions = conversationRegistry.getSessions(ConvId.PUBLIC_ROOM_ID);
+                if (convSessions != null && !convSessions.isEmpty()) {
+                    result.addAll(convSessions);
+                }
+            }
+            if (result.isEmpty() && registry != null) {
+                result.addAll(registry.getSessions());
+            }
+            return result;
+        }
         if (convId != null && !convId.isBlank() && conversationRegistry != null) {
             List<ClientSession> convSessions = conversationRegistry.getSessions(convId);
             if (convSessions != null && !convSessions.isEmpty()) {
@@ -148,6 +160,15 @@ public class MessageRouter implements IMessageRouter {
             ClientSession userSession = registry.find(targetUser);
             if (userSession != null && userSession.isConnected()) {
                 result.add(userSession);
+            }
+        }
+        if (result.isEmpty() && ConvId.isDm(convId) && senderSession != null && senderSession.getUsername() != null && registry != null) {
+            String other = ConvId.getOtherUser(convId, senderSession.getUsername());
+            if (other != null) {
+                ClientSession userSession = registry.find(other);
+                if (userSession != null && userSession.isConnected()) {
+                    result.add(userSession);
+                }
             }
         }
         if (result.isEmpty() && convId != null && !convId.isBlank() && registry != null) {
