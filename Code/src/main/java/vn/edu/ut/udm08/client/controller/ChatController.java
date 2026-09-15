@@ -1,4 +1,7 @@
 package vn.edu.ut.udm08.client.controller;
+import vn.edu.ut.udm08.client.ui.sidebar.SidebarController;
+import vn.edu.ut.udm08.client.ui.sidebar.IConversationSource;
+import vn.edu.ut.udm08.shared.protocol.ConvId;
 
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -29,7 +32,7 @@ import java.util.UUID;
 
 public class ChatController {
 
-    @FXML private ListView<UserProfile> onlineUsersList;
+    @FXML private SidebarController sidebarController;
     @FXML private Label chatPartnerName;
     @FXML private Label chatPartnerInitial;
     @FXML private StackPane chatPartnerAvatar;
@@ -63,19 +66,20 @@ public class ChatController {
         void onSendMessage(ProtocolMessage message);
     }
 
+    private String selectedConvId;
+
     @FXML
     public void initialize() {
-        onlineUsersList.setItems(onlineUsers);
-        onlineUsersList.setCellFactory(list -> new UserListCell());
-
-        onlineUsersList.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
-            if (newVal != null) {
-                selectUser(newVal);
+        sidebarController.setSelectionListener(conversation -> {
+            String other = ConvId.getOtherUser(conversation.getId(), currentUsername);
+            if (other != null) {
+                this.selectedConvId = conversation.getId();
+                selectUser(new UserProfile(other, conversation.getAvatar()));
+                chatPartnerName.setText(conversation.getName());
+            } else {
+                selectPublicRoom();
             }
         });
-
-        sendButton.setDisable(true);
-        messageInput.setDisable(true);
 
         messageInput.setOnAction(e -> handleSend());
         messageInput.setOnKeyPressed(e -> {
@@ -84,13 +88,43 @@ public class ChatController {
             }
         });
 
+        showEmptyState();
+    }
+
+    public void showEmptyState() {
+        this.selectedUser = null;
+        this.selectedConvId = null;
+        sendButton.setDisable(true);
+        messageInput.setDisable(true);
+        messageContainer.getChildren().clear();
+        messageInput.clear();
         emptyStatePane.setVisible(true);
+    }
+
+    public void selectPublicRoom() {
+        this.selectedUser = null;
+        this.selectedConvId = ConvId.PUBLIC_ROOM_ID;
+        chatPartnerName.setText("Phòng chung");
+        chatPartnerInitial.setText("#");
+        chatPartnerAvatar.setStyle("-fx-background-color: #0068ff;");
+        messageContainer.getChildren().clear();
+        messageInput.clear();
+        messageInput.setDisable(false);
+        sendButton.setDisable(false);
+        emptyStatePane.setVisible(false);
     }
 
     public void setCurrentUsername(String username) {
         this.currentUsername = username;
     }
 
+    public void loadSidebar(IConversationSource source) {
+        sidebarController.configure(source, currentUsername);
+        showEmptyState();
+    }
+    public void disposeSidebar() {
+        sidebarController.dispose();
+    }
     public void setSendListener(MessageSendListener listener) {
         this.sendListener = listener;
     }
@@ -105,6 +139,9 @@ public class ChatController {
                     .filter(u -> u != null && u.username != null && !u.username.equalsIgnoreCase(currentUsername))
                     .toList();
             onlineUsers.setAll(otherUsers);
+            if (sidebarController != null) {
+                sidebarController.updateOnlineUsers(users);
+            }
         });
     }
 
@@ -115,7 +152,27 @@ public class ChatController {
             }
 
             boolean isMine = message.sender != null && message.sender.equals(currentUsername);
-            boolean belongsToCurrentChat = selectedUser != null && message.sender != null && (message.sender.equals(selectedUser.username) || isMine);
+            String convId = message.convId;
+            if (convId == null || convId.isBlank()) {
+                if (message.target != null && message.target.equalsIgnoreCase("PUBLIC")) {
+                    convId = ConvId.PUBLIC_ROOM_ID;
+                } else if (message.sender != null) {
+                    convId = ConvId.forDm(currentUsername, message.sender);
+                }
+            }
+            if (convId != null && !ConvId.isPublicRoom(convId) && sidebarController != null) {
+                String other = isMine ? message.target : message.sender;
+                if (other != null && !other.isBlank()) {
+                    sidebarController.ensureConversation(convId, other, "avatar1");
+                }
+            }
+
+            boolean belongsToCurrentChat = false;
+            if (ConvId.isPublicRoom(selectedConvId)) {
+                belongsToCurrentChat = ConvId.isPublicRoom(convId) || "PUBLIC".equalsIgnoreCase(message.target);
+            } else if (selectedConvId != null && !selectedConvId.isBlank()) {
+                belongsToCurrentChat = selectedConvId.equalsIgnoreCase(convId);
+            }
 
             if (belongsToCurrentChat) {
                 addMessageBubble(message, isMine);
@@ -125,7 +182,10 @@ public class ChatController {
 
     private void selectUser(UserProfile user) {
         this.selectedUser = user;
-         cancelReply();
+        if (currentUsername != null && user != null && user.username != null) {
+            this.selectedConvId = ConvId.forDm(currentUsername, user.username);
+        }
+        cancelReply();
 
         chatPartnerName.setText(user.username);
         chatPartnerInitial.setText(user.username.substring(0, 1).toUpperCase());
@@ -142,12 +202,27 @@ public class ChatController {
     @FXML
     private void handleSend() {
         String content = messageInput.getText().trim();
-        if (content.isEmpty() || selectedUser == null) return; 
+        if (content.isEmpty() || (selectedUser == null && (selectedConvId == null || selectedConvId.isBlank()))) return; 
 
         ProtocolMessage message = new ProtocolMessage(MessageType.CHAT);
         message.messageId = UUID.randomUUID().toString();   
         message.sender = currentUsername;                    
-        message.target = selectedUser.username;             
+        if (selectedConvId != null && !selectedConvId.isBlank()) {
+            message.convId = selectedConvId;
+            if (ConvId.isPublicRoom(selectedConvId)) {
+                message.target = "PUBLIC";
+            } else if (ConvId.isDm(selectedConvId)) {
+                String other = ConvId.getOtherUser(selectedConvId, currentUsername);
+                if (other != null) {
+                    message.target = other;
+                } else if (selectedUser != null) {
+                    message.target = selectedUser.username;
+                }
+            }
+        } else if (selectedUser != null) {
+            message.convId = ConvId.forDm(currentUsername, selectedUser.username);
+            message.target = selectedUser.username;
+        }
         message.content = content;                           
         message.timestamp = System.currentTimeMillis(); 
         if (replyingToMessage != null) {
@@ -182,7 +257,8 @@ static {
     });
 }
 
-private void handleEmojiButtonClick() {
+    @FXML
+    private void handleEmojiButtonClick() {
     Popup popup = new Popup();
     popup.setAutoHide(true);
 
@@ -272,6 +348,8 @@ private void insertEmojiAtCaret(String emoji) {
     });
             bubble.getChildren().add(quoteBlock);
         }
+
+        bubble.getChildren().add(contentLabel);
         
         ContextMenu contextMenu = new ContextMenu();
         MenuItem replyItem = new MenuItem("Trả lời");
