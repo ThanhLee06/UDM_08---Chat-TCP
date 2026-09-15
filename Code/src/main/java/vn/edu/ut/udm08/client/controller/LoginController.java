@@ -1,4 +1,6 @@
 package vn.edu.ut.udm08.client.controller;
+import vn.edu.ut.udm08.client.ui.sidebar.ClientConversationSource;
+import javafx.stage.WindowEvent;
 
 import java.io.File;
 import java.io.IOException;
@@ -604,10 +606,15 @@ public class LoginController {
             Scene chatScene = new Scene(loader.load());
             ChatController chatController = loader.getController();
             chatController.setCurrentUsername(username);
+            chatController.loadSidebar(new ClientConversationSource(client));
             chatController.setSendListener(message -> {
                 try {
                     conversationCache.addRealtimeMessage(message);
-                    client.sendMessage(message.target, message.content);
+                    if (message.convId != null && !message.convId.isBlank()) {
+                        client.sendMessage(message);
+                    } else {
+                        client.sendMessage(message.target, message.content);
+                    }
                 } catch (Exception ignored) {
                 }
             });
@@ -616,7 +623,8 @@ public class LoginController {
                 chatController.updateOnlineUsers(pendingUserList);
             }
             Stage stage = (Stage) loginBtn.getScene().getWindow();
-            stage.setTitle("Chat TCP - " + username);
+            stage.setTitle("UDM08 Chat - " + username);
+            stage.addEventHandler(WindowEvent.WINDOW_HIDDEN, event -> chatController.disposeSidebar());
             stage.setScene(chatScene);
             stage.setResizable(true);
         } catch (Exception e) {
