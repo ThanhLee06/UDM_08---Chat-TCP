@@ -9,9 +9,12 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
+import vn.edu.ut.udm08.server.conversation.ConversationRegistry;
+import vn.edu.ut.udm08.server.conversation.IConversationRegistry;
 import vn.edu.ut.udm08.shared.model.MessageType;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
 import vn.edu.ut.udm08.shared.model.UserProfile;
+import vn.edu.ut.udm08.shared.protocol.ConvId;
 import vn.edu.ut.udm08.shared.protocol.JsonUtil;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -103,6 +106,20 @@ public class LoginHandlerTest {
             assertTrue(containsUser(listAfterDisconnect, "An"));
             assertNull(registry.find("Bình"));
             assertFalse(second.session.isConnected());
+        }
+    }
+    @Test
+    void autoJoinsPublicRoomOnLoginAndLeavesOnDisconnect() throws Exception {
+        OnlineUserRegistry registry = new OnlineUserRegistry();
+        IConversationRegistry convRegistry = new ConversationRegistry();
+        LoginHandler handler = new LoginHandler(registry, convRegistry);
+        try (TestConnection connection = new TestConnection()) {
+            boolean loggedIn = handler.handleHello(connection.session, hello("user1", "01"));
+            assertTrue(loggedIn);
+            assertEquals(1, convRegistry.getSessions(ConvId.PUBLIC_ROOM_ID).size());
+            assertEquals("user1", convRegistry.getSessions(ConvId.PUBLIC_ROOM_ID).get(0).getUsername());
+            handler.handleDisconnect(connection.session);
+            assertTrue(convRegistry.getSessions(ConvId.PUBLIC_ROOM_ID).isEmpty());
         }
     }
     private ProtocolMessage hello(String username, String avatarId) {
