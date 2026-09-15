@@ -1,0 +1,33 @@
+.root-pane {
+  -fx-background-color: #ebecf0;
+  -fx-font-family: "Segoe UI", "Arial";
+}
+.avatar-circle {
+  -fx-background-radius: 50%;
+  -fx-min-width: 42;
+  -fx-min-height: 42;
+  -fx-max-width: 42;
+  -fx-max-height: 42;
+  -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.12), 4, 0, 0, 1);
+}
+.avatar-text {
+  -fx-text-fill: white;
+  -fx-font-weight: bold;
+  -fx-font-size: 16px;
+}
+.avatar-circle-small {
+  -fx-background-radius: 50%;
+  -fx-min-width: 34;
+  -fx-min-height: 34;
+  -fx-max-width: 34;
+  -fx-max-height: 34;
+}
+.avatar-text-small {
+  -fx-text-fill: white;
+  -fx-font-weight: bold;
+  -fx-font-size: 13px;
+}
+.cell-name {
+  -fx-font-size: 14px;
+  -fx-text-fill: #050505;
+}
