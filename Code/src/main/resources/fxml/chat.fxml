@@ -46,7 +46,7 @@
                 <VBox styleClass="input-bar">
                     <HBox styleClass="toolbar-row" spacing="16" alignment="CENTER_LEFT">
                         <padding><Insets top="8" right="16" bottom="4" left="16"/></padding>
-                        <Label text="😊" styleClass="toolbar-icon"/>
+                       <Label fx:id="emojiIcon" text="😊" styleClass="toolbar-icon" onMouseClicked="#handleEmojiButtonClick"/>
                         <Label text="🖼" styleClass="toolbar-icon"/>
                         <Label text="📎" styleClass="toolbar-icon"/>
                         <Label text="✂" styleClass="toolbar-icon"/>

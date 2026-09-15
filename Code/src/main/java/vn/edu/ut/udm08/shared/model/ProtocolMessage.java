@@ -29,6 +29,11 @@ public class ProtocolMessage {
     public String kind;
     public String errorCode;
     public String errorMessage;
+    public String replyToMessageId;
+    public String replyToSender;
+    public String replyToContent;
+    public String forwardedFromSender;
+    public boolean isForwarded;
     public MessageSendStatus sendStatus;
 
     public ProtocolMessage() {}
@@ -37,6 +42,3 @@ public class ProtocolMessage {
         this.type = type;
     }
 }
-
-
-
