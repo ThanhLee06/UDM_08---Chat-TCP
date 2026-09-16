@@ -126,10 +126,13 @@ public class ClientSession implements Runnable {
 
         this.username = username;
         this.avatarId = avatarId;
-
         return true;
     }
-
+    public void unauthenticate() {
+        this.user = null;
+        this.username = null;
+        this.avatarId = null;
+    }
     public ProtocolMessage readMessage() throws IOException {
         if (!isConnected()) {
             throw new IOException("Socket mat ket noi");

@@ -121,6 +121,7 @@ public class ChatServer {
         switch (message.type) {
             case HELLO -> loginHandler.handleHello(session, message);
             case CHAT -> messageRouter.handleChatMessage(session, message);
+            case LOGOUT -> loginHandler.handleLogout(session, message);
             case DISCONNECT -> {
                 loginHandler.handleDisconnect(session);
             }

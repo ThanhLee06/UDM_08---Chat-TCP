@@ -108,6 +108,34 @@ public class LoginHandler {
             broadcastUserList();
         }
     }
+    public boolean handleLogout(ClientSession session, ProtocolMessage message) {
+        if (session == null) {
+            return false;
+        }
+        boolean wasAuthenticated = session.isAuthenticated();
+        String username = session.getUsername();
+        ProtocolMessage response = new ProtocolMessage(MessageType.LOGOUT_OK);
+        response.sender = "SERVER";
+        response.target = username != null ? username : "ANONYMOUS";
+        response.timestamp = System.currentTimeMillis();
+        try {
+            session.sendMessage(response);
+        } catch (IOException ignored) {
+        }
+        if (conversationRegistry != null) {
+            conversationRegistry.removeSessionFromAll(session);
+        }
+        boolean removed = false;
+        if (wasAuthenticated) {
+            removed = registry.remove(session);
+        }
+        session.unauthenticate();
+        session.close();
+        if (removed) {
+            broadcastUserList();
+        }
+        return true;
+    }
     public void broadcastUserList() {
         ProtocolMessage message = new ProtocolMessage(MessageType.USER_LIST);
         message.sender = "SERVER";
