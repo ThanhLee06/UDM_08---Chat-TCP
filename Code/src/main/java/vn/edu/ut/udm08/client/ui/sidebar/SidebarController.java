@@ -17,6 +17,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.ProgressIndicator;
+import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.VBox;
@@ -30,6 +31,7 @@ public final class SidebarController {
     @FXML private ToggleButton roomsTab;
     @FXML private ToggleGroup conversationTabs;
     @FXML private ListView<SidebarConversation> conversationList;
+    @FXML private TextField searchField;
     @FXML private ProgressIndicator loadingIndicator;
     @FXML private VBox statusPane;
     @FXML private Label statusTitle;
@@ -58,7 +60,7 @@ public final class SidebarController {
     @FXML
     private void initialize() {
         conversationList.setItems(filtered);
-        conversationList.setCellFactory(list -> new ConversationCell());
+        conversationList.setCellFactory(list -> new ConversationCell(this));
         conversationList.setPlaceholder(new Label(""));
 
         if (statusPane != null) {
@@ -72,6 +74,10 @@ public final class SidebarController {
         if (retryButton != null) {
             retryButton.managedProperty().bind(retryButton.visibleProperty());
             retryButton.setVisible(false);
+        }
+
+        if (searchField != null) {
+            searchField.textProperty().addListener((obs, oldVal, newVal) -> applyFilter());
         }
 
         conversationTabs.selectedToggleProperty().addListener((observable, oldValue, value) -> {
@@ -99,6 +105,15 @@ public final class SidebarController {
         });
 
         rebuildConversations();
+    }
+
+    private void applyFilter() {
+        String query = (searchField != null && searchField.getText() != null) ? searchField.getText().trim().toLowerCase() : "";
+        filtered.setPredicate(item -> {
+            if (query.isEmpty()) return true;
+            return (item.getName() != null && item.getName().toLowerCase().contains(query)) ||
+                   (item.getLastMessage() != null && item.getLastMessage().toLowerCase().contains(query));
+        });
     }
 
     public void configure(IConversationSource source, String username) {
@@ -189,6 +204,9 @@ public final class SidebarController {
             list.removeIf(item -> item.getId().equals(ConvId.PUBLIC_ROOM_ID));
 
             list.sort((a, b) -> {
+                if (a.isPinned() != b.isPinned()) {
+                    return a.isPinned() ? -1 : 1;
+                }
                 Long tA = a.getLastActivity();
                 Long tB = b.getLastActivity();
                 if (tA == null && tB == null) return 0;
@@ -225,11 +243,47 @@ public final class SidebarController {
         }
 
         updatingSelection = true;
-        filtered.setPredicate(item -> true);
         conversations.setAll(resultMap.values());
+        applyFilter();
         restoreSelection();
         updatingSelection = false;
         renderState();
+    }
+
+    public void togglePin(String convId) {
+        if (convId == null || convId.isBlank()) return;
+        SidebarConversation existing = activeConversationsMap.get(convId);
+        if (existing != null) {
+            activeConversationsMap.put(convId, existing.withPinned(!existing.isPinned()));
+            rebuildConversations();
+        }
+    }
+
+    public void toggleMute(String convId) {
+        if (convId == null || convId.isBlank()) return;
+        SidebarConversation existing = activeConversationsMap.get(convId);
+        if (existing != null) {
+            activeConversationsMap.put(convId, existing.withMuted(!existing.isMuted()));
+            rebuildConversations();
+        }
+    }
+
+    public void markAsUnread(String convId) {
+        if (convId == null || convId.isBlank()) return;
+        SidebarConversation existing = activeConversationsMap.get(convId);
+        if (existing != null) {
+            activeConversationsMap.put(convId, existing.withUnreadCount(1));
+            rebuildConversations();
+        }
+    }
+
+    public void deleteConversation(String convId) {
+        if (convId == null || convId.isBlank()) return;
+        activeConversationsMap.remove(convId);
+        if (selectedId != null && selectedId.equals(convId)) {
+            selectedId = null;
+        }
+        rebuildConversations();
     }
 
     public void updateLastMessage(String convId, String snippet, long timestamp, boolean incrementUnread) {

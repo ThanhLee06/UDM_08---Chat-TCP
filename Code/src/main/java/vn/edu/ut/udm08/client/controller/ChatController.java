@@ -172,6 +172,39 @@ public class ChatController {
         });
     }
 
+    public static String formatMessagePreview(ProtocolMessage message, boolean isMine) {
+        if (message == null || message.content == null || message.content.isBlank()) {
+            return "";
+        }
+        String content = message.content.trim();
+        String prefix = isMine ? "Bạn: " : "";
+        String lower = content.toLowerCase();
+
+        if (message.isForwarded) {
+            return prefix + "[Chuyển tiếp] " + content;
+        }
+        if (content.startsWith("[IMAGE]") || lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".gif")) {
+            return prefix + "[Hình ảnh]";
+        }
+        if (content.startsWith("[VIDEO]") || lower.endsWith(".mp4") || lower.endsWith(".mkv")) {
+            return prefix + "[Video]";
+        }
+        if (content.startsWith("[FILE]")) {
+            String name = content.length() > 6 ? content.substring(6).trim() : "Tập tin";
+            return prefix + "[File] " + name;
+        }
+        if (content.startsWith("[STICKER]")) {
+            return prefix + "[Sticker]";
+        }
+        if (content.startsWith("[CALL]")) {
+            return "Cuộc gọi thoại";
+        }
+        if (content.startsWith("[SYSTEM]") || content.startsWith("[REVOKED]")) {
+            return "Tin nhắn đã được thu hồi";
+        }
+        return prefix + content;
+    }
+
     public void receiveMessage(ProtocolMessage message) {
         Platform.runLater(() -> {
             if (message == null) {
@@ -203,7 +236,7 @@ public class ChatController {
                     }
                 }
                 long ts = message.timestamp != 0 ? message.timestamp : System.currentTimeMillis();
-                String snippet = isMine ? ("Bạn: " + message.content) : message.content;
+                String snippet = formatMessagePreview(message, isMine);
                 boolean incrementUnread = !isMine && !belongsToCurrentChat;
                 sidebarController.updateLastMessage(convId, snippet, ts, incrementUnread);
             }
@@ -271,7 +304,7 @@ public class ChatController {
         }       
         addMessageBubble(message, true);
         if (sidebarController != null && message.convId != null) {
-            sidebarController.updateLastMessage(message.convId, "Bạn: " + message.content, message.timestamp, false);
+            sidebarController.updateLastMessage(message.convId, formatMessagePreview(message, true), message.timestamp, false);
         }
         messageInput.clear(); 
         cancelReply();

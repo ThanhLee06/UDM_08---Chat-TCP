@@ -11,8 +11,10 @@ public final class SidebarConversation {
     private final String lastMessage;
     private final Long lastActivity;
     private final int unreadCount;
+    private final boolean pinned;
+    private final boolean muted;
 
-    private SidebarConversation(String id, String name, String avatar, ConvType type, String lastMessage, Long lastActivity, int unreadCount) {
+    private SidebarConversation(String id, String name, String avatar, ConvType type, String lastMessage, Long lastActivity, int unreadCount, boolean pinned, boolean muted) {
         this.id = id;
         this.name = name;
         this.avatar = avatar;
@@ -20,6 +22,8 @@ public final class SidebarConversation {
         this.lastMessage = lastMessage;
         this.lastActivity = lastActivity;
         this.unreadCount = Math.max(0, unreadCount);
+        this.pinned = pinned;
+        this.muted = muted;
     }
 
     public static SidebarConversation from(ConversationSummary summary, String currentUser) {
@@ -42,7 +46,8 @@ public final class SidebarConversation {
         if (name == null || name.isBlank()) {
             name = "Cuộc trò chuyện";
         }
-        return new SidebarConversation(id, name.trim(), summary.avatar, info.getType(), summary.lastMessage, summary.lastActivity, 0);
+        boolean defaultPinned = id.equals(ConvId.PUBLIC_ROOM_ID);
+        return new SidebarConversation(id, name.trim(), summary.avatar, info.getType(), summary.lastMessage, summary.lastActivity, 0, defaultPinned, false);
     }
     public String getId() {
         return id;
@@ -68,17 +73,29 @@ public final class SidebarConversation {
     public boolean isUnread() {
         return unreadCount > 0;
     }
+    public boolean isPinned() {
+        return pinned;
+    }
+    public boolean isMuted() {
+        return muted;
+    }
     public String getLastActivityText() {
         return lastActivity != null ? String.valueOf(lastActivity) : "";
     }
     public SidebarConversation withLastMessage(String newLastMessage, Long newLastActivity) {
-        return new SidebarConversation(this.id, this.name, this.avatar, this.type, newLastMessage, newLastActivity, this.unreadCount);
+        return new SidebarConversation(this.id, this.name, this.avatar, this.type, newLastMessage, newLastActivity, this.unreadCount, this.pinned, this.muted);
     }
     public SidebarConversation withLastMessage(String newLastMessage, Long newLastActivity, int newUnreadCount) {
-        return new SidebarConversation(this.id, this.name, this.avatar, this.type, newLastMessage, newLastActivity, newUnreadCount);
+        return new SidebarConversation(this.id, this.name, this.avatar, this.type, newLastMessage, newLastActivity, newUnreadCount, this.pinned, this.muted);
     }
     public SidebarConversation withUnreadCount(int newUnreadCount) {
-        return new SidebarConversation(this.id, this.name, this.avatar, this.type, this.lastMessage, this.lastActivity, newUnreadCount);
+        return new SidebarConversation(this.id, this.name, this.avatar, this.type, this.lastMessage, this.lastActivity, newUnreadCount, this.pinned, this.muted);
+    }
+    public SidebarConversation withPinned(boolean newPinned) {
+        return new SidebarConversation(this.id, this.name, this.avatar, this.type, this.lastMessage, this.lastActivity, this.unreadCount, newPinned, this.muted);
+    }
+    public SidebarConversation withMuted(boolean newMuted) {
+        return new SidebarConversation(this.id, this.name, this.avatar, this.type, this.lastMessage, this.lastActivity, this.unreadCount, this.pinned, newMuted);
     }
     public String getTypeLabel() {
         return switch (type) {

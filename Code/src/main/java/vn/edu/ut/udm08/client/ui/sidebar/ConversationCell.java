@@ -6,9 +6,12 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import javafx.geometry.Pos;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.OverrunStyle;
+import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -22,13 +25,17 @@ public final class ConversationCell extends ListCell<SidebarConversation> {
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM");
 
+    private final SidebarController controller;
+
     private final Label initial = new Label();
     private final ImageView image = new ImageView();
     private final StackPane avatar = new StackPane(initial, image);
 
+    private final Label pinIcon = new Label("📌");
     private final Label name = new Label();
+    private final Label muteIcon = new Label("𔘓");
     private final Label time = new Label();
-    private final HBox topRow = new HBox(name, time);
+    private final HBox topRow = new HBox(4, pinIcon, name, muteIcon, time);
 
     private final Label detail = new Label();
     private final Label badge = new Label();
@@ -38,16 +45,26 @@ public final class ConversationCell extends ListCell<SidebarConversation> {
     private final HBox row = new HBox(12, avatar, text);
 
     public ConversationCell() {
+        this(null);
+    }
+
+    public ConversationCell(SidebarController controller) {
+        this.controller = controller;
+
         avatar.getStyleClass().add("sidebar-avatar");
         initial.getStyleClass().add("sidebar-initial");
         name.getStyleClass().add("conversation-name");
         time.getStyleClass().add("conversation-time");
         detail.getStyleClass().add("conversation-detail");
         badge.getStyleClass().add("conversation-unread-badge");
+        pinIcon.getStyleClass().add("conversation-pin-icon");
+        muteIcon.getStyleClass().add("conversation-mute-icon");
 
         name.setTextOverrun(OverrunStyle.ELLIPSIS);
         name.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(name, Priority.ALWAYS);
+
+        topRow.setAlignment(Pos.CENTER_LEFT);
 
         detail.setTextOverrun(OverrunStyle.ELLIPSIS);
         detail.setMaxWidth(Double.MAX_VALUE);
@@ -71,6 +88,7 @@ public final class ConversationCell extends ListCell<SidebarConversation> {
         super.updateItem(item, empty);
         setText(null);
         setTooltip(null);
+        setContextMenu(null);
         image.setImage(null);
         image.setVisible(false);
         if (empty || item == null) {
@@ -95,6 +113,12 @@ public final class ConversationCell extends ListCell<SidebarConversation> {
             time.setText("");
             time.setVisible(false);
         }
+
+        pinIcon.setVisible(item.isPinned());
+        pinIcon.setManaged(item.isPinned());
+
+        muteIcon.setVisible(item.isMuted());
+        muteIcon.setManaged(item.isMuted());
 
         int unread = item.getUnreadCount();
         if (unread > 0) {
@@ -132,6 +156,31 @@ public final class ConversationCell extends ListCell<SidebarConversation> {
                 }
             }
         }
+
+        if (controller != null) {
+            ContextMenu menu = new ContextMenu();
+            MenuItem pinItem = new MenuItem(item.isPinned() ? "📌 Bỏ ghim trò chuyện" : "📌 Ghim trò chuyện");
+            pinItem.setOnAction(e -> controller.togglePin(item.getId()));
+
+            MenuItem muteItem = new MenuItem(item.isMuted() ? "🔔 Bật thông báo" : "𔘓 Tắt thông báo");
+            muteItem.setOnAction(e -> controller.toggleMute(item.getId()));
+
+            MenuItem markReadItem = new MenuItem(item.isUnread() ? "✉️ Đánh dấu đã đọc" : "✉️ Đánh dấu chưa đọc");
+            markReadItem.setOnAction(e -> {
+                if (item.isUnread()) {
+                    controller.markAsRead(item.getId());
+                } else {
+                    controller.markAsUnread(item.getId());
+                }
+            });
+
+            MenuItem deleteItem = new MenuItem("🗑️ Xóa hội thoại");
+            deleteItem.setOnAction(e -> controller.deleteConversation(item.getId()));
+
+            menu.getItems().addAll(pinItem, muteItem, markReadItem, new SeparatorMenuItem(), deleteItem);
+            setContextMenu(menu);
+        }
+
         setTooltip(new Tooltip(item.getName()));
         setAccessibleText(item.getName() + ", " + item.getTypeLabel());
         setGraphic(row);
@@ -142,6 +191,8 @@ public final class ConversationCell extends ListCell<SidebarConversation> {
         ZonedDateTime now = ZonedDateTime.now(ZoneId.systemDefault());
         if (dateTime.toLocalDate().equals(now.toLocalDate())) {
             return TIME_FORMAT.format(dateTime);
+        } else if (dateTime.toLocalDate().equals(now.toLocalDate().minusDays(1))) {
+            return "Hôm qua";
         } else {
             return DATE_FORMAT.format(dateTime);
         }

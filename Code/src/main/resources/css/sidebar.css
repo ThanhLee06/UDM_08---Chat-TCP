@@ -143,3 +143,23 @@
     -fx-background-radius: 10;
     -fx-alignment: center;
 }
+.sidebar-search-input {
+    -fx-background-color: #f1f5f9;
+    -fx-border-color: #e2e8f0;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-padding: 6 10;
+    -fx-font-size: 12px;
+}
+.sidebar-search-input:focused {
+    -fx-background-color: white;
+    -fx-border-color: #0068ff;
+}
+.conversation-pin-icon {
+    -fx-font-size: 11px;
+    -fx-text-fill: #64748b;
+}
+.conversation-mute-icon {
+    -fx-font-size: 12px;
+    -fx-text-fill: #94a3b8;
+}

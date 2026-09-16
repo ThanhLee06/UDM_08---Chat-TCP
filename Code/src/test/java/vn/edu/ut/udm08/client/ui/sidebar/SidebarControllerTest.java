@@ -192,6 +192,22 @@ class SidebarControllerTest {
             assertEquals(1, selectedCount.get());
         });
     }
+    @Test
+    void supportsPinMuteAndMarkAsUnread() throws Exception {
+        requests.getFirst().complete(List.of(
+            summary("dm:alice:bob", "Bảo")
+        ));
+        fx(() -> {
+            assertEquals("room:public", list.getItems().get(0).getId());
+            assertEquals("dm:alice:bob", list.getItems().get(1).getId());
+            controller.togglePin("dm:alice:bob");
+            assertTrue(list.getItems().get(1).isPinned());
+            controller.toggleMute("dm:alice:bob");
+            assertTrue(list.getItems().get(1).isMuted());
+            controller.markAsUnread("dm:alice:bob");
+            assertTrue(list.getItems().get(1).isUnread());
+        });
+    }
     private static ConversationSummary summary(String id, String name) {
         var result = new ConversationSummary();
         result.convId = id;
