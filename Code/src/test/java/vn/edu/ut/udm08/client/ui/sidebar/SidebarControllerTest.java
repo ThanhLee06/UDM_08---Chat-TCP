@@ -149,6 +149,40 @@ class SidebarControllerTest {
             javax.imageio.ImageIO.write(png, "png", Path.of("target", "sidebar-preview.png").toFile());
         });
     }
+    @Test
+    void updatesLastMessageAndSortsByRecentActivityDescendingKeepingPublicRoomPinned() throws Exception {
+        requests.getFirst().complete(List.of(
+            summary("dm:alice:bob", "Bảo"),
+            summary("dm:alice:dan", "Danh")
+        ));
+        fx(() -> {
+            assertEquals(3, list.getItems().size());
+            assertEquals("room:public", list.getItems().get(0).getId());
+            
+            long now = System.currentTimeMillis();
+            controller.updateLastMessage("dm:alice:bob", "Xin chào Bob", now - 5000);
+            controller.updateLastMessage("dm:alice:dan", "Danh nhắn mới hơn", now);
+
+            assertEquals("room:public", list.getItems().get(0).getId());
+            assertEquals("dm:alice:dan", list.getItems().get(1).getId());
+            assertEquals("Danh nhắn mới hơn", list.getItems().get(1).getLastMessage());
+            assertEquals("dm:alice:bob", list.getItems().get(2).getId());
+            assertEquals("Xin chào Bob", list.getItems().get(2).getLastMessage());
+        });
+    }
+    @Test
+    void supportsGroupRoomSelection() throws Exception {
+        requests.getFirst().complete(List.of(
+            summary("room:dev-team", "Nhóm Lập Trình")
+        ));
+        AtomicInteger selectedCount = new AtomicInteger();
+        fx(() -> {
+            controller.setSelectionListener(item -> selectedCount.incrementAndGet());
+            list.getSelectionModel().select(1);
+            assertEquals("room:dev-team", list.getSelectionModel().getSelectedItem().getId());
+            assertEquals(1, selectedCount.get());
+        });
+    }
     private static ConversationSummary summary(String id, String name) {
         var result = new ConversationSummary();
         result.convId = id;

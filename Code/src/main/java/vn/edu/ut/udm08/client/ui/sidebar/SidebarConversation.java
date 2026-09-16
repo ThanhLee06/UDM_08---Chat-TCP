@@ -58,6 +58,12 @@ public final class SidebarConversation {
     public Long getLastActivity() {
         return lastActivity;
     }
+    public String getLastActivityText() {
+        return lastActivity != null ? String.valueOf(lastActivity) : "";
+    }
+    public SidebarConversation withLastMessage(String newLastMessage, Long newLastActivity) {
+        return new SidebarConversation(this.id, this.name, this.avatar, this.type, newLastMessage, newLastActivity);
+    }
     public String getTypeLabel() {
         return switch (type) {
             case DM -> "Tin nhắn riêng";

@@ -147,7 +147,7 @@ public final class SidebarController {
         if (items != null) {
             for (ConversationSummary summary : items) {
                 SidebarConversation item = SidebarConversation.from(summary, currentUser);
-                if (item != null && !item.getId().equals(ConvId.PUBLIC_ROOM_ID)) {
+                if (item != null) {
                     activeConversationsMap.put(item.getId(), item);
                 }
             }
@@ -156,7 +156,9 @@ public final class SidebarController {
     }
 
     private void ensurePublicRoom(Map<String, SidebarConversation> map) {
-        if (!map.containsKey(ConvId.PUBLIC_ROOM_ID)) {
+        if (activeConversationsMap.containsKey(ConvId.PUBLIC_ROOM_ID)) {
+            map.put(ConvId.PUBLIC_ROOM_ID, activeConversationsMap.get(ConvId.PUBLIC_ROOM_ID));
+        } else if (!map.containsKey(ConvId.PUBLIC_ROOM_ID)) {
             ConversationSummary summary = new ConversationSummary();
             summary.convId = ConvId.PUBLIC_ROOM_ID;
             summary.displayName = "Phòng chung";
@@ -180,24 +182,40 @@ public final class SidebarController {
 
         if (isDirectTab) {
             ensurePublicRoom(resultMap);
-            for (SidebarConversation item : activeConversationsMap.values()) {
-                if (!item.getId().equals(ConvId.PUBLIC_ROOM_ID)) {
-                    resultMap.put(item.getId(), item);
-                }
+
+            List<SidebarConversation> list = new ArrayList<>(activeConversationsMap.values());
+            list.removeIf(item -> item.getId().equals(ConvId.PUBLIC_ROOM_ID));
+
+            list.sort((a, b) -> {
+                Long tA = a.getLastActivity();
+                Long tB = b.getLastActivity();
+                if (tA == null && tB == null) return 0;
+                if (tA == null) return 1;
+                if (tB == null) return -1;
+                return Long.compare(tB, tA);
+            });
+
+            for (SidebarConversation item : list) {
+                resultMap.put(item.getId(), item);
             }
         } else {
             for (UserProfile user : onlineUsersList) {
                 if (user != null && user.username != null && currentUser != null && !user.username.equalsIgnoreCase(currentUser)) {
                     String convId = ConvId.forDm(currentUser, user.username);
                     if (!resultMap.containsKey(convId)) {
-                        ConversationSummary summary = new ConversationSummary();
-                        summary.convId = convId;
-                        summary.displayName = user.username;
-                        summary.avatar = user.avatarId;
-                        summary.chatType = "DM";
-                        SidebarConversation item = SidebarConversation.from(summary, currentUser);
-                        if (item != null) {
-                            resultMap.put(item.getId(), item);
+                        SidebarConversation existing = activeConversationsMap.get(convId);
+                        if (existing != null) {
+                            resultMap.put(existing.getId(), existing);
+                        } else {
+                            ConversationSummary summary = new ConversationSummary();
+                            summary.convId = convId;
+                            summary.displayName = user.username;
+                            summary.avatar = user.avatarId;
+                            summary.chatType = "DM";
+                            SidebarConversation item = SidebarConversation.from(summary, currentUser);
+                            if (item != null) {
+                                resultMap.put(item.getId(), item);
+                            }
                         }
                     }
                 }
@@ -210,6 +228,43 @@ public final class SidebarController {
         restoreSelection();
         updatingSelection = false;
         renderState();
+    }
+
+    public void updateLastMessage(String convId, String snippet, long timestamp) {
+        if (convId == null || convId.isBlank()) {
+            return;
+        }
+        SidebarConversation existing = activeConversationsMap.get(convId);
+        if (existing == null && convId.equals(ConvId.PUBLIC_ROOM_ID)) {
+            ConversationSummary summary = new ConversationSummary();
+            summary.convId = ConvId.PUBLIC_ROOM_ID;
+            summary.displayName = "Phòng chung";
+            summary.chatType = "PUBLIC";
+            summary.lastMessage = snippet;
+            summary.lastActivity = timestamp;
+            existing = SidebarConversation.from(summary, currentUser);
+        } else if (existing != null) {
+            existing = existing.withLastMessage(snippet, timestamp);
+        } else {
+            String displayName = snippet;
+            if (ConvId.isDm(convId)) {
+                displayName = ConvId.getOtherUser(convId, currentUser);
+            } else if (convId.startsWith("room:")) {
+                displayName = convId.substring(5);
+            }
+            ConversationSummary summary = new ConversationSummary();
+            summary.convId = convId;
+            summary.displayName = displayName;
+            summary.avatar = "avatar1";
+            summary.chatType = convId.startsWith("room:") ? (convId.equals(ConvId.PUBLIC_ROOM_ID) ? "PUBLIC" : "GROUP") : "DM";
+            summary.lastMessage = snippet;
+            summary.lastActivity = timestamp;
+            existing = SidebarConversation.from(summary, currentUser);
+        }
+        if (existing != null) {
+            activeConversationsMap.put(convId, existing);
+            rebuildConversations();
+        }
     }
 
     private void restoreSelection() {
@@ -235,12 +290,12 @@ public final class SidebarController {
 
     public SidebarConversation ensureConversation(String convId, String displayName, String avatar) {
         if (convId == null || convId.isBlank()) return null;
-        if (!convId.equals(ConvId.PUBLIC_ROOM_ID) && !activeConversationsMap.containsKey(convId)) {
+        if (!activeConversationsMap.containsKey(convId)) {
             ConversationSummary summary = new ConversationSummary();
             summary.convId = convId;
             summary.displayName = displayName;
             summary.avatar = avatar != null ? avatar : "avatar1";
-            summary.chatType = convId.startsWith("room:") ? "PUBLIC" : "DM";
+            summary.chatType = convId.startsWith("room:") ? (convId.equals(ConvId.PUBLIC_ROOM_ID) ? "PUBLIC" : "GROUP") : "DM";
             SidebarConversation item = SidebarConversation.from(summary, currentUser);
             if (item != null) {
                 activeConversationsMap.put(item.getId(), item);

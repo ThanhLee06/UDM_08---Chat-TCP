@@ -1,7 +1,9 @@
 package vn.edu.ut.udm08.client.controller;
 import vn.edu.ut.udm08.client.ui.sidebar.SidebarController;
+import vn.edu.ut.udm08.client.ui.sidebar.SidebarConversation;
 import vn.edu.ut.udm08.client.ui.sidebar.IConversationSource;
 import vn.edu.ut.udm08.shared.protocol.ConvId;
+import vn.edu.ut.udm08.shared.protocol.ConvType;
 
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -71,13 +73,18 @@ public class ChatController {
     @FXML
     public void initialize() {
         sidebarController.setSelectionListener(conversation -> {
-            String other = ConvId.getOtherUser(conversation.getId(), currentUsername);
-            if (other != null) {
+            if (conversation.getType() == ConvType.PUBLIC) {
+                selectPublicRoom();
+            } else if (conversation.getType() == ConvType.GROUP) {
+                selectGroupRoom(conversation);
+            } else {
+                String other = ConvId.getOtherUser(conversation.getId(), currentUsername);
+                if (other == null) {
+                    other = conversation.getName();
+                }
                 this.selectedConvId = conversation.getId();
                 selectUser(new UserProfile(other, conversation.getAvatar()));
                 chatPartnerName.setText(conversation.getName());
-            } else {
-                selectPublicRoom();
             }
         });
 
@@ -109,6 +116,20 @@ public class ChatController {
         chatPartnerAvatar.setStyle("-fx-background-color: #0068ff;");
         messageContainer.getChildren().clear();
         messageInput.clear();
+        messageInput.setDisable(false);
+        sendButton.setDisable(false);
+        emptyStatePane.setVisible(false);
+    }
+
+    public void selectGroupRoom(SidebarConversation group) {
+        this.selectedUser = null;
+        this.selectedConvId = group.getId();
+        cancelReply();
+        chatPartnerName.setText(group.getName());
+        chatPartnerInitial.setText(group.getName() != null && !group.getName().isBlank() ? group.getName().substring(0, 1).toUpperCase() : "#");
+        chatPartnerAvatar.setStyle("-fx-background-color: #5e35b1;");
+        messageContainer.getChildren().clear();
+        messageNodeIndex.clear();
         messageInput.setDisable(false);
         sendButton.setDisable(false);
         emptyStatePane.setVisible(false);
@@ -160,11 +181,15 @@ public class ChatController {
                     convId = ConvId.forDm(currentUsername, message.sender);
                 }
             }
-            if (convId != null && !ConvId.isPublicRoom(convId) && sidebarController != null) {
-                String other = isMine ? message.target : message.sender;
-                if (other != null && !other.isBlank()) {
-                    sidebarController.ensureConversation(convId, other, "avatar1");
+            if (convId != null && sidebarController != null) {
+                if (!ConvId.isPublicRoom(convId)) {
+                    String other = isMine ? message.target : message.sender;
+                    if (other != null && !other.isBlank()) {
+                        sidebarController.ensureConversation(convId, other, "avatar1");
+                    }
                 }
+                long ts = message.timestamp != 0 ? message.timestamp : System.currentTimeMillis();
+                sidebarController.updateLastMessage(convId, message.content, ts);
             }
 
             boolean belongsToCurrentChat = false;
@@ -218,6 +243,8 @@ public class ChatController {
                 } else if (selectedUser != null) {
                     message.target = selectedUser.username;
                 }
+            } else {
+                message.target = selectedConvId;
             }
         } else if (selectedUser != null) {
             message.convId = ConvId.forDm(currentUsername, selectedUser.username);
@@ -226,11 +253,14 @@ public class ChatController {
         message.content = content;                           
         message.timestamp = System.currentTimeMillis(); 
         if (replyingToMessage != null) {
-        message.replyToMessageId = replyingToMessage.messageId;
-        message.replyToSender = replyingToMessage.sender;
-        message.replyToContent = replyingToMessage.content;
+            message.replyToMessageId = replyingToMessage.messageId;
+            message.replyToSender = replyingToMessage.sender;
+            message.replyToContent = replyingToMessage.content;
         }       
         addMessageBubble(message, true);
+        if (sidebarController != null && message.convId != null) {
+            sidebarController.updateLastMessage(message.convId, message.content, message.timestamp);
+        }
         messageInput.clear(); 
         cancelReply();
 
