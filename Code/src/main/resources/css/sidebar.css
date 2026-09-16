@@ -118,3 +118,28 @@
     -fx-border-color: #0068ff;
     -fx-border-radius: 8;
 }
+.conversation-time {
+    -fx-text-fill: #94a3b8;
+    -fx-font-size: 11px;
+}
+.conversation-time-unread {
+    -fx-text-fill: #0068ff;
+    -fx-font-weight: bold;
+}
+.conversation-name-unread {
+    -fx-font-weight: bold;
+    -fx-text-fill: #0f172a;
+}
+.conversation-detail-unread {
+    -fx-font-weight: bold;
+    -fx-text-fill: #0f172a;
+}
+.conversation-unread-badge {
+    -fx-background-color: #0068ff;
+    -fx-text-fill: white;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-padding: 1 6 1 6;
+    -fx-background-radius: 10;
+    -fx-alignment: center;
+}

@@ -10,14 +10,18 @@ public final class SidebarConversation {
     private final ConvType type;
     private final String lastMessage;
     private final Long lastActivity;
-    private SidebarConversation(String id, String name, String avatar, ConvType type, String lastMessage, Long lastActivity) {
+    private final int unreadCount;
+
+    private SidebarConversation(String id, String name, String avatar, ConvType type, String lastMessage, Long lastActivity, int unreadCount) {
         this.id = id;
         this.name = name;
         this.avatar = avatar;
         this.type = type;
         this.lastMessage = lastMessage;
         this.lastActivity = lastActivity;
+        this.unreadCount = Math.max(0, unreadCount);
     }
+
     public static SidebarConversation from(ConversationSummary summary, String currentUser) {
         if (summary == null) {
             return null;
@@ -38,7 +42,7 @@ public final class SidebarConversation {
         if (name == null || name.isBlank()) {
             name = "Cuộc trò chuyện";
         }
-        return new SidebarConversation(id, name.trim(), summary.avatar, info.getType(), summary.lastMessage, summary.lastActivity);
+        return new SidebarConversation(id, name.trim(), summary.avatar, info.getType(), summary.lastMessage, summary.lastActivity, 0);
     }
     public String getId() {
         return id;
@@ -58,11 +62,23 @@ public final class SidebarConversation {
     public Long getLastActivity() {
         return lastActivity;
     }
+    public int getUnreadCount() {
+        return unreadCount;
+    }
+    public boolean isUnread() {
+        return unreadCount > 0;
+    }
     public String getLastActivityText() {
         return lastActivity != null ? String.valueOf(lastActivity) : "";
     }
     public SidebarConversation withLastMessage(String newLastMessage, Long newLastActivity) {
-        return new SidebarConversation(this.id, this.name, this.avatar, this.type, newLastMessage, newLastActivity);
+        return new SidebarConversation(this.id, this.name, this.avatar, this.type, newLastMessage, newLastActivity, this.unreadCount);
+    }
+    public SidebarConversation withLastMessage(String newLastMessage, Long newLastActivity, int newUnreadCount) {
+        return new SidebarConversation(this.id, this.name, this.avatar, this.type, newLastMessage, newLastActivity, newUnreadCount);
+    }
+    public SidebarConversation withUnreadCount(int newUnreadCount) {
+        return new SidebarConversation(this.id, this.name, this.avatar, this.type, this.lastMessage, this.lastActivity, newUnreadCount);
     }
     public String getTypeLabel() {
         return switch (type) {

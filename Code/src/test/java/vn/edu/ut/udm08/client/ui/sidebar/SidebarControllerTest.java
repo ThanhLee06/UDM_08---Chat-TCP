@@ -160,14 +160,23 @@ class SidebarControllerTest {
             assertEquals("room:public", list.getItems().get(0).getId());
             
             long now = System.currentTimeMillis();
-            controller.updateLastMessage("dm:alice:bob", "Xin chào Bob", now - 5000);
-            controller.updateLastMessage("dm:alice:dan", "Danh nhắn mới hơn", now);
+            controller.updateLastMessage("dm:alice:bob", "Bạn: Xin chào Bob", now - 5000, false);
+            controller.updateLastMessage("dm:alice:dan", "Danh nhắn mới hơn", now, true);
 
             assertEquals("room:public", list.getItems().get(0).getId());
             assertEquals("dm:alice:dan", list.getItems().get(1).getId());
             assertEquals("Danh nhắn mới hơn", list.getItems().get(1).getLastMessage());
+            assertTrue(list.getItems().get(1).isUnread());
+            assertEquals(1, list.getItems().get(1).getUnreadCount());
+
             assertEquals("dm:alice:bob", list.getItems().get(2).getId());
-            assertEquals("Xin chào Bob", list.getItems().get(2).getLastMessage());
+            assertEquals("Bạn: Xin chào Bob", list.getItems().get(2).getLastMessage());
+            assertFalse(list.getItems().get(2).isUnread());
+
+            // Select Dan to mark as read
+            list.getSelectionModel().select(1);
+            assertEquals(0, list.getItems().get(1).getUnreadCount());
+            assertFalse(list.getItems().get(1).isUnread());
         });
     }
     @Test

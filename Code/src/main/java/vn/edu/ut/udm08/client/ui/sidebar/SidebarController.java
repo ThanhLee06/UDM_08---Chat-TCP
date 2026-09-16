@@ -85,6 +85,7 @@ public final class SidebarController {
         conversationList.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, item) -> {
             if (!updatingSelection && item != null && !item.getId().equals(selectedId)) {
                 selectedId = item.getId();
+                markAsRead(selectedId);
                 selectionListener.accept(item);
             }
         });
@@ -92,6 +93,7 @@ public final class SidebarController {
             SidebarConversation item = conversationList.getSelectionModel().getSelectedItem();
             if (item != null) {
                 selectedId = item.getId();
+                markAsRead(selectedId);
                 selectionListener.accept(item);
             }
         });
@@ -230,11 +232,17 @@ public final class SidebarController {
         renderState();
     }
 
-    public void updateLastMessage(String convId, String snippet, long timestamp) {
+    public void updateLastMessage(String convId, String snippet, long timestamp, boolean incrementUnread) {
         if (convId == null || convId.isBlank()) {
             return;
         }
         SidebarConversation existing = activeConversationsMap.get(convId);
+        int newUnread = 0;
+        if (incrementUnread) {
+            int currentUnread = (existing != null) ? existing.getUnreadCount() : 0;
+            newUnread = currentUnread + 1;
+        }
+
         if (existing == null && convId.equals(ConvId.PUBLIC_ROOM_ID)) {
             ConversationSummary summary = new ConversationSummary();
             summary.convId = ConvId.PUBLIC_ROOM_ID;
@@ -243,8 +251,11 @@ public final class SidebarController {
             summary.lastMessage = snippet;
             summary.lastActivity = timestamp;
             existing = SidebarConversation.from(summary, currentUser);
+            if (existing != null && newUnread > 0) {
+                existing = existing.withUnreadCount(newUnread);
+            }
         } else if (existing != null) {
-            existing = existing.withLastMessage(snippet, timestamp);
+            existing = existing.withLastMessage(snippet, timestamp, incrementUnread ? existing.getUnreadCount() + 1 : 0);
         } else {
             String displayName = snippet;
             if (ConvId.isDm(convId)) {
@@ -260,9 +271,25 @@ public final class SidebarController {
             summary.lastMessage = snippet;
             summary.lastActivity = timestamp;
             existing = SidebarConversation.from(summary, currentUser);
+            if (existing != null && newUnread > 0) {
+                existing = existing.withUnreadCount(newUnread);
+            }
         }
         if (existing != null) {
             activeConversationsMap.put(convId, existing);
+            rebuildConversations();
+        }
+    }
+
+    public void updateLastMessage(String convId, String snippet, long timestamp) {
+        updateLastMessage(convId, snippet, timestamp, false);
+    }
+
+    public void markAsRead(String convId) {
+        if (convId == null || convId.isBlank()) return;
+        SidebarConversation existing = activeConversationsMap.get(convId);
+        if (existing != null && existing.getUnreadCount() > 0) {
+            activeConversationsMap.put(convId, existing.withUnreadCount(0));
             rebuildConversations();
         }
     }

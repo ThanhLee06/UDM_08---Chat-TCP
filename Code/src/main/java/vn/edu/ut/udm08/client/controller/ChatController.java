@@ -111,6 +111,9 @@ public class ChatController {
     public void selectPublicRoom() {
         this.selectedUser = null;
         this.selectedConvId = ConvId.PUBLIC_ROOM_ID;
+        if (sidebarController != null) {
+            sidebarController.markAsRead(selectedConvId);
+        }
         chatPartnerName.setText("Phòng chung");
         chatPartnerInitial.setText("#");
         chatPartnerAvatar.setStyle("-fx-background-color: #0068ff;");
@@ -125,6 +128,9 @@ public class ChatController {
         this.selectedUser = null;
         this.selectedConvId = group.getId();
         cancelReply();
+        if (sidebarController != null) {
+            sidebarController.markAsRead(selectedConvId);
+        }
         chatPartnerName.setText(group.getName());
         chatPartnerInitial.setText(group.getName() != null && !group.getName().isBlank() ? group.getName().substring(0, 1).toUpperCase() : "#");
         chatPartnerAvatar.setStyle("-fx-background-color: #5e35b1;");
@@ -181,6 +187,14 @@ public class ChatController {
                     convId = ConvId.forDm(currentUsername, message.sender);
                 }
             }
+
+            boolean belongsToCurrentChat = false;
+            if (ConvId.isPublicRoom(selectedConvId)) {
+                belongsToCurrentChat = ConvId.isPublicRoom(convId) || "PUBLIC".equalsIgnoreCase(message.target);
+            } else if (selectedConvId != null && !selectedConvId.isBlank()) {
+                belongsToCurrentChat = selectedConvId.equalsIgnoreCase(convId);
+            }
+
             if (convId != null && sidebarController != null) {
                 if (!ConvId.isPublicRoom(convId)) {
                     String other = isMine ? message.target : message.sender;
@@ -189,14 +203,9 @@ public class ChatController {
                     }
                 }
                 long ts = message.timestamp != 0 ? message.timestamp : System.currentTimeMillis();
-                sidebarController.updateLastMessage(convId, message.content, ts);
-            }
-
-            boolean belongsToCurrentChat = false;
-            if (ConvId.isPublicRoom(selectedConvId)) {
-                belongsToCurrentChat = ConvId.isPublicRoom(convId) || "PUBLIC".equalsIgnoreCase(message.target);
-            } else if (selectedConvId != null && !selectedConvId.isBlank()) {
-                belongsToCurrentChat = selectedConvId.equalsIgnoreCase(convId);
+                String snippet = isMine ? ("Bạn: " + message.content) : message.content;
+                boolean incrementUnread = !isMine && !belongsToCurrentChat;
+                sidebarController.updateLastMessage(convId, snippet, ts, incrementUnread);
             }
 
             if (belongsToCurrentChat) {
@@ -211,6 +220,9 @@ public class ChatController {
             this.selectedConvId = ConvId.forDm(currentUsername, user.username);
         }
         cancelReply();
+        if (sidebarController != null && selectedConvId != null) {
+            sidebarController.markAsRead(selectedConvId);
+        }
 
         chatPartnerName.setText(user.username);
         chatPartnerInitial.setText(user.username.substring(0, 1).toUpperCase());
@@ -259,7 +271,7 @@ public class ChatController {
         }       
         addMessageBubble(message, true);
         if (sidebarController != null && message.convId != null) {
-            sidebarController.updateLastMessage(message.convId, message.content, message.timestamp);
+            sidebarController.updateLastMessage(message.convId, "Bạn: " + message.content, message.timestamp, false);
         }
         messageInput.clear(); 
         cancelReply();
