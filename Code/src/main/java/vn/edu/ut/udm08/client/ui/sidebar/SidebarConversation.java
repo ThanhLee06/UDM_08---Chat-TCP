@@ -13,8 +13,9 @@ public final class SidebarConversation {
     private final int unreadCount;
     private final boolean pinned;
     private final boolean muted;
+    private final boolean online;
 
-    private SidebarConversation(String id, String name, String avatar, ConvType type, String lastMessage, Long lastActivity, int unreadCount, boolean pinned, boolean muted) {
+    private SidebarConversation(String id, String name, String avatar, ConvType type, String lastMessage, Long lastActivity, int unreadCount, boolean pinned, boolean muted, boolean online) {
         this.id = id;
         this.name = name;
         this.avatar = avatar;
@@ -24,6 +25,7 @@ public final class SidebarConversation {
         this.unreadCount = Math.max(0, unreadCount);
         this.pinned = pinned;
         this.muted = muted;
+        this.online = online;
     }
 
     public static SidebarConversation from(ConversationSummary summary, String currentUser) {
@@ -47,7 +49,7 @@ public final class SidebarConversation {
             name = "Cuộc trò chuyện";
         }
         boolean defaultPinned = id.equals(ConvId.PUBLIC_ROOM_ID);
-        return new SidebarConversation(id, name.trim(), summary.avatar, info.getType(), summary.lastMessage, summary.lastActivity, 0, defaultPinned, false);
+        return new SidebarConversation(id, name.trim(), summary.avatar, info.getType(), summary.lastMessage, summary.lastActivity, 0, defaultPinned, false, false);
     }
     public String getId() {
         return id;
@@ -79,23 +81,29 @@ public final class SidebarConversation {
     public boolean isMuted() {
         return muted;
     }
+    public boolean isOnline() {
+        return online;
+    }
     public String getLastActivityText() {
         return lastActivity != null ? String.valueOf(lastActivity) : "";
     }
     public SidebarConversation withLastMessage(String newLastMessage, Long newLastActivity) {
-        return new SidebarConversation(this.id, this.name, this.avatar, this.type, newLastMessage, newLastActivity, this.unreadCount, this.pinned, this.muted);
+        return new SidebarConversation(this.id, this.name, this.avatar, this.type, newLastMessage, newLastActivity, this.unreadCount, this.pinned, this.muted, this.online);
     }
     public SidebarConversation withLastMessage(String newLastMessage, Long newLastActivity, int newUnreadCount) {
-        return new SidebarConversation(this.id, this.name, this.avatar, this.type, newLastMessage, newLastActivity, newUnreadCount, this.pinned, this.muted);
+        return new SidebarConversation(this.id, this.name, this.avatar, this.type, newLastMessage, newLastActivity, newUnreadCount, this.pinned, this.muted, this.online);
     }
     public SidebarConversation withUnreadCount(int newUnreadCount) {
-        return new SidebarConversation(this.id, this.name, this.avatar, this.type, this.lastMessage, this.lastActivity, newUnreadCount, this.pinned, this.muted);
+        return new SidebarConversation(this.id, this.name, this.avatar, this.type, this.lastMessage, this.lastActivity, newUnreadCount, this.pinned, this.muted, this.online);
     }
     public SidebarConversation withPinned(boolean newPinned) {
-        return new SidebarConversation(this.id, this.name, this.avatar, this.type, this.lastMessage, this.lastActivity, this.unreadCount, newPinned, this.muted);
+        return new SidebarConversation(this.id, this.name, this.avatar, this.type, this.lastMessage, this.lastActivity, this.unreadCount, newPinned, this.muted, this.online);
     }
     public SidebarConversation withMuted(boolean newMuted) {
-        return new SidebarConversation(this.id, this.name, this.avatar, this.type, this.lastMessage, this.lastActivity, this.unreadCount, this.pinned, newMuted);
+        return new SidebarConversation(this.id, this.name, this.avatar, this.type, this.lastMessage, this.lastActivity, this.unreadCount, this.pinned, newMuted, this.online);
+    }
+    public SidebarConversation withOnline(boolean newOnline) {
+        return new SidebarConversation(this.id, this.name, this.avatar, this.type, this.lastMessage, this.lastActivity, this.unreadCount, this.pinned, this.muted, newOnline);
     }
     public String getTypeLabel() {
         return switch (type) {

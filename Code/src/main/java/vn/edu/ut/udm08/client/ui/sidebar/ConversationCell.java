@@ -6,6 +6,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import javafx.geometry.Pos;
+import javafx.geometry.Side;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
@@ -15,6 +16,7 @@ import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.input.MouseButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
@@ -29,13 +31,15 @@ public final class ConversationCell extends ListCell<SidebarConversation> {
 
     private final Label initial = new Label();
     private final ImageView image = new ImageView();
-    private final StackPane avatar = new StackPane(initial, image);
+    private final Circle onlineDot = new Circle(5);
+    private final StackPane avatar = new StackPane(initial, image, onlineDot);
 
     private final Label pinIcon = new Label("📌");
     private final Label name = new Label();
-    private final Label muteIcon = new Label("𔘓");
+    private final Label muteIcon = new Label("🔕");
     private final Label time = new Label();
-    private final HBox topRow = new HBox(4, pinIcon, name, muteIcon, time);
+    private final Label optionsBtn = new Label("•••");
+    private final HBox topRow = new HBox(4, pinIcon, name, muteIcon, time, optionsBtn);
 
     private final Label detail = new Label();
     private final Label badge = new Label();
@@ -43,6 +47,7 @@ public final class ConversationCell extends ListCell<SidebarConversation> {
 
     private final VBox text = new VBox(3, topRow, bottomRow);
     private final HBox row = new HBox(12, avatar, text);
+    private ContextMenu cellContextMenu;
 
     public ConversationCell() {
         this(null);
@@ -59,6 +64,36 @@ public final class ConversationCell extends ListCell<SidebarConversation> {
         badge.getStyleClass().add("conversation-unread-badge");
         pinIcon.getStyleClass().add("conversation-pin-icon");
         muteIcon.getStyleClass().add("conversation-mute-icon");
+        optionsBtn.getStyleClass().add("conversation-options-btn");
+
+        optionsBtn.setVisible(false);
+        optionsBtn.setManaged(false);
+
+        optionsBtn.setOnMouseClicked(e -> {
+            if (e.getButton() == MouseButton.PRIMARY && cellContextMenu != null) {
+                cellContextMenu.show(optionsBtn, Side.BOTTOM, 0, 4);
+                e.consume();
+            }
+        });
+
+        hoverProperty().addListener((obs, oldVal, isHovered) -> {
+            if (getItem() != null) {
+                boolean showBtn = Boolean.TRUE.equals(isHovered);
+                optionsBtn.setVisible(showBtn);
+                optionsBtn.setManaged(showBtn);
+                Long lastAct = getItem().getLastActivity();
+                if (lastAct != null && lastAct > 0) {
+                    time.setVisible(!showBtn);
+                    time.setManaged(!showBtn);
+                }
+            }
+        });
+
+        onlineDot.setFill(javafx.scene.paint.Color.web("#10B981"));
+        onlineDot.setStroke(javafx.scene.paint.Color.WHITE);
+        onlineDot.setStrokeWidth(1.5);
+        onlineDot.setVisible(false);
+        StackPane.setAlignment(onlineDot, Pos.BOTTOM_RIGHT);
 
         name.setTextOverrun(OverrunStyle.ELLIPSIS);
         name.setMaxWidth(Double.MAX_VALUE);
@@ -91,6 +126,7 @@ public final class ConversationCell extends ListCell<SidebarConversation> {
         setContextMenu(null);
         image.setImage(null);
         image.setVisible(false);
+        onlineDot.setVisible(false);
         if (empty || item == null) {
             setGraphic(null);
             setAccessibleText(null);
@@ -105,13 +141,22 @@ public final class ConversationCell extends ListCell<SidebarConversation> {
             detail.setText(item.getTypeLabel());
         }
 
+        boolean isOnlineDM = item.isOnline() && item.getType() == vn.edu.ut.udm08.shared.protocol.ConvType.DM;
+        onlineDot.setVisible(isOnlineDM);
+
+        boolean isHovered = isHover();
+        optionsBtn.setVisible(isHovered);
+        optionsBtn.setManaged(isHovered);
+
         Long lastAct = item.getLastActivity();
         if (lastAct != null && lastAct > 0) {
             time.setText(formatTime(lastAct));
-            time.setVisible(true);
+            time.setVisible(!isHovered);
+            time.setManaged(!isHovered);
         } else {
             time.setText("");
             time.setVisible(false);
+            time.setManaged(false);
         }
 
         pinIcon.setVisible(item.isPinned());
@@ -159,13 +204,12 @@ public final class ConversationCell extends ListCell<SidebarConversation> {
 
         if (controller != null) {
             ContextMenu menu = new ContextMenu();
+            menu.getStyleClass().add("custom-context-menu");
+
             MenuItem pinItem = new MenuItem(item.isPinned() ? "📌 Bỏ ghim trò chuyện" : "📌 Ghim trò chuyện");
             pinItem.setOnAction(e -> controller.togglePin(item.getId()));
 
-            MenuItem muteItem = new MenuItem(item.isMuted() ? "🔔 Bật thông báo" : "𔘓 Tắt thông báo");
-            muteItem.setOnAction(e -> controller.toggleMute(item.getId()));
-
-            MenuItem markReadItem = new MenuItem(item.isUnread() ? "✉️ Đánh dấu đã đọc" : "✉️ Đánh dấu chưa đọc");
+            MenuItem markReadItem = new MenuItem(item.isUnread() ? "✉ Đánh dấu đã đọc" : "✉ Đánh dấu chưa đọc");
             markReadItem.setOnAction(e -> {
                 if (item.isUnread()) {
                     controller.markAsRead(item.getId());
@@ -174,11 +218,18 @@ public final class ConversationCell extends ListCell<SidebarConversation> {
                 }
             });
 
-            MenuItem deleteItem = new MenuItem("🗑️ Xóa hội thoại");
-            deleteItem.setOnAction(e -> controller.deleteConversation(item.getId()));
+            MenuItem muteItem = new MenuItem(item.isMuted() ? "🔔 Bật thông báo" : "🔕 Tắt thông báo");
+            muteItem.setOnAction(e -> controller.toggleMute(item.getId()));
 
-            menu.getItems().addAll(pinItem, muteItem, markReadItem, new SeparatorMenuItem(), deleteItem);
+            MenuItem deleteItem = new MenuItem("❌ Xóa cuộc trò chuyện");
+            deleteItem.getStyleClass().add("menu-item-danger");
+            deleteItem.setOnAction(e -> controller.deleteConversationWithConfirmation(item.getId(), item.getName()));
+
+            menu.getItems().addAll(pinItem, markReadItem, muteItem, new SeparatorMenuItem(), deleteItem);
             setContextMenu(menu);
+            this.cellContextMenu = menu;
+        } else {
+            this.cellContextMenu = null;
         }
 
         setTooltip(new Tooltip(item.getName()));

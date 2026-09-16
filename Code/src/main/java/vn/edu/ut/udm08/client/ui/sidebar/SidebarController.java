@@ -13,7 +13,9 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.fxml.FXML;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.ProgressIndicator;
@@ -194,6 +196,14 @@ public final class SidebarController {
 
     private void rebuildConversations() {
         Map<String, SidebarConversation> resultMap = new LinkedHashMap<>();
+        java.util.Set<String> onlineUsernames = new java.util.HashSet<>();
+        if (onlineUsersList != null) {
+            for (UserProfile user : onlineUsersList) {
+                if (user != null && user.username != null) {
+                    onlineUsernames.add(user.username.toLowerCase(java.util.Locale.ROOT));
+                }
+            }
+        }
 
         boolean isDirectTab = (conversationTabs != null && conversationTabs.getSelectedToggle() == directTab);
 
@@ -242,8 +252,20 @@ public final class SidebarController {
             }
         }
 
+        List<SidebarConversation> finalItems = new ArrayList<>();
+        for (SidebarConversation item : resultMap.values()) {
+            if (item != null) {
+                if (item.getType() == vn.edu.ut.udm08.shared.protocol.ConvType.DM) {
+                    String other = ConvId.getOtherUser(item.getId(), currentUser);
+                    boolean isOnline = (other != null) && onlineUsernames.contains(other.toLowerCase(java.util.Locale.ROOT));
+                    item = item.withOnline(isOnline);
+                }
+                finalItems.add(item);
+            }
+        }
+
         updatingSelection = true;
-        conversations.setAll(resultMap.values());
+        conversations.setAll(finalItems);
         applyFilter();
         restoreSelection();
         updatingSelection = false;
@@ -284,6 +306,19 @@ public final class SidebarController {
             selectedId = null;
         }
         rebuildConversations();
+    }
+
+    public void deleteConversationWithConfirmation(String convId, String convName) {
+        if (convId == null || convId.isBlank()) return;
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Xóa cuộc trò chuyện");
+        alert.setHeaderText("Xóa cuộc trò chuyện với " + (convName != null ? convName : "người này") + "?");
+        alert.setContentText("Toàn bộ cuộc trò chuyện sẽ bị xóa khỏi danh sách. Bạn có chắc chắn không?");
+        alert.showAndWait().ifPresent(buttonType -> {
+            if (buttonType == ButtonType.OK) {
+                deleteConversation(convId);
+            }
+        });
     }
 
     public void updateLastMessage(String convId, String snippet, long timestamp, boolean incrementUnread) {

@@ -66,7 +66,7 @@
     -fx-background-color: #e8f1ff;
 }
 .conversation-list .list-cell:filled:selected .conversation-name {
-    -fx-text-fill: #0056d6;
+    -fx-text-fill: #172b4d;
 }
 .conversation-list .scroll-bar:horizontal {
     -fx-pref-height: 0;
@@ -123,19 +123,19 @@
     -fx-font-size: 11px;
 }
 .conversation-time-unread {
-    -fx-text-fill: #0068ff;
+    -fx-text-fill: #172b4d;
     -fx-font-weight: bold;
 }
 .conversation-name-unread {
     -fx-font-weight: bold;
-    -fx-text-fill: #0f172a;
+    -fx-text-fill: #172b4d;
 }
 .conversation-detail-unread {
     -fx-font-weight: bold;
-    -fx-text-fill: #0f172a;
+    -fx-text-fill: #172b4d;
 }
 .conversation-unread-badge {
-    -fx-background-color: #0068ff;
+    -fx-background-color: #e8313a;
     -fx-text-fill: white;
     -fx-font-size: 10px;
     -fx-font-weight: bold;
@@ -162,4 +162,48 @@
 .conversation-mute-icon {
     -fx-font-size: 12px;
     -fx-text-fill: #94a3b8;
+}
+.conversation-options-btn {
+    -fx-background-color: #dbeafe;
+    -fx-text-fill: #0068ff;
+    -fx-font-weight: bold;
+    -fx-font-size: 11px;
+    -fx-padding: 2 6 2 6;
+    -fx-background-radius: 6;
+    -fx-cursor: hand;
+    -fx-alignment: center;
+}
+.conversation-options-btn:hover {
+    -fx-background-color: #bfdbfe;
+}
+.context-menu {
+    -fx-background-color: white;
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+    -fx-border-color: #e2e8f0;
+    -fx-border-width: 1;
+    -fx-padding: 6 0 6 0;
+    -fx-effect: dropshadow(three-pass-box, rgba(0, 0, 0, 0.12), 12, 0, 0, 4);
+}
+.menu-item {
+    -fx-padding: 8 16 8 16;
+    -fx-background-color: transparent;
+}
+.menu-item:hover, .menu-item:focused {
+    -fx-background-color: #f1f5f9;
+}
+.menu-item .label {
+    -fx-text-fill: #1e293b;
+    -fx-font-size: 13px;
+}
+.menu-item-danger .label {
+    -fx-text-fill: #e11d48;
+    -fx-font-weight: bold;
+}
+.menu-item-danger:hover, .menu-item-danger:focused {
+    -fx-background-color: #ffe4e6;
+}
+.separator-menu-item .line {
+    -fx-border-color: #f1f5f9;
+    -fx-border-width: 1 0 0 0;
 }
