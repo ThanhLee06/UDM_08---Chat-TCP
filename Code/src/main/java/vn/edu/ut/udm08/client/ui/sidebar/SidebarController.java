@@ -23,6 +23,11 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.VBox;
+import javafx.geometry.Side;
+import javafx.scene.control.ContextMenu;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.SeparatorMenuItem;
+import vn.edu.ut.udm08.client.network.ChatClient;
 import vn.edu.ut.udm08.shared.model.ConversationSummary;
 import vn.edu.ut.udm08.shared.model.UserProfile;
 import vn.edu.ut.udm08.shared.protocol.ConvId;
@@ -58,9 +63,14 @@ public final class SidebarController {
     private boolean updatingSelection;
     private CompletableFuture<List<ConversationSummary>> pending;
     private Consumer<SidebarConversation> selectionListener = item -> {};
+    private Runnable logoutListener;
 
     @FXML
     private void initialize() {
+        if (currentUserLabel != null) {
+            currentUserLabel.setCursor(javafx.scene.Cursor.HAND);
+            currentUserLabel.setOnMouseClicked(e -> showUserMenu(e));
+        }
         conversationList.setItems(filtered);
         conversationList.setCellFactory(list -> new ConversationCell(this));
         conversationList.setPlaceholder(new Label(""));
@@ -128,6 +138,28 @@ public final class SidebarController {
 
     public void setSelectionListener(Consumer<SidebarConversation> listener) {
         selectionListener = Objects.requireNonNull(listener);
+    }
+    public void setLogoutListener(Runnable listener) {
+        this.logoutListener = listener;
+    }
+    public ChatClient getClient() {
+        return (source instanceof ClientConversationSource) ? ((ClientConversationSource) source).getClient() : null;
+    }
+    private void showUserMenu(javafx.scene.input.MouseEvent e) {
+        if (currentUser == null || currentUser.isBlank()) return;
+        ContextMenu menu = new ContextMenu();
+        menu.getStyleClass().add("custom-context-menu");
+        MenuItem accountItem = new MenuItem("👤 Tài khoản: " + currentUser);
+        accountItem.setDisable(true);
+        MenuItem logoutItem = new MenuItem("🚪 Đăng xuất");
+        logoutItem.getStyleClass().add("menu-item-danger");
+        logoutItem.setOnAction(evt -> {
+            if (logoutListener != null) {
+                logoutListener.run();
+            }
+        });
+        menu.getItems().addAll(accountItem, new SeparatorMenuItem(), logoutItem);
+        menu.show(currentUserLabel, Side.BOTTOM, 0, 4);
     }
 
     @FXML

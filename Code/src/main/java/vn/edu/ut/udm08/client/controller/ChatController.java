@@ -32,6 +32,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
+import javafx.fxml.FXMLLoader;
+import javafx.scene.Scene;
+import javafx.stage.Stage;
+
 public class ChatController {
 
     @FXML private SidebarController sidebarController;
@@ -49,13 +53,10 @@ public class ChatController {
 
     private String currentUsername;
     private UserProfile selectedUser; 
-    //luu lai tin nhan duoc chon de reply
     private ProtocolMessage replyingToMessage;
-    //thanh quote hien dang hien thi 
     private HBox replyBar;
-    //luu tam lich su tin nhan
-     private final java.util.Map<String, ProtocolMessage> messageHistory = new java.util.HashMap<>();
-     private final java.util.Map<String, javafx.scene.Node> messageNodeIndex = new java.util.HashMap<>();
+    private final java.util.Map<String, ProtocolMessage> messageHistory = new java.util.HashMap<>();
+    private final java.util.Map<String, javafx.scene.Node> messageNodeIndex = new java.util.HashMap<>();
 
     private static final String[] AVATAR_COLORS = {
             "#0068ff", "#00c853", "#ff6d00", "#e91e63",
@@ -72,6 +73,7 @@ public class ChatController {
 
     @FXML
     public void initialize() {
+        sidebarController.setLogoutListener(this::handleLogout);
         sidebarController.setSelectionListener(conversation -> {
             if (conversation.getType() == ConvType.PUBLIC) {
                 selectPublicRoom();
@@ -96,6 +98,28 @@ public class ChatController {
         });
 
         showEmptyState();
+    }
+    public void handleLogout() {
+        if (sidebarController != null && sidebarController.getClient() != null) {
+            try {
+                sidebarController.getClient().logout();
+            } catch (Exception ignored) {
+            }
+        }
+        if (sidebarController != null) {
+            sidebarController.dispose();
+        }
+        Platform.runLater(() -> {
+            try {
+                Stage stage = (Stage) messageInput.getScene().getWindow();
+                FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/LoginView.fxml"));
+                Scene loginScene = new Scene(loader.load());
+                stage.setTitle("UDM08 Chat - Đăng nhập");
+                stage.setScene(loginScene);
+                stage.setResizable(false);
+            } catch (Exception ignored) {
+            }
+        });
     }
 
     public void showEmptyState() {
