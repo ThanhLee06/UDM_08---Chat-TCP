@@ -105,9 +105,9 @@ public class UserRepository implements IUserRepository {
             pstmt.setString(1, user.getUsername());
             pstmt.setString(2, user.getPhoneNumber());
             pstmt.setString(3, user.getPasswordHash());
-            pstmt.setString(4, user.getAvatarType());
-            pstmt.setString(5, user.getAvatarPath());
-            pstmt.setString(6, user.getEmail() == null ? null : user.getEmail().trim().toLowerCase(java.util.Locale.ROOT));
+            pstmt.setString(4, user.getAvatarType() != null ? user.getAvatarType() : "PRESET");
+            pstmt.setString(5, user.getAvatarPath() != null ? user.getAvatarPath() : "01.png");
+            pstmt.setString(6, (user.getEmail() == null || user.getEmail().isBlank()) ? null : user.getEmail().trim().toLowerCase(java.util.Locale.ROOT));
             int affected = pstmt.executeUpdate();
             if (affected > 0) {
                 ResultSet rs = pstmt.getGeneratedKeys();
@@ -178,6 +178,75 @@ public class UserRepository implements IUserRepository {
         return list;
     }
     @Override
+    public java.util.List<vn.edu.ut.udm08.shared.model.UserProfile> searchUsers(String query, String excludeUsername, int limit) {
+        return searchUsers(query, 0L, excludeUsername, limit);
+    }
+    @Override
+    public java.util.List<vn.edu.ut.udm08.shared.model.UserProfile> searchUsers(String query, long excludeUserId, int limit) {
+        return searchUsers(query, excludeUserId, null, limit);
+    }
+    @Override
+    public java.util.List<vn.edu.ut.udm08.shared.model.UserProfile> searchUsers(String query, long excludeUserId, String excludeUsername, int limit) {
+        if (query == null || query.isBlank() || query.length() > 200) {
+            return java.util.Collections.emptyList();
+        }
+        int maxLimit = (limit <= 0 || limit > 20) ? 20 : limit;
+        String rawQuery = query.trim();
+        String normalizedPhone = rawQuery.replaceAll("\\s+", "");
+        String trimmedQuery = rawQuery.toLowerCase(java.util.Locale.ROOT);
+        String exclude = (excludeUsername != null) ? excludeUsername.trim().toLowerCase(java.util.Locale.ROOT) : "";
+        String sql = """
+                SELECT id, username, avatar_type, avatar_path,
+                       CASE
+                           WHEN phone_number = ? THEN 1
+                           WHEN LOWER(username) = ? THEN 2
+                           WHEN LOWER(username) LIKE ? THEN 3
+                           WHEN LOWER(username) LIKE ? THEN 4
+                           WHEN LOWER(COALESCE(email, '')) = ? THEN 5
+                           ELSE 6
+                       END AS search_rank
+                FROM users
+                WHERE id != ?
+                  AND LOWER(username) != ?
+                  AND (
+                      LOWER(username) LIKE ?
+                      OR phone_number = ?
+                      OR LOWER(COALESCE(email, '')) = ?
+                  )
+                ORDER BY search_rank ASC, username ASC
+                LIMIT ?
+                """;
+        java.util.List<vn.edu.ut.udm08.shared.model.UserProfile> list = new java.util.ArrayList<>();
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, normalizedPhone);
+            stmt.setString(2, trimmedQuery);
+            stmt.setString(3, trimmedQuery + "%");
+            stmt.setString(4, "%" + trimmedQuery + "%");
+            stmt.setString(5, trimmedQuery);
+            stmt.setLong(6, excludeUserId);
+            stmt.setString(7, exclude);
+            stmt.setString(8, "%" + trimmedQuery + "%");
+            stmt.setString(9, normalizedPhone);
+            stmt.setString(10, trimmedQuery);
+            stmt.setInt(11, maxLimit);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    vn.edu.ut.udm08.shared.model.UserProfile profile = new vn.edu.ut.udm08.shared.model.UserProfile();
+                    profile.userId = String.valueOf(rs.getLong("id"));
+                    profile.username = rs.getString("username");
+                    profile.displayName = rs.getString("username");
+                    profile.avatarId = rs.getString("avatar_type");
+                    profile.avatarPath = rs.getString("avatar_path");
+                    list.add(profile);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+    @Override
     public boolean deleteByPhoneNumber(String phoneNumber) {
         if (phoneNumber == null) {
             return false;
@@ -215,18 +284,26 @@ public class UserRepository implements IUserRepository {
             return false;
         }
     }
+    private boolean hasColumn(ResultSet rs, String columnName) {
+        try {
+            rs.findColumn(columnName);
+            return true;
+        } catch (SQLException e) {
+            return false;
+        }
+    }
     private User mapResultSetToUser(ResultSet rs) throws SQLException {
         User user = new User();
         user.setId(rs.getLong("id"));
         user.setUsername(rs.getString("username"));
         user.setPhoneNumber(rs.getString("phone_number"));
-        user.setEmail(rs.getString("email"));
+        user.setEmail(hasColumn(rs, "email") ? rs.getString("email") : null);
         user.setPasswordHash(rs.getString("password_hash"));
         user.setAvatarType(rs.getString("avatar_type"));
         user.setAvatarPath(rs.getString("avatar_path"));
-        user.setGender(rs.getString("gender"));
-        user.setBio(rs.getString("bio"));
-        user.setCoverUrl(rs.getString("cover_url"));
+        user.setGender(hasColumn(rs, "gender") ? rs.getString("gender") : null);
+        user.setBio(hasColumn(rs, "bio") ? rs.getString("bio") : null);
+        user.setCoverUrl(hasColumn(rs, "cover_url") ? rs.getString("cover_url") : null);
         return user;
     }
 }
