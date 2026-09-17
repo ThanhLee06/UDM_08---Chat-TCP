@@ -149,9 +149,9 @@ public final class SidebarController {
         if (currentUser == null || currentUser.isBlank()) return;
         ContextMenu menu = new ContextMenu();
         menu.getStyleClass().add("custom-context-menu");
-        MenuItem accountItem = new MenuItem("👤 Tài khoản: " + currentUser);
+        MenuItem accountItem = new MenuItem("Tài khoản: " + currentUser);
         accountItem.setDisable(true);
-        MenuItem logoutItem = new MenuItem("🚪 Đăng xuất");
+        MenuItem logoutItem = new MenuItem("Đăng xuất");
         logoutItem.getStyleClass().add("menu-item-danger");
         logoutItem.setOnAction(evt -> {
             if (logoutListener != null) {

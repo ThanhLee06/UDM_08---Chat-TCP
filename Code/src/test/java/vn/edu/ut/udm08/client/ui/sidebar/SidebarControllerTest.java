@@ -101,6 +101,29 @@ class SidebarControllerTest {
         });
     }
     @Test
+    void testAccountSwitchClearsOldClientState() throws Exception {
+        var req1 = requests.getFirst();
+        var req2 = new CompletableFuture<List<ConversationSummary>>();
+        fx(() -> {
+            req1.complete(List.of(summary("dm:usera:bob", "Bob A")));
+        });
+        fx(() -> {
+            assertEquals(2, list.getItems().size());
+            assertEquals("alice", ((Label) root.lookup("#currentUserLabel")).getText());
+            controller.dispose();
+            assertTrue(list.getItems().isEmpty());
+            assertEquals("", ((Label) root.lookup("#currentUserLabel")).getText());
+            controller.configure(() -> req2, "userb");
+        });
+        req2.complete(List.of(summary("dm:userb:charlie", "Charlie B")));
+        fx(() -> {
+            assertEquals(2, list.getItems().size());
+            assertEquals("userb", ((Label) root.lookup("#currentUserLabel")).getText());
+            assertEquals("Charlie B", list.getItems().get(1).getName());
+            assertTrue(list.getItems().stream().noneMatch(item -> "Bob A".equals(item.getName())));
+        });
+    }
+    @Test
     void selectionUsesIdAcrossTabSwitchAndReload() throws Exception {
         AtomicInteger selections = new AtomicInteger();
         requests.getFirst().complete(List.of(summary("dm:alice:bob", "Bảo"), summary("dm:alice:dan", "Danh")));
