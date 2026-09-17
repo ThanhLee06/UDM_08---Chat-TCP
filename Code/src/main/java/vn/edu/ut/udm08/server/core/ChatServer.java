@@ -7,10 +7,13 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import vn.edu.ut.udm08.server.conversation.ConversationRegistry;
 import vn.edu.ut.udm08.server.conversation.IConversationRegistry;
+import vn.edu.ut.udm08.server.repository.UserRepository;
 import vn.edu.ut.udm08.server.routing.MessageRouter;
+import vn.edu.ut.udm08.server.search.UserSearchHandler;
 import vn.edu.ut.udm08.server.session.ClientSession;
 import vn.edu.ut.udm08.server.session.LoginHandler;
 import vn.edu.ut.udm08.server.session.OnlineUserRegistry;
+import vn.edu.ut.udm08.server.session.SessionValidator;
 import vn.edu.ut.udm08.shared.model.MessageType;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
 
@@ -22,6 +25,8 @@ public class ChatServer {
     private final ConversationRegistry conversationRegistry;
     private final LoginHandler loginHandler;
     private final MessageRouter messageRouter;
+    private final SessionValidator sessionValidator;
+    private final UserSearchHandler userSearchHandler;
     private final ExecutorService clientExecutor;
 
     private volatile boolean running;
@@ -38,6 +43,8 @@ public class ChatServer {
         this.conversationRegistry = new ConversationRegistry();
         this.loginHandler = new LoginHandler(registry, conversationRegistry);
         this.messageRouter = new MessageRouter(registry, conversationRegistry);
+        this.sessionValidator = new SessionValidator();
+        this.userSearchHandler = new UserSearchHandler(new UserRepository());
         this.clientExecutor = Executors.newCachedThreadPool();
         this.boundPort = configuredPort;
     }
@@ -118,10 +125,15 @@ public class ChatServer {
             return;
         }
 
+        if (!sessionValidator.validate(session, message)) {
+            return;
+        }
+
         switch (message.type) {
             case HELLO -> loginHandler.handleHello(session, message);
             case CHAT -> messageRouter.handleChatMessage(session, message);
             case LOGOUT -> loginHandler.handleLogout(session, message);
+            case USER_SEARCH_REQUEST -> userSearchHandler.handleSearchRequest(session, message);
             case DISCONNECT -> {
                 loginHandler.handleDisconnect(session);
             }
