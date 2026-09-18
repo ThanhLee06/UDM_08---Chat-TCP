@@ -101,6 +101,29 @@ class SidebarControllerTest {
         });
     }
     @Test
+    void testAccountSwitchClearsOldClientState() throws Exception {
+        var req1 = requests.getFirst();
+        var req2 = new CompletableFuture<List<ConversationSummary>>();
+        fx(() -> {
+            req1.complete(List.of(summary("dm:usera:bob", "Bob A")));
+        });
+        fx(() -> {
+            assertEquals(2, list.getItems().size());
+            assertEquals("alice", ((Label) root.lookup("#currentUserLabel")).getText());
+            controller.dispose();
+            assertTrue(list.getItems().isEmpty());
+            assertEquals("", ((Label) root.lookup("#currentUserLabel")).getText());
+            controller.configure(() -> req2, "userb");
+        });
+        req2.complete(List.of(summary("dm:userb:charlie", "Charlie B")));
+        fx(() -> {
+            assertEquals(2, list.getItems().size());
+            assertEquals("userb", ((Label) root.lookup("#currentUserLabel")).getText());
+            assertEquals("Charlie B", list.getItems().get(1).getName());
+            assertTrue(list.getItems().stream().noneMatch(item -> "Bob A".equals(item.getName())));
+        });
+    }
+    @Test
     void selectionUsesIdAcrossTabSwitchAndReload() throws Exception {
         AtomicInteger selections = new AtomicInteger();
         requests.getFirst().complete(List.of(summary("dm:alice:bob", "Bảo"), summary("dm:alice:dan", "Danh")));
@@ -147,6 +170,65 @@ class SidebarControllerTest {
                 }
             }
             javax.imageio.ImageIO.write(png, "png", Path.of("target", "sidebar-preview.png").toFile());
+        });
+    }
+    @Test
+    void updatesLastMessageAndSortsByRecentActivityDescendingKeepingPublicRoomPinned() throws Exception {
+        requests.getFirst().complete(List.of(
+            summary("dm:alice:bob", "Bảo"),
+            summary("dm:alice:dan", "Danh")
+        ));
+        fx(() -> {
+            assertEquals(3, list.getItems().size());
+            assertEquals("room:public", list.getItems().get(0).getId());
+            
+            long now = System.currentTimeMillis();
+            controller.updateLastMessage("dm:alice:bob", "Bạn: Xin chào Bob", now - 5000, false);
+            controller.updateLastMessage("dm:alice:dan", "Danh nhắn mới hơn", now, true);
+
+            assertEquals("room:public", list.getItems().get(0).getId());
+            assertEquals("dm:alice:dan", list.getItems().get(1).getId());
+            assertEquals("Danh nhắn mới hơn", list.getItems().get(1).getLastMessage());
+            assertTrue(list.getItems().get(1).isUnread());
+            assertEquals(1, list.getItems().get(1).getUnreadCount());
+
+            assertEquals("dm:alice:bob", list.getItems().get(2).getId());
+            assertEquals("Bạn: Xin chào Bob", list.getItems().get(2).getLastMessage());
+            assertFalse(list.getItems().get(2).isUnread());
+
+            // Select Dan to mark as read
+            list.getSelectionModel().select(1);
+            assertEquals(0, list.getItems().get(1).getUnreadCount());
+            assertFalse(list.getItems().get(1).isUnread());
+        });
+    }
+    @Test
+    void supportsGroupRoomSelection() throws Exception {
+        requests.getFirst().complete(List.of(
+            summary("room:dev-team", "Nhóm Lập Trình")
+        ));
+        AtomicInteger selectedCount = new AtomicInteger();
+        fx(() -> {
+            controller.setSelectionListener(item -> selectedCount.incrementAndGet());
+            list.getSelectionModel().select(1);
+            assertEquals("room:dev-team", list.getSelectionModel().getSelectedItem().getId());
+            assertEquals(1, selectedCount.get());
+        });
+    }
+    @Test
+    void supportsPinMuteAndMarkAsUnread() throws Exception {
+        requests.getFirst().complete(List.of(
+            summary("dm:alice:bob", "Bảo")
+        ));
+        fx(() -> {
+            assertEquals("room:public", list.getItems().get(0).getId());
+            assertEquals("dm:alice:bob", list.getItems().get(1).getId());
+            controller.togglePin("dm:alice:bob");
+            assertTrue(list.getItems().get(1).isPinned());
+            controller.toggleMute("dm:alice:bob");
+            assertTrue(list.getItems().get(1).isMuted());
+            controller.markAsUnread("dm:alice:bob");
+            assertTrue(list.getItems().get(1).isUnread());
         });
     }
     private static ConversationSummary summary(String id, String name) {

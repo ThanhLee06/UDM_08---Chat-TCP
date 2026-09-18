@@ -29,10 +29,10 @@ public class LoginHandler {
         }
 
         if (user.getUsername() != null && !user.getUsername().isBlank()) {
-            registry.kickSession(user.getUsername(), "Tài khoản của bạn vừa đăng nhập ở một thiết bị khác.");
+            registry.kickSession(user.getUsername(), "Tài khoản của bạn vừa đăng nhập ở một thiết bị khác", session);
         }
         if (user.getPhoneNumber() != null && !user.getPhoneNumber().isBlank()) {
-            registry.kickSession(user.getPhoneNumber(), "Tài khoản của bạn vừa đăng nhập ở một thiết bị khác.");
+            registry.kickSession(user.getPhoneNumber(), "Tài khoản của bạn vừa đăng nhập ở một thiết bị khác", session);
         }
 
         boolean authenticated = session.authenticate(user);
@@ -72,7 +72,7 @@ public class LoginHandler {
             sendError(session, "INVALID_AVATAR", "Avatar khong hop le");
             return false;
         }
-        registry.kickSession(message.sender, "Tài khoản của bạn vừa đăng nhập ở một thiết bị khác.");
+        registry.kickSession(message.sender, "Tài khoản của bạn vừa đăng nhập ở một thiết bị khác", session);
         boolean authenticated = session.authenticate(message.sender, message.avatarId);
         if (!authenticated) {
             sendError(session, "INVALID_IDENTITY", "Thong tin dang nhap khong hop le");
@@ -99,14 +99,46 @@ public class LoginHandler {
         if (session == null) {
             return;
         }
+        boolean removed = registry.remove(session);
         if (conversationRegistry != null) {
             conversationRegistry.removeSessionFromAll(session);
         }
-        boolean removed = registry.remove(session);
+        session.unauthenticate();
         session.close();
         if (removed) {
             broadcastUserList();
         }
+    }
+    public boolean handleLogout(ClientSession session) {
+        return handleLogout(session, null);
+    }
+    public boolean handleLogout(ClientSession session, ProtocolMessage message) {
+        if (session == null) {
+            return false;
+        }
+        boolean wasAuthenticated = session.isAuthenticated();
+        String username = session.getUsername();
+        ProtocolMessage response = new ProtocolMessage(MessageType.LOGOUT_OK);
+        response.sender = "SERVER";
+        response.target = username != null ? username : "ANONYMOUS";
+        response.timestamp = System.currentTimeMillis();
+        try {
+            session.sendMessage(response);
+        } catch (IOException ignored) {
+        }
+        if (conversationRegistry != null) {
+            conversationRegistry.removeSessionFromAll(session);
+        }
+        boolean removed = false;
+        if (wasAuthenticated) {
+            removed = registry.remove(session);
+        }
+        session.unauthenticate();
+        session.close();
+        if (removed) {
+            broadcastUserList();
+        }
+        return true;
     }
     public void broadcastUserList() {
         ProtocolMessage message = new ProtocolMessage(MessageType.USER_LIST);
