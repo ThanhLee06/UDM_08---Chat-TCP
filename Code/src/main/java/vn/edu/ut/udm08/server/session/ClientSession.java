@@ -17,6 +17,7 @@ public class ClientSession implements Runnable {
     public static final String ANONYMOUS_USER_ID = "anonymous";
 
     private final Socket socket;
+    private final String sessionId;
 
     private BufferedReader reader;
     private PrintWriter writer;
@@ -30,6 +31,7 @@ public class ClientSession implements Runnable {
 
     private ClientSession(Socket socket) {
         this.socket = socket;
+        this.sessionId = java.util.UUID.randomUUID().toString();
     }
 
     public static ClientSession createAnonymous(Socket socket) {
@@ -126,10 +128,13 @@ public class ClientSession implements Runnable {
 
         this.username = username;
         this.avatarId = avatarId;
-
         return true;
     }
-
+    public void unauthenticate() {
+        this.user = null;
+        this.username = null;
+        this.avatarId = null;
+    }
     public ProtocolMessage readMessage() throws IOException {
         if (!isConnected()) {
             throw new IOException("Socket mat ket noi");
@@ -178,6 +183,25 @@ public class ClientSession implements Runnable {
             sendMessage(msg);
         } catch (IOException ignored) {
         }
+    }
+    public void kick(String reason) {
+        ProtocolMessage msg = new ProtocolMessage(vn.edu.ut.udm08.shared.model.MessageType.SESSION_KICKED);
+        msg.sender = "SERVER";
+        msg.errorCode = "SESSION_KICKED";
+        msg.errorMessage = reason != null ? reason : "Tài khoản của bạn vừa đăng nhập ở một thiết bị khác";
+        msg.timestamp = System.currentTimeMillis();
+        try {
+            sendMessage(msg);
+            if (writer != null) {
+                writer.flush();
+            }
+        } catch (IOException ignored) {
+        }
+        unauthenticate();
+        java.util.concurrent.CompletableFuture.delayedExecutor(500, java.util.concurrent.TimeUnit.MILLISECONDS).execute(this::close);
+    }
+    public String getSessionId() {
+        return sessionId;
     }
 
     public boolean isConnected() {

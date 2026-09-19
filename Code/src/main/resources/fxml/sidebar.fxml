@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<VBox xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+      fx:controller="vn.edu.ut.udm08.client.ui.sidebar.SidebarController"
+      styleClass="sidebar" minWidth="280" prefWidth="310" maxWidth="360">
+    <fx:define><ToggleGroup fx:id="conversationTabs"/></fx:define>
+    <VBox styleClass="sidebar-heading" spacing="5">
+        <HBox alignment="CENTER_LEFT">
+            <Label text="Tin nhắn" styleClass="sidebar-title"/>
+            <Pane HBox.hgrow="ALWAYS"/>
+            <Button fx:id="refreshButton" text="↻" onAction="#reload" styleClass="sidebar-refresh" accessibleText="Tải lại danh sách hội thoại">
+                <tooltip><Tooltip text="Tải lại hội thoại"/></tooltip>
+            </Button>
+        </HBox>
+        <Label fx:id="currentUserLabel" styleClass="sidebar-account"/>
+    </VBox>
+    <VBox styleClass="sidebar-search-box" style="-fx-padding: 0 12 8 12;">
+        <TextField fx:id="searchField" promptText="🔎 Tìm bạn bè, nhóm và tin nhắn" styleClass="sidebar-search-input"/>
+    </VBox>
+    <HBox styleClass="sidebar-tabs" spacing="4">
+        <ToggleButton fx:id="directTab" text="💬 Đoạn chat" selected="true" toggleGroup="$conversationTabs" styleClass="sidebar-tab" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+        <ToggleButton fx:id="roomsTab" text="👥 Online" toggleGroup="$conversationTabs" styleClass="sidebar-tab" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+    </HBox>
+    <Label fx:id="conversationCount" styleClass="sidebar-count"/>
+    <StackPane VBox.vgrow="ALWAYS">
+        <ListView fx:id="conversationList" styleClass="conversation-list" accessibleText="Danh sách hội thoại"/>
+        <VBox fx:id="statusPane" alignment="CENTER" spacing="12" styleClass="sidebar-state">
+            <ProgressIndicator fx:id="loadingIndicator" prefWidth="28" prefHeight="28" maxWidth="28" maxHeight="28"/>
+            <Label fx:id="statusTitle" styleClass="sidebar-state-title" wrapText="true"/>
+            <Label fx:id="statusDetail" styleClass="sidebar-state-detail" wrapText="true"/>
+            <Button fx:id="retryButton" text="Thử lại" onAction="#reload" styleClass="sidebar-retry"/>
+        </VBox>
+    </StackPane>
+</VBox>
