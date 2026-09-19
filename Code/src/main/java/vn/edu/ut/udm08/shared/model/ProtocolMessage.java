@@ -5,7 +5,7 @@ import java.util.List;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class ProtocolMessage {
-    public MessageType type;
+    public String type;
     public String messageId;
     public String requestId;
     public String sender;
@@ -38,7 +38,12 @@ public class ProtocolMessage {
 
     public ProtocolMessage() {}
 
-    public ProtocolMessage(MessageType type) {
+    /**
+     * Khởi tạo với hằng số String từ {@link MessageType}.
+     *
+     * @param type hằng số message type, ví dụ {@code MessageType.CHAT}
+     */
+    public ProtocolMessage(String type) {
         this.type = type;
     }
 }

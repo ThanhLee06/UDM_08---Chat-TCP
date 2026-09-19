@@ -56,7 +56,7 @@ public class LoginHandler {
         if (session == null) {
             return false;
         }
-        if (message == null || message.type != MessageType.HELLO) {
+        if (message == null || !MessageType.HELLO.equals(message.type)) {
             sendError(session, "INVALID_HELLO", "Goi tin dang nhap khong hop le");
             return false;
         }

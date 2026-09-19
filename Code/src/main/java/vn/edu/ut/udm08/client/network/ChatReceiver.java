@@ -3,6 +3,7 @@ package vn.edu.ut.udm08.client.network;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.util.Collections;
+import vn.edu.ut.udm08.shared.model.MessageType;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
 import vn.edu.ut.udm08.shared.protocol.JsonUtil;
 
@@ -67,44 +68,60 @@ public class ChatReceiver implements Runnable {
         }
 
         switch (message.type) {
-            case HELLO_OK:
+            case MessageType.HELLO_OK:
                 listener.onLoginSuccess(message);
                 break;
-            case USER_LIST:
-                listener.onUserListUpdated(message.users != null ? message.users : Collections.emptyList());
+
+            case MessageType.USER_LIST:
+                listener.onUserListUpdated(
+                        message.users != null
+                                ? message.users
+                                : Collections.emptyList()
+                );
                 break;
-            case CHAT:
+
+            case MessageType.CHAT:
                 listener.onMessageReceived(message);
                 break;
-            case CHAT_OK:
+
+            case MessageType.CHAT_OK:
                 if (client != null) {
                     client.handleChatOk(message);
                 }
                 listener.onMessageSentSuccess(message.messageId);
                 break;
-            case HISTORY_RESPONSE:
+
+            case MessageType.HISTORY_RESPONSE:
                 if (client != null) {
                     client.handleHistoryResponse(message);
                 }
                 break;
-            case CONVERSATION_LIST_RESPONSE:
+
+            case MessageType.CONVERSATION_LIST_RESPONSE:
                 if (client != null) {
                     client.handleConversationListResponse(message);
                 }
                 break;
-            case USER_SEARCH_RESPONSE:
+
+            case MessageType.USER_SEARCH_RESPONSE:
                 if (client != null) {
                     client.handleUserSearchResponse(message);
                 }
                 break;
-            case OPEN_DM_RESPONSE:
+
+            case MessageType.OPEN_DM_RESPONSE:
                 if (client != null) {
                     client.handleOpenDmResponse(message);
                 }
                 break;
-            case ERROR:
+
+            case MessageType.ERROR:
                 if (client != null && client.isSessionInvalidError(message.errorCode)) {
-                    client.handleSessionExpired(message.errorCode, message.errorMessage, listener);
+                    client.handleSessionExpired(
+                            message.errorCode,
+                            message.errorMessage,
+                            listener
+                    );
                 } else if (client != null && client.handleUserSearchError(message)) {
                     break;
                 } else if (client != null && client.handleOpenDmError(message)) {
@@ -116,23 +133,36 @@ public class ChatReceiver implements Runnable {
                 } else if (client != null && client.handleMessageError(message)) {
                     break;
                 } else {
-                    listener.onErrorReceived(message.errorCode, message.errorMessage);
+                    listener.onErrorReceived(
+                            message.errorCode,
+                            message.errorMessage
+                    );
                 }
                 break;
-            case LOGOUT_OK:
+
+            case MessageType.LOGOUT_OK:
                 if (client != null) {
                     client.handleLogoutOk(listener);
                 } else {
                     listener.onLogoutSuccess();
                 }
                 break;
-            case SESSION_EXPIRED:
+
+            case MessageType.SESSION_EXPIRED:
                 if (client != null) {
-                    client.handleSessionExpired(message.errorCode, message.errorMessage, listener);
+                    client.handleSessionExpired(
+                            message.errorCode,
+                            message.errorMessage,
+                            listener
+                    );
                 } else {
-                    listener.onSessionExpired(message.errorCode, message.errorMessage);
+                    listener.onSessionExpired(
+                            message.errorCode,
+                            message.errorMessage
+                    );
                 }
                 break;
+
             default:
                 break;
         }
