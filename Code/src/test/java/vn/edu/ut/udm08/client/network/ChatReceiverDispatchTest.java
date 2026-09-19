@@ -211,6 +211,32 @@ class ChatReceiverDispatchTest {
         assertDoesNotThrow(() -> receiver.dispatchMessage(chatMsg));
     }
 
+    @Test
+    @DisplayName("TC_09: Phân loại gói tin SESSION_KICKED và kích hoạt callback onSessionExpired")
+    void shouldHandleSessionKicked() {
+        AtomicReference<String> code = new AtomicReference<>();
+        AtomicReference<String> msg = new AtomicReference<>();
+
+        ChatListener listener = new StubChatListener() {
+            @Override
+            public void onSessionExpired(String errorCode, String errorMessage) {
+                code.set(errorCode);
+                msg.set(errorMessage);
+            }
+        };
+
+        ChatReceiver receiver = new ChatReceiver(client, dummyReader, listener);
+
+        ProtocolMessage kicked = new ProtocolMessage(MessageType.SESSION_KICKED);
+        kicked.errorCode = "SESSION_KICKED";
+        kicked.errorMessage = "Tài khoản của bạn vừa đăng nhập ở một thiết bị khác";
+
+        receiver.dispatchMessage(kicked);
+
+        assertEquals("SESSION_KICKED", code.get());
+        assertEquals("Tài khoản của bạn vừa đăng nhập ở một thiết bị khác", msg.get());
+    }
+
     private static class StubChatListener implements ChatListener {
         @Override public void onLoginSuccess(ProtocolMessage message) {}
         @Override public void onUserListUpdated(List<UserProfile> users) {}

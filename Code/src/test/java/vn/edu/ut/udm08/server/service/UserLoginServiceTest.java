@@ -99,6 +99,14 @@ public class UserLoginServiceTest {
         public Optional<User> findByEmail(String email) {
             return usersByPhone.values().stream().filter(u -> email != null && email.equalsIgnoreCase(u.getEmail())).findFirst();
         }
+
+        @Override
+        public Optional<User> findByUsername(String username) {
+            if (username == null) {
+                return Optional.empty();
+            }
+            return Optional.ofNullable(usersByUsername.get(username.trim().toLowerCase()));
+        }
         @Override
         public boolean existsByEmail(String email) {
             return findByEmail(email).isPresent();

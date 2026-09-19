@@ -13,6 +13,9 @@ public class ClientLoginService {
     public void connectAndLogin(String host, int port, String username, String avatarId, ChatListener listener) throws IOException {
         chatClient.connect(host, port, username, avatarId, listener);
     }
+    public void connectAndAuthLogin(String host, int port, String usernameOrPhone, String password, ChatListener listener) throws IOException {
+        chatClient.connectAndAuthLogin(host, port, usernameOrPhone, password, listener);
+    }
     public void disconnect() {
         if (chatClient != null) {
             chatClient.disconnect();

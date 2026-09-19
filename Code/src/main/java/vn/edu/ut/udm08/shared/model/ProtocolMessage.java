@@ -32,7 +32,11 @@ public class ProtocolMessage {
     public String replyToMessageId;
     public String replyToSender;
     public String replyToContent;
+    public String forwardFromMessageId;
+    public String forwardFromConvId;
     public String forwardedFromSender;
+    public String forwardFromMessageId;
+    public String forwardFromConvId;
     public boolean isForwarded;
     public MessageSendStatus sendStatus;
 

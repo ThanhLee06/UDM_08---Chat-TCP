@@ -10,12 +10,16 @@ public final class ServerConfig {
     private static final String PORT_KEY = "server.port";
 
     private final int port;
+    private final String dbUrl;
+    private final int dbBusyTimeout;
     private final int messageMaxLength;
     private final int historyMaxLimit;
     private final int searchMaxLength;
 
-    private ServerConfig(int port, int messageMaxLength, int historyMaxLimit, int searchMaxLength) {
+    private ServerConfig(int port, String dbUrl, int dbBusyTimeout, int messageMaxLength, int historyMaxLimit, int searchMaxLength) {
         this.port = port;
+        this.dbUrl = dbUrl;
+        this.dbBusyTimeout = dbBusyTimeout;
         this.messageMaxLength = messageMaxLength;
         this.historyMaxLimit = historyMaxLimit;
         this.searchMaxLength = searchMaxLength;
@@ -59,11 +63,13 @@ public final class ServerConfig {
             throw new IllegalStateException("Server port must be between 1 and 65535: " + port);
         }
 
+        String dbUrl = properties.getProperty("db.url", "jdbc:sqlite:data/udm08_chat.db").trim();
+        int busyTimeout = parseOrDefault(properties.getProperty("db.busyTimeout"), 5000);
         int msgMax = parseOrDefault(properties.getProperty("message.maxLength"), 5000);
         int histMax = parseOrDefault(properties.getProperty("history.maxLimit"), 100);
         int searchMax = parseOrDefault(properties.getProperty("search.maxLength"), 100);
 
-        return new ServerConfig(port, msgMax, histMax, searchMax);
+        return new ServerConfig(port, dbUrl, busyTimeout, msgMax, histMax, searchMax);
     }
 
     private static int parseOrDefault(String val, int def) {
@@ -77,6 +83,14 @@ public final class ServerConfig {
 
     public int getPort() {
         return port;
+    }
+
+    public String getDbUrl() {
+        return dbUrl;
+    }
+
+    public int getDbBusyTimeout() {
+        return dbBusyTimeout;
     }
 
     public int getMessageMaxLength() {

@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.function.Consumer;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
 import vn.edu.ut.udm08.shared.model.User;
+import vn.edu.ut.udm08.shared.validation.UsernameValidator;
 import vn.edu.ut.udm08.shared.protocol.JsonUtil;
 
 public class ClientSession implements Runnable {
@@ -212,6 +213,14 @@ public class ClientSession implements Runnable {
         running = false;
 
         try {
+            if (socket != null && !socket.isClosed()) {
+                socket.close();
+            }
+        }
+        catch (IOException ignored) {
+        }
+
+        try {
             if (reader != null) {
                 reader.close();
             }
@@ -224,14 +233,6 @@ public class ClientSession implements Runnable {
         if (writer != null) {
             writer.close();
             writer = null;
-        }
-
-        try {
-            if (socket != null && !socket.isClosed()) {
-                socket.close();
-            }
-        }
-        catch (IOException ignored) {
         }
     }
 
@@ -255,5 +256,14 @@ public class ClientSession implements Runnable {
 
     public User getUser() {
         return user;
+    }
+
+    public void setUser(User user) {
+        if (user != null) {
+            this.user = user;
+            if (this.username == null || this.username.isBlank()) {
+                this.username = user.getUsername();
+            }
+        }
     }
 }

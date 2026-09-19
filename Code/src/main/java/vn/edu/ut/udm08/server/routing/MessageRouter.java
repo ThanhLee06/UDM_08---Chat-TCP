@@ -23,7 +23,10 @@ public class MessageRouter implements IMessageRouter {
         this(null, conversationRegistry);
     }
     public MessageRouter(OnlineUserRegistry registry, IConversationRegistry conversationRegistry) {
-        this(registry, conversationRegistry, new vn.edu.ut.udm08.server.service.ChatStorageService(), new vn.edu.ut.udm08.server.repository.ConversationDao(), new vn.edu.ut.udm08.server.repository.UserRepository());
+        this(registry, conversationRegistry, new vn.edu.ut.udm08.server.config.DatabaseConnectionFactory());
+    }
+    public MessageRouter(OnlineUserRegistry registry, IConversationRegistry conversationRegistry, vn.edu.ut.udm08.server.config.DatabaseConnectionFactory dbFactory) {
+        this(registry, conversationRegistry, new vn.edu.ut.udm08.server.service.ChatStorageService(dbFactory), new vn.edu.ut.udm08.server.repository.ConversationDao(dbFactory), new vn.edu.ut.udm08.server.repository.UserRepository(dbFactory));
     }
     public MessageRouter(OnlineUserRegistry registry, IConversationRegistry conversationRegistry, vn.edu.ut.udm08.server.service.IChatStorageService chatStorageService, vn.edu.ut.udm08.server.repository.IConversationDao conversationDao, vn.edu.ut.udm08.server.repository.IUserRepository userRepository) {
         this.registry = registry;
@@ -98,8 +101,9 @@ public class MessageRouter implements IMessageRouter {
                 }
             }
 
-            if (msg.fwdFrom != null) {
-                if (msg.fwdFrom.isBlank()) {
+            String fwdSource = msg.fwdFrom != null ? msg.fwdFrom : (msg.forwardFromConvId != null ? msg.forwardFromConvId : msg.forwardFromMessageId);
+            if (fwdSource != null) {
+                if (fwdSource.isBlank()) {
                     sendErrorMessage(senderSession, msg.messageId, "INVALID_FORWARD_SOURCE", "Tin nguon khong ton tai hoac khong co quyen doc");
                     return;
                 }
@@ -126,6 +130,12 @@ public class MessageRouter implements IMessageRouter {
 
             // 5. Tim ClientSession cua nguoi nhan trong OnlineUserRegistry
             List<ClientSession> targets = findTargetSessions(senderSession, convId, targetUser);
+            boolean hasOtherRecipientOnline = targets.stream().anyMatch(r -> r != null && r.isConnected() && !r.equals(senderSession));
+            if (!hasOtherRecipientOnline && !ConvId.isPublicRoom(convId)) {
+                sendErrorMessage(senderSession, msg.messageId, "USER_OFFLINE", "Nguoi nhan hien khong truy cap (offline)");
+                return;
+            }
+
             for (ClientSession recipient : targets) {
                 if (recipient != null && recipient.isConnected() && !recipient.equals(senderSession)) {
                     try {

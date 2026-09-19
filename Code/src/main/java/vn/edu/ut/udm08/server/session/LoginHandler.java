@@ -3,6 +3,7 @@ import java.io.IOException;
 import java.util.List;
 import vn.edu.ut.udm08.server.conversation.IConversationRegistry;
 import vn.edu.ut.udm08.shared.model.MessageType;
+import vn.edu.ut.udm08.shared.validation.UsernameValidator;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
 import vn.edu.ut.udm08.shared.model.UserProfile;
 import vn.edu.ut.udm08.shared.protocol.ConvId;
@@ -78,6 +79,7 @@ public class LoginHandler {
             sendError(session, "INVALID_IDENTITY", "Thong tin dang nhap khong hop le");
             return false;
         }
+        new vn.edu.ut.udm08.server.repository.UserRepository().findByUsername(message.sender).ifPresent(session::setUser);
         boolean registered = registry.register(session);
         if (!registered) {
             sendError(session, "USERNAME_TAKEN", "Username da co nguoi su dung");
