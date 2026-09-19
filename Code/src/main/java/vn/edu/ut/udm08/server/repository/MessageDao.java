@@ -63,6 +63,14 @@ public class MessageDao implements IMessageDao {
     }
     @Override
     public Optional<ChatMessage> findByMessageId(String messageId) {
+        try (Connection conn = connectionFactory.getConnection()) {
+            return findByMessageId(conn, messageId);
+        } catch (SQLException e) {
+            throw new IllegalStateException("Không thể tra cứu tin nhắn theo ID", e);
+        }
+    }
+    @Override
+    public Optional<ChatMessage> findByMessageId(Connection conn, String messageId) {
         if (messageId == null || messageId.isBlank()) {
             return Optional.empty();
         }
@@ -71,8 +79,7 @@ public class MessageDao implements IMessageDao {
                 FROM messages
                 WHERE message_id = ?
                 """;
-        try (Connection conn = connectionFactory.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, messageId.trim());
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {

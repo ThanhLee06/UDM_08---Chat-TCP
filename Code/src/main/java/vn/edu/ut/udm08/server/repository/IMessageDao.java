@@ -7,5 +7,6 @@ public interface IMessageDao {
     ChatMessage insertMessage(ChatMessage message);
     ChatMessage insertMessage(Connection conn, ChatMessage message);
     Optional<ChatMessage> findByMessageId(String messageId);
+    Optional<ChatMessage> findByMessageId(Connection conn, String messageId);
     List<ChatMessage> findByConvId(String convId, Long beforeSequenceId, int limit);
 }
