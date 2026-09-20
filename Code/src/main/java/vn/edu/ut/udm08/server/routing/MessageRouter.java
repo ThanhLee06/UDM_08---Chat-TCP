@@ -1,5 +1,8 @@
 package vn.edu.ut.udm08.server.routing;
 import vn.edu.ut.udm08.server.conversation.IConversationRegistry;
+import vn.edu.ut.udm08.server.room.ConversationDao;
+import vn.edu.ut.udm08.server.room.MessageDao;
+import vn.edu.ut.udm08.server.room.Transaction;
 import vn.edu.ut.udm08.server.session.ClientSession;
 import vn.edu.ut.udm08.server.session.OnlineUserRegistry;
 import vn.edu.ut.udm08.shared.model.MessageType;
@@ -12,21 +15,52 @@ import java.util.List;
 public class MessageRouter implements IMessageRouter {
     private final OnlineUserRegistry registry;
     private final IConversationRegistry conversationRegistry;
+    private final ConversationDao conversationDao;
+    private final Transaction transaction;
+    private final MessageDao messageDao;
 
     public MessageRouter(OnlineUserRegistry registry) {
-        if (registry == null) {
-            throw new IllegalArgumentException("Registry must not be null!");
-        }
+        this(registry, (IConversationRegistry) null, null, null);
+    }
+
+    public MessageRouter(IConversationRegistry conversationRegistry) {
+        this((OnlineUserRegistry) null, conversationRegistry, null, null);
+    }
+
+    public MessageRouter(OnlineUserRegistry registry, IConversationRegistry conversationRegistry) {
+        this(registry, conversationRegistry, null, null);
+    }
+
+    public MessageRouter(OnlineUserRegistry registry, ConversationDao conversationDao, Transaction transaction) {
+        this(registry, (IConversationRegistry) null, conversationDao, transaction);
+    }
+
+    public MessageRouter(OnlineUserRegistry registry, MessageDao messageDao, ConversationDao conversationDao, Transaction transaction) {
         this.registry = registry;
         this.conversationRegistry = null;
+        this.messageDao = messageDao;
+        this.conversationDao = conversationDao;
+        this.transaction = transaction != null ? transaction : (messageDao != null ? new Transaction(messageDao) : null);
     }
-    public MessageRouter(IConversationRegistry conversationRegistry) {
-        this.registry = null;
-        this.conversationRegistry = conversationRegistry;
-    }
-    public MessageRouter(OnlineUserRegistry registry, IConversationRegistry conversationRegistry) {
+
+    public MessageRouter(OnlineUserRegistry registry, IConversationRegistry conversationRegistry, ConversationDao conversationDao, Transaction transaction) {
         this.registry = registry;
         this.conversationRegistry = conversationRegistry;
+        this.conversationDao = conversationDao;
+        this.transaction = transaction;
+        this.messageDao = (transaction != null) ? transaction.getMessageDao() : null;
+    }
+
+    public MessageDao getMessageDao() {
+        return messageDao;
+    }
+
+    public ConversationDao getConversationDao() {
+        return conversationDao;
+    }
+
+    public Transaction getTransaction() {
+        return transaction;
     }
 
     // Xu ly dinh tuyen tin nhan CHAT rieng tu nguoi gui den nguoi nhan
@@ -39,13 +73,19 @@ public class MessageRouter implements IMessageRouter {
                 return;
             }
 
-            // 2. Kiem tra nguoi gui (sender) co khop voi session hien tai hay khong
-            if (msg == null || msg.sender == null || !msg.sender.equals(senderSession.getUsername())) {
-                sendErrorMessage(senderSession, msg != null ? msg.messageId : null, "INVALID_SENDER", "Nguoi gui khong khop voi phien lam viec");
+            if (msg == null) {
                 return;
             }
 
-            // 3. Kiem tra nguoi nhan (target) co bi rong khong
+            // 2. Xac thuc Sender: Lay senderId tu Session (khong tin Client truyen len)
+            String senderId = senderSession.getUsername();
+            if (msg.sender != null && !msg.sender.equals(senderId)) {
+                sendErrorMessage(senderSession, msg.messageId, "INVALID_SENDER", "Nguoi gui khong khop voi phien lam viec");
+                return;
+            }
+            msg.sender = senderId;
+
+            // 3. Kiem tra nguoi nhan (target) hoac cuoc tro chuyen (convId)
             String convId = msg.convId;
             String targetUser = msg.target;
             if ((convId == null || convId.isBlank()) && (targetUser == null || targetUser.isBlank())) {
@@ -53,7 +93,7 @@ public class MessageRouter implements IMessageRouter {
                 return;
             }
 
-            // 4. Kiem tra noi dung tin nhan (content) khong duoc rong hoac qua dai (> 5000 ky tu)
+            // 4. Kiem tra noi dung tin nhan (content)
             if (msg.content == null || msg.content.trim().isEmpty()) {
                 sendErrorMessage(senderSession, msg.messageId, "INVALID_CONTENT", "Noi dung tin nhan khong duoc de trong");
                 return;
@@ -63,7 +103,24 @@ public class MessageRouter implements IMessageRouter {
                 return;
             }
 
-            if (convId != null && !convId.isBlank() && conversationRegistry != null) {
+            // 5. Phan quyen: Kiem tra User co nam trong cuoc tro chuyen khong bang ConversationDao.isMember(convId, userId)
+            if (conversationDao != null) {
+                String effectiveConvId = (convId != null && !convId.isBlank()) ? convId : targetUser;
+                if (effectiveConvId != null && !effectiveConvId.isBlank()) {
+                    List<String> members = conversationDao.getMembers(effectiveConvId);
+                    if (members != null && !members.isEmpty()) {
+                        if (!conversationDao.isMember(effectiveConvId, senderId)) {
+                            sendErrorMessage(senderSession, msg.messageId, "FORBIDDEN", "Khong co quyen gui tin vao hoi thoai nay");
+                            return;
+                        }
+                    } else {
+                        conversationDao.addMember(effectiveConvId, senderId);
+                        if (targetUser != null && !targetUser.isBlank() && !targetUser.equals(senderId)) {
+                            conversationDao.addMember(effectiveConvId, targetUser.trim());
+                        }
+                    }
+                }
+            } else if (convId != null && !convId.isBlank() && conversationRegistry != null) {
                 if (!ConvId.isDm(convId) && !conversationRegistry.isMember(convId, senderSession)) {
                     sendErrorMessage(senderSession, msg.messageId, "NOT_A_MEMBER", "Khong co quyen gui tin vao hoi thoai nay");
                     return;
@@ -90,7 +147,23 @@ public class MessageRouter implements IMessageRouter {
                 }
             }
 
-            // 5. Tim ClientSession cua nguoi nhan trong OnlineUserRegistry
+            // 6. Luu DB truoc: Goi Transaction cua TV2 (ST-103) de luu tin vao SQLite/DB
+            // Chi khi DB xac nhan da luu thanh cong thi Server moi phat tin di cho nguoi nhan va bao ve cho nguoi gui
+            ProtocolMessage messageToSend = msg;
+            if (transaction != null) {
+                ProtocolMessage savedMsg = transaction.saveMessage(msg);
+                if (savedMsg == null) {
+                    sendErrorMessage(senderSession, msg.messageId, "DB_SAVE_FAILED", "Khong the luu tin nhan vao co so du lieu");
+                    return;
+                }
+                messageToSend = savedMsg;
+            } else {
+                if (messageToSend.timestamp == null || messageToSend.timestamp <= 0) {
+                    messageToSend.timestamp = System.currentTimeMillis();
+                }
+            }
+
+            // 7. Ban tin Realtime: Tim cac thanh vien dang Online trong cuoc tro chuyen de gui
             List<ClientSession> targets = findTargetSessions(senderSession, convId, targetUser);
             List<ClientSession> recipients = new ArrayList<>();
             for (ClientSession session : targets) {
@@ -99,45 +172,90 @@ public class MessageRouter implements IMessageRouter {
                 }
             }
 
-            if (recipients.isEmpty()) {
-                // Nguoi nhan khong ton tai hoac da offline
-                sendErrorMessage(senderSession, msg.messageId, "USER_OFFLINE", "Nguoi nhan khong ton tai hoac da offline trong hoi thoai");
-                return;
-            }
-
-            // 6. Chuyen tiep nguyen ven goi tin CHAT sang nguoi nhan
-            boolean anyDelivered = false;
-            for (ClientSession recipient : recipients) {
-                try {
-                    recipient.sendMessage(msg);
-                    anyDelivered = true;
-                } catch (Exception ignored) {
+            if (transaction != null) {
+                // Xu ly rot mang nguoi nhan: Neu gui Realtime cho nguoi nhan bi loi (do nguoi nhan rot mang dung luc do)
+                // thi KHONG bao loi cho nguoi gui. Tin nhan van da nam an toan trong DB, nguoi nhan se doc lai qua lich su khi online lai.
+                for (ClientSession recipient : recipients) {
+                    try {
+                        recipient.sendMessage(messageToSend);
+                    } catch (Exception e) {
+                        System.err.println("Goi tin realtime toi nguoi nhan that bai (rot mang): " + e.getMessage());
+                        if (registry != null && !recipient.isConnected()) {
+                            registry.remove(recipient);
+                        }
+                    }
                 }
+
+                // 8. Phan hoi cho nguoi gui: Tra ve goi tin xac nhan (type = "MESSAGE_ACK")
+                // kem messageId, timestamp chinh thuc va trang thai SENT cho nguoi gui
+                ProtocolMessage ackMsg = new ProtocolMessage(MessageType.MESSAGE_ACK);
+                ackMsg.messageId = messageToSend.messageId;
+                ackMsg.convId = messageToSend.convId;
+                ackMsg.sender = "SERVER";
+                ackMsg.target = senderId;
+                ackMsg.timestamp = messageToSend.timestamp;
+                ackMsg.sequence = messageToSend.sequence;
+                ackMsg.status = "SENT";
+
+                try {
+                    senderSession.sendMessage(ackMsg);
+                } catch (Exception e) {
+                    System.err.println("Khong the gui MESSAGE_ACK ve cho sender (da ngat ket noi): " + e.getMessage());
+                }
+            } else {
+                // Luong mac dinh cu khi khong dung transaction: Giu nguyen de khong anh huong code cu cua nguoi khac
+                if (recipients.isEmpty()) {
+                    sendErrorMessage(senderSession, msg.messageId, "USER_OFFLINE", "Nguoi nhan khong ton tai hoac da offline trong hoi thoai");
+                    return;
+                }
+
+                boolean anyDelivered = false;
+                for (ClientSession recipient : recipients) {
+                    try {
+                        recipient.sendMessage(messageToSend);
+                        anyDelivered = true;
+                    } catch (Exception ignored) {
+                    }
+                }
+
+                if (!anyDelivered) {
+                    sendErrorMessage(senderSession, msg.messageId, "DELIVERY_FAILED", "Khong the gui tin nhan toi hoi thoai");
+                    return;
+                }
+
+                ProtocolMessage okMsg = new ProtocolMessage(MessageType.CHAT_OK);
+                okMsg.messageId = msg.messageId;
+                okMsg.sender = "SERVER";
+                okMsg.target = msg.sender;
+                okMsg.convId = msg.convId;
+                okMsg.timestamp = System.currentTimeMillis();
+
+                senderSession.sendMessage(okMsg);
             }
-
-            if (!anyDelivered) {
-                sendErrorMessage(senderSession, msg.messageId, "DELIVERY_FAILED", "Khong the gui tin nhan toi hoi thoai");
-                return;
-            }
-
-            // 7. Phan hoi goi tin CHAT_OK ve cho nguoi gui xac nhan da toi dich
-            ProtocolMessage okMsg = new ProtocolMessage(MessageType.CHAT_OK);
-            okMsg.messageId = msg.messageId;
-            okMsg.sender = "SERVER";
-            okMsg.target = msg.sender;
-            okMsg.convId = msg.convId;
-            okMsg.timestamp = System.currentTimeMillis();
-
-            senderSession.sendMessage(okMsg);
 
         } catch (Exception e) {
-            // Try-catch an toan: bat moi loi de khong lam sap server
             System.err.println("Loi dinh tuyen tin nhan: " + e.getMessage());
             sendErrorMessage(senderSession, msg != null ? msg.messageId : null, "ERROR", "Loi he thong dinh tuyen");
         }
     }
+
     private List<ClientSession> findTargetSessions(ClientSession senderSession, String convId, String targetUser) {
         List<ClientSession> result = new ArrayList<>();
+
+        if (conversationDao != null && convId != null && !convId.isBlank()) {
+            List<String> members = conversationDao.getMembers(convId);
+            if (members != null) {
+                for (String member : members) {
+                    if (member != null && !member.equalsIgnoreCase(senderSession.getUsername()) && registry != null) {
+                        ClientSession userSession = registry.find(member);
+                        if (userSession != null && userSession.isConnected() && !result.contains(userSession)) {
+                            result.add(userSession);
+                        }
+                    }
+                }
+            }
+        }
+
         if (ConvId.isPublicRoom(convId) || "PUBLIC".equalsIgnoreCase(targetUser)) {
             if (conversationRegistry != null) {
                 List<ClientSession> convSessions = conversationRegistry.getSessions(ConvId.PUBLIC_ROOM_ID);

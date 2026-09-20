@@ -15,6 +15,8 @@ public class ProtocolMessage {
     public String keyword;
     public String avatarId;
     public Long timestamp;
+    public Long sequence;
+    public String status;
     public List<UserProfile> users;
     public List<ProtocolMessage> messages;
     public List<ConversationSummary> conversations;
