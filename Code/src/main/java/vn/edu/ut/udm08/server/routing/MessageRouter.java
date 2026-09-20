@@ -163,6 +163,11 @@ public class MessageRouter implements IMessageRouter {
                 }
             }
 
+            if (conversationDao != null) {
+                String effectiveConvId = (convId != null && !convId.isBlank()) ? convId : targetUser;
+                conversationDao.addMessage(effectiveConvId, messageToSend);
+            }
+
             // 7. Ban tin Realtime: Tim cac thanh vien dang Online trong cuoc tro chuyen de gui
             List<ClientSession> targets = findTargetSessions(senderSession, convId, targetUser);
             List<ClientSession> recipients = new ArrayList<>();

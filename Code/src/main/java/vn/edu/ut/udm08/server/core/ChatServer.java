@@ -7,7 +7,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import vn.edu.ut.udm08.server.conversation.ConversationRegistry;
 import vn.edu.ut.udm08.server.conversation.IConversationRegistry;
+import vn.edu.ut.udm08.server.history.HistoryHandler;
 import vn.edu.ut.udm08.server.repository.UserRepository;
+import vn.edu.ut.udm08.server.room.ConversationDao;
+import vn.edu.ut.udm08.server.room.InMemoryConversationDao;
 import vn.edu.ut.udm08.server.routing.MessageRouter;
 import vn.edu.ut.udm08.server.search.UserSearchHandler;
 import vn.edu.ut.udm08.server.session.ClientSession;
@@ -23,6 +26,8 @@ public class ChatServer {
 
     private final OnlineUserRegistry registry;
     private final ConversationRegistry conversationRegistry;
+    private final ConversationDao conversationDao;
+    private final HistoryHandler historyHandler;
     private final LoginHandler loginHandler;
     private final MessageRouter messageRouter;
     private final SessionValidator sessionValidator;
@@ -41,8 +46,10 @@ public class ChatServer {
         this.configuredPort = config.getPort();
         this.registry = new OnlineUserRegistry();
         this.conversationRegistry = new ConversationRegistry();
+        this.conversationDao = new InMemoryConversationDao();
+        this.historyHandler = new HistoryHandler(conversationDao);
         this.loginHandler = new LoginHandler(registry, conversationRegistry);
-        this.messageRouter = new MessageRouter(registry, conversationRegistry);
+        this.messageRouter = new MessageRouter(registry, conversationRegistry, conversationDao, null);
         this.sessionValidator = new SessionValidator();
         this.userSearchHandler = new UserSearchHandler(new UserRepository());
         this.clientExecutor = Executors.newCachedThreadPool();
@@ -134,12 +141,21 @@ public class ChatServer {
             case CHAT -> messageRouter.handleChatMessage(session, message);
             case LOGOUT -> loginHandler.handleLogout(session, message);
             case USER_SEARCH_REQUEST -> userSearchHandler.handleSearchRequest(session, message);
+            case HISTORY_REQUEST -> historyHandler.handleHistoryRequest(session, message);
             case DISCONNECT -> {
                 loginHandler.handleDisconnect(session);
             }
             default -> {
             }
         }
+    }
+
+    public ConversationDao getConversationDao() {
+        return conversationDao;
+    }
+
+    public HistoryHandler getHistoryHandler() {
+        return historyHandler;
     }
 
     public synchronized void stop() {

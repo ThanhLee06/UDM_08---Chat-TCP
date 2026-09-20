@@ -20,4 +20,14 @@ public interface ConversationDao {
      * Them thanh vien vao cuoc tro chuyen.
      */
     void addMember(String convId, String userId);
+
+    /**
+     * Lay danh sach tin nhan phan trang theo cursor (ST-102 / ST-113).
+     */
+    MessagePagedResult getMessages(String convId, String cursor, int limit);
+
+    /**
+     * Luu tin nhan vao hoi thoai.
+     */
+    void addMessage(String convId, vn.edu.ut.udm08.shared.model.ProtocolMessage message);
 }
