@@ -5,6 +5,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import vn.edu.ut.udm08.server.conversation.ConversationListHandler;
 import vn.edu.ut.udm08.server.conversation.ConversationRegistry;
 import vn.edu.ut.udm08.server.conversation.IConversationRegistry;
 import vn.edu.ut.udm08.server.history.HistoryHandler;
@@ -28,6 +29,7 @@ public class ChatServer {
     private final ConversationRegistry conversationRegistry;
     private final ConversationDao conversationDao;
     private final HistoryHandler historyHandler;
+    private final ConversationListHandler conversationListHandler;
     private final LoginHandler loginHandler;
     private final MessageRouter messageRouter;
     private final SessionValidator sessionValidator;
@@ -48,6 +50,7 @@ public class ChatServer {
         this.conversationRegistry = new ConversationRegistry();
         this.conversationDao = new InMemoryConversationDao();
         this.historyHandler = new HistoryHandler(conversationDao);
+        this.conversationListHandler = new ConversationListHandler(conversationDao);
         this.loginHandler = new LoginHandler(registry, conversationRegistry);
         this.messageRouter = new MessageRouter(registry, conversationRegistry, conversationDao, null);
         this.sessionValidator = new SessionValidator();
@@ -142,6 +145,7 @@ public class ChatServer {
             case LOGOUT -> loginHandler.handleLogout(session, message);
             case USER_SEARCH_REQUEST -> userSearchHandler.handleSearchRequest(session, message);
             case HISTORY_REQUEST -> historyHandler.handleHistoryRequest(session, message);
+            case CONVERSATION_LIST_REQUEST -> conversationListHandler.handleConversationListRequest(session, message);
             case DISCONNECT -> {
                 loginHandler.handleDisconnect(session);
             }
@@ -156,6 +160,10 @@ public class ChatServer {
 
     public HistoryHandler getHistoryHandler() {
         return historyHandler;
+    }
+
+    public ConversationListHandler getConversationListHandler() {
+        return conversationListHandler;
     }
 
     public synchronized void stop() {
