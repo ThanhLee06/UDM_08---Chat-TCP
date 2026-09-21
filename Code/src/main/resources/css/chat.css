@@ -84,6 +84,21 @@
   -fx-background-color: #e8f1ff;
 }
 
+.emoji-editor {
+  -fx-background-color: transparent;
+  -fx-padding: 0;
+}
+
+.emoji-input-prompt {
+  -fx-text-fill: #8a94a3;
+  -fx-font-size: 13px;
+}
+
+.message-delivery-status {
+  -fx-font-size: 10px;
+  -fx-text-fill: #8290a3;
+}
+
 .send-button {
   -fx-background-color: #0068ff;
   -fx-text-fill: white;

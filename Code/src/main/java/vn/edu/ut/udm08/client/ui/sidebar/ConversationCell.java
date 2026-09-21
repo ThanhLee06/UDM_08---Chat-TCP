@@ -61,6 +61,8 @@ public final class ConversationCell extends ListCell<SidebarConversation> {
         name.getStyleClass().add("conversation-name");
         time.getStyleClass().add("conversation-time");
         detail.getStyleClass().add("conversation-detail");
+        detail.setMinWidth(0);
+        vn.edu.ut.udm08.client.ui.EmojiText.installSingleLine(detail, 14);
         badge.getStyleClass().add("conversation-unread-badge");
         pinIcon.getStyleClass().add("conversation-pin-icon");
         muteIcon.getStyleClass().add("conversation-mute-icon");
