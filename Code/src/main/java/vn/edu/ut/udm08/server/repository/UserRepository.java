@@ -37,6 +37,22 @@ public class UserRepository implements IUserRepository {
         } catch (Exception e) {
             throw new IllegalStateException("Không thể khởi tạo cơ sở dữ liệu tài khoản", e);
         }
+        try (InputStream is = getClass().getResourceAsStream("/db/migration/chat_storage.sql")) {
+            if (is != null) {
+                String sql = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+                try (Connection conn = getConnection();
+                     Statement stmt = conn.createStatement()) {
+                    stmt.execute("PRAGMA foreign_keys = ON;");
+                    for (String query : sql.split(";")) {
+                        if (!query.trim().isEmpty()) {
+                            stmt.execute(query.trim());
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("Không thể khởi tạo cơ sở dữ liệu hội thoại", e);
+        }
     }
     @Override
     public boolean existsByEmail(String email) {
