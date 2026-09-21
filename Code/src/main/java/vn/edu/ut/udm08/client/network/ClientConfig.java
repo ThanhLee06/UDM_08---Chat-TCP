@@ -7,6 +7,8 @@ public final class ClientConfig {
 
     private final String host;
     private final int port;
+    private final int connectTimeoutMs;
+    private final int requestTimeoutMs;
 
     /**
      * Khởi tạo cấu hình kết nối Client với kiểm tra tính hợp lệ của Host và Port.
@@ -16,6 +18,10 @@ public final class ClientConfig {
      * @throws IllegalArgumentException Nếu host hoặc port không hợp lệ.
      */
     public ClientConfig(String host, int port) {
+        this(host, port, 5000, 15000);
+    }
+
+    public ClientConfig(String host, int port, int connectTimeoutMs, int requestTimeoutMs) {
         if (host == null || host.isBlank()) {
             throw new IllegalArgumentException("Host không được để trống");
         }
@@ -24,7 +30,15 @@ public final class ClientConfig {
         }
         this.host = host.trim();
         this.port = port;
+        if (connectTimeoutMs < 100 || connectTimeoutMs > 120000 || requestTimeoutMs < 100 || requestTimeoutMs > 120000) {
+            throw new IllegalArgumentException("Timeout phải từ 100 đến 120000 ms");
+        }
+        this.connectTimeoutMs = connectTimeoutMs;
+        this.requestTimeoutMs = requestTimeoutMs;
     }
+
+    public int getConnectTimeoutMs() { return connectTimeoutMs; }
+    public int getRequestTimeoutMs() { return requestTimeoutMs; }
 
     /**
      * Factory method tiện ích tạo ClientConfig.

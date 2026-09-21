@@ -27,6 +27,8 @@
             <Insets top="24" right="28" bottom="24" left="28"/>
         </padding>
         <Label text="CHAT TCP" style="-fx-font-size: 26px; -fx-font-weight: 900; -fx-text-fill: #0068ff;"/>
+        <Button text="Cấu hình kết nối" onAction="#onConnectionSettings"/>
+        <Label fx:id="connectionLabel" wrapText="true"/>
         <HBox fx:id="topTabBox" alignment="CENTER" spacing="0" style="-fx-background-color: #f1f5f9; -fx-background-radius: 10px; -fx-padding: 4px;" prefWidth="300">
             <Button fx:id="tabLoginBtn" text="Đăng nhập" onAction="#showLoginTab" prefWidth="180" prefHeight="36" style="-fx-background-color: #ffffff; -fx-text-fill: #0068ff; -fx-font-weight: bold; -fx-background-radius: 8px; -fx-cursor: hand; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.05), 4, 0, 0, 1);"/>
             <Button fx:id="tabRegisterBtn" text="Đăng ký" onAction="#showRegisterTab" prefWidth="180" prefHeight="36" style="-fx-background-color: transparent; -fx-text-fill: #64748b; -fx-font-weight: bold; -fx-background-radius: 8px; -fx-cursor: hand;"/>

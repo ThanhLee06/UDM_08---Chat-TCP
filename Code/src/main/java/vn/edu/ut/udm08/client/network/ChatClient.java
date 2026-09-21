@@ -22,7 +22,7 @@ import vn.edu.ut.udm08.shared.model.MessageType;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
 import vn.edu.ut.udm08.shared.protocol.JsonUtil;
 
-public class ChatClient {
+public class ChatClient implements AutoCloseable {
     private static final String ERROR_SESSION_INVALID = "SESSION_INVALID";
     private static final String ERROR_SESSION_EXPIRED = "SESSION_EXPIRED";
     private static final String ERROR_UNAUTHORIZED = "UNAUTHORIZED";
@@ -36,6 +36,10 @@ public class ChatClient {
 
     private String username;
     private String avatarId;
+    private int requestTimeoutMs = 15000;
+    private volatile ScheduledFuture<?> authTimeout;
+    private volatile String authRequestId;
+    private volatile ScheduledFuture<?> logoutTimeout;
     private final AtomicLong sessionEpoch = new AtomicLong(0);
     private final Map<String, PendingRequest> pendingRequests = new ConcurrentHashMap<>();
     private final Map<String, PendingHistoryRequest> pendingHistoryRequests = new ConcurrentHashMap<>();
@@ -75,7 +79,7 @@ public class ChatClient {
         cancelPendingOpenDmRequests("NEW_SESSION", "Phiên mới đã bắt đầu");
         markAllPendingOutboundUnknown(listener);
 
-        this.socket = new Socket(config.getHost(), config.getPort());
+        this.socket = openSocket(config.getHost(), config.getPort(), config.getConnectTimeoutMs());
         this.reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
         this.writer = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
         this.username = username.trim();
@@ -107,7 +111,9 @@ public class ChatClient {
             disconnect();
         }
         sessionEpoch.incrementAndGet();
-        this.socket = new Socket(host, port);
+        ClientConfig config = new vn.edu.ut.udm08.client.config.ClientConfigStore().load();
+        this.requestTimeoutMs = config.getRequestTimeoutMs();
+        this.socket = openSocket(host, port, config.getConnectTimeoutMs());
         this.reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
         this.writer = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
         this.listener = listener;
@@ -123,7 +129,7 @@ public class ChatClient {
         msg.requestId = UUID.randomUUID().toString();
         msg.timestamp = System.currentTimeMillis();
         msg.content = JsonUtil.toJson(new vn.edu.ut.udm08.shared.dto.AuthLoginRequest(usernameOrPhone, password));
-        sendRawMessage(JsonUtil.toJson(msg));
+        sendAuthRequest(msg);
     }
 
     public void sendRegisterInit(vn.edu.ut.udm08.shared.dto.RegisterInitRequest req) {
@@ -131,7 +137,7 @@ public class ChatClient {
         msg.requestId = UUID.randomUUID().toString();
         msg.timestamp = System.currentTimeMillis();
         msg.content = JsonUtil.toJson(req);
-        sendRawMessage(JsonUtil.toJson(msg));
+        sendAuthRequest(msg);
     }
 
     public void sendVerifyOtp(String registrationId, String otpCode) {
@@ -139,7 +145,7 @@ public class ChatClient {
         msg.requestId = UUID.randomUUID().toString();
         msg.timestamp = System.currentTimeMillis();
         msg.content = JsonUtil.toJson(new vn.edu.ut.udm08.shared.dto.RegisterOtpVerifyRequest(registrationId, otpCode));
-        sendRawMessage(JsonUtil.toJson(msg));
+        sendAuthRequest(msg);
     }
 
     public void sendResendOtp(String registrationId) {
@@ -147,7 +153,7 @@ public class ChatClient {
         msg.requestId = UUID.randomUUID().toString();
         msg.timestamp = System.currentTimeMillis();
         msg.content = registrationId;
-        sendRawMessage(JsonUtil.toJson(msg));
+        sendAuthRequest(msg);
     }
 
     public void sendForgotInit(String phoneOrEmail) {
@@ -155,7 +161,7 @@ public class ChatClient {
         msg.requestId = UUID.randomUUID().toString();
         msg.timestamp = System.currentTimeMillis();
         msg.content = JsonUtil.toJson(new vn.edu.ut.udm08.shared.dto.ForgotInitRequest(phoneOrEmail));
-        sendRawMessage(JsonUtil.toJson(msg));
+        sendAuthRequest(msg);
     }
 
     public void sendForgotReset(String resetId, String otpCode, String newPassword) {
@@ -163,13 +169,63 @@ public class ChatClient {
         msg.requestId = UUID.randomUUID().toString();
         msg.timestamp = System.currentTimeMillis();
         msg.content = JsonUtil.toJson(new vn.edu.ut.udm08.shared.dto.ForgotResetRequest(resetId, otpCode, newPassword));
-        sendRawMessage(JsonUtil.toJson(msg));
+        sendAuthRequest(msg);
     }
 
     public void sendRawMessage(String rawMessage) {
         if (writer != null) {
-            writer.println(rawMessage);
+            vn.edu.ut.udm08.shared.protocol.SocketWrites.line(socket, writer, rawMessage, requestTimeoutMs);
         }
+    }
+
+    private Socket openSocket(String host, int port, int timeoutMs) throws IOException {
+        Socket connected = new Socket();
+        try {
+            connected.connect(new java.net.InetSocketAddress(host, port), timeoutMs);
+            connected.setTcpNoDelay(true);
+            return connected;
+        } catch (IOException | RuntimeException e) { connected.close(); throw e; }
+    }
+    @Override public void close() {
+        disconnect();
+        timeoutExecutor.shutdownNow();
+    }
+
+    private synchronized void sendAuthRequest(ProtocolMessage request) {
+        if (authTimeout != null) authTimeout.cancel(false);
+        authRequestId = request.requestId;
+        final String id = request.requestId;
+        final long epoch = sessionEpoch.get();
+        authTimeout = timeoutExecutor.schedule(() -> {
+            if (isCurrentEpoch(epoch) && id.equals(authRequestId)) {
+                authRequestId = null;
+                ChatListener active = listener;
+                if (active != null) active.onErrorReceived("TIMEOUT", "Server không phản hồi đúng hạn. Vui lòng thử lại.");
+            }
+        }, requestTimeoutMs, TimeUnit.MILLISECONDS);
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
+            if (isCurrentEpoch(epoch) && id.equals(authRequestId)) sendRawMessage(JsonUtil.toJson(request));
+        });
+    }
+
+    boolean completeAuthRequest(ProtocolMessage response) {
+        if (response.requestId != null && response.requestId.equals(authRequestId)) {
+            authRequestId = null;
+            if (authTimeout != null) authTimeout.cancel(false);
+            return true;
+        }
+        return false;
+    }
+    public void cancelAuthRequest() {
+        authRequestId = null;
+        if (authTimeout != null) authTimeout.cancel(false);
+    }
+
+    void acceptAuthenticatedUser(ProtocolMessage response) {
+        var user = JsonUtil.fromJson(response.content, vn.edu.ut.udm08.shared.dto.AuthUserDto.class);
+        if (user == null || user.getUsername() == null) throw new IllegalArgumentException("Invalid authentication response");
+        username = user.getUsername();
+        avatarId = user.getAvatarPath();
     }
 
     public void sendMessage(String target, String content) throws IOException {
@@ -211,6 +267,11 @@ public class ChatClient {
         chatMessage.sendStatus = MessageSendStatus.PENDING;
 
         outboundMessages.put(chatMessage.messageId, chatMessage);
+        final String sentId = chatMessage.messageId;
+        final long sendEpoch = sessionEpoch.get();
+        timeoutExecutor.schedule(() -> {
+            if (isCurrentEpoch(sendEpoch)) markOutboundMessageFailed(sentId, "ACK_TIMEOUT", "Chưa nhận được xác nhận từ Server");
+        }, requestTimeoutMs, TimeUnit.MILLISECONDS);
         notifyMessageStatusUpdated(chatMessage);
         sendRawMessage(JsonUtil.toJson(chatMessage));
 
@@ -424,24 +485,17 @@ public class ChatClient {
     }
 
     public synchronized void logout() {
-        ChatListener activeListener = listener;
-        try {
-            if (writer != null && socket != null && !socket.isClosed()) {
-                ProtocolMessage logoutMessage = new ProtocolMessage(MessageType.LOGOUT);
-                logoutMessage.sender = this.username;
-                logoutMessage.requestId = UUID.randomUUID().toString();
-                logoutMessage.timestamp = System.currentTimeMillis();
-                writer.println(JsonUtil.toJson(logoutMessage));
-            }
-        } catch (Exception ignored) {
-        } finally {
-            clearLocalSession("LOGOUT", activeListener);
-            if (activeListener != null) {
-                activeListener.onLogoutSuccess();
-            }
-        }
+        if (logoutTimeout != null && !logoutTimeout.isDone()) return;
+        if (!isConnected()) { handleLogoutOk(listener); return; }
+        final long epoch = sessionEpoch.get();
+        logoutTimeout = timeoutExecutor.schedule(() -> {
+            if (isCurrentEpoch(epoch)) handleLogoutOk(listener);
+        }, 3, TimeUnit.SECONDS);
+        ProtocolMessage request = new ProtocolMessage(MessageType.LOGOUT);
+        request.requestId = UUID.randomUUID().toString();
+        sendRawMessage(JsonUtil.toJson(request));
     }
-
+    boolean isLoggingOut() { return logoutTimeout != null && !logoutTimeout.isDone(); }
     public long registerPendingRequest(String requestId) {
         if (requestId == null || requestId.isBlank()) {
             throw new IllegalArgumentException("RequestId không được để trống");
@@ -715,7 +769,12 @@ public class ChatClient {
         this.avatarId = null;
     }
 
+    boolean isCurrentReceiver(ChatReceiver candidate) { return receiver == candidate; }
+
     private void clearLocalSession(String reason, ChatListener cancelListener) {
+        authRequestId = null;
+        if (authTimeout != null) authTimeout.cancel(false);
+        if (logoutTimeout != null) logoutTimeout.cancel(false);
         sessionEpoch.incrementAndGet();
         markAllPendingOutboundUnknown(cancelListener);
         cancelPendingHistoryRequests(reason, "Phiên kết thúc trước khi Server trả lịch sử");

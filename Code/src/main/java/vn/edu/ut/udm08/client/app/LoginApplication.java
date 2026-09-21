@@ -12,6 +12,7 @@ public class LoginApplication extends Application {
         FXMLLoader loader = new FXMLLoader(
                 LoginApplication.class.getResource("/fxml/LoginView.fxml"));
         Scene scene = new Scene(loader.load());
+        ((vn.edu.ut.udm08.client.controller.LoginController)loader.getController()).attachToStage(stage);
 
         stage.setTitle("UDM08 Chat - Đăng nhập");
         stage.setScene(scene);

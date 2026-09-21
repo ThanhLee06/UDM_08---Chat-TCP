@@ -1,0 +1,7 @@
+server.port=8080
+db.url=jdbc:sqlite:data/udm08_chat.db
+db.busyTimeout=5000
+message.maxLength=5000
+history.maxLimit=100
+search.maxLength=100
+connection.idleTimeout=300000
