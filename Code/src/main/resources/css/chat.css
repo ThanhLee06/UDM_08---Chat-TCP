@@ -145,10 +145,16 @@
 }
 .reply-quote-block {
   -fx-font-size: 12px;
-  -fx-text-fill: #666666;
-  -fx-background-color: rgba(0, 0, 0, 0.05);
   -fx-padding: 4 8 4 8;
   -fx-background-radius: 6;
+}
+.message-bubble-sent .reply-quote-block {
+  -fx-text-fill: white;
+  -fx-background-color: rgba(255, 255, 255, 0.2);
+}
+.message-bubble-received .reply-quote-block {
+  -fx-text-fill: #666666;
+  -fx-background-color: rgba(0, 0, 0, 0.05);
 }
 .message-highlight {
   -fx-background-color: rgba(0, 104, 255, 0.12);
@@ -238,4 +244,14 @@
 .reply-cancel-button:hover {
   -fx-background-color: #e4e6eb;
   -fx-background-radius: 50%;
+}
+.message-bubble-sent .message-bubble-text {
+  -fx-text-fill: white;
+}
+
+.message-bubble-received .message-bubble-text {
+  -fx-text-fill: #050505;
+}
+.message-bubble-sent .forwarded-label {
+  -fx-text-fill: rgba(255, 255, 255, 0.8);
 }
