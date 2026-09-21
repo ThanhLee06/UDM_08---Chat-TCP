@@ -3,7 +3,6 @@ import vn.edu.ut.udm08.client.ui.sidebar.ClientConversationSource;
 import javafx.stage.WindowEvent;
 
 import java.io.File;
-import java.io.IOException;
 import java.net.URL;
 import java.util.List;
 import javafx.application.Platform;
@@ -27,15 +26,8 @@ import vn.edu.ut.udm08.client.cache.ConversationCache;
 import vn.edu.ut.udm08.client.network.ChatClient;
 import vn.edu.ut.udm08.client.network.ChatListener;
 import vn.edu.ut.udm08.integration.ClientLoginService;
-import vn.edu.ut.udm08.server.auth.EmailOtpService;
-import vn.edu.ut.udm08.server.auth.SmtpOtpEmailSender;
-import vn.edu.ut.udm08.server.repository.UserRepository;
-import vn.edu.ut.udm08.server.service.UserLoginService;
-import vn.edu.ut.udm08.server.service.UserRegisterService;
-import vn.edu.ut.udm08.shared.dto.RegisterRequest;
 import vn.edu.ut.udm08.shared.dto.RegisterResponse;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
-import vn.edu.ut.udm08.shared.model.User;
 import vn.edu.ut.udm08.shared.model.UserProfile;
 
 public class LoginController {
@@ -120,13 +112,10 @@ public class LoginController {
     private final LoginFormValidator loginValidator = new LoginFormValidator();
     private final RegisterFormValidator registerValidator = new RegisterFormValidator();
     private ClientLoginService clientLoginService;
-    private UserRegisterService userRegisterService;
-    private UserLoginService userLoginService;
-    private UserRepository userRepository;
     private ChatController activeChatController;
+    private Stage activeStage;
     private volatile List<UserProfile> pendingUserList;
     private final ConversationCache conversationCache = new ConversationCache();
-    private EmailOtpService sharedOtpService;
     private String currentRegistrationId;
     private String currentRegistrationEmail;
     private String currentRegistrationPhone;
@@ -135,16 +124,6 @@ public class LoginController {
 
     @FXML
     private void initialize() {
-        try {
-            sharedOtpService = new EmailOtpService(new SmtpOtpEmailSender());
-            userRepository = new UserRepository();
-            userRegisterService = new UserRegisterService(userRepository, new vn.edu.ut.udm08.shared.security.PasswordEncoder(), sharedOtpService);
-            userLoginService = new UserLoginService(userRepository);
-        } catch (Exception e) {
-            userRepository = null;
-            userRegisterService = null;
-            userLoginService = null;
-        }
 
         regAvatarChoiceBox.getItems().addAll("avatar1", "avatar2", "avatar3");
         regAvatarChoiceBox.setValue("avatar1");
@@ -166,37 +145,15 @@ public class LoginController {
         otpInputController.stop();
     }
     private void verifyOtpCode(String code) {
-        final String registrationId = currentRegistrationId;
-        final String registeredPhone = currentRegistrationPhone;
-        final int version = registrationVersion;
-        if (registrationId == null || userRegisterService == null) {
-            otpInputController.stop();
-            showError(otpStatusLabel, "Phiên đăng ký không còn hiệu lực. Vui lòng quay lại đăng ký.");
+        if (currentRegistrationId == null || currentRegistrationId.isBlank()) {
+            showError(otpStatusLabel, "Phiên đăng ký không hợp lệ, vui lòng thử lại");
             return;
         }
         otpStatusLabel.setStyle("-fx-text-fill: #0068ff;");
         otpStatusLabel.setText("Đang xác thực mã OTP...");
-        AccountTaskRunner.run(() -> userRegisterService.verifyRegistration(registrationId, code), response -> {
-            if (version != registrationVersion) {
-                return;
-            }
-            otpInputController.setBusy(false);
-            if (response.isSuccess()) {
-                otpInputController.stop();
-                showInfoAlert("Đăng ký thành công", "Tài khoản của bạn đã được đăng ký thành công");
-                phoneField.setText(registeredPhone);
-                passwordField.clear();
-                showLoginTab();
-            } else {
-                showOtpFailure(response);
-            }
-        }, error -> {
-            if (version == registrationVersion) {
-                otpInputController.setBusy(false);
-                showError(otpStatusLabel, error);
-                otpInputController.clear();
-            }
-        });
+        if (clientLoginService != null && clientLoginService.getChatClient() != null) {
+            clientLoginService.getChatClient().sendVerifyOtp(currentRegistrationId, code);
+        }
     }
     private void showOtpFailure(RegisterResponse response) {
         showError(otpStatusLabel, response.getMessage());
@@ -210,29 +167,11 @@ public class LoginController {
         otpInputController.requestResend();
     }
     private void resendOtp() {
-        final String registrationId = currentRegistrationId;
-        final int version = registrationVersion;
-        otpStatusLabel.setStyle("-fx-text-fill: #0068ff;");
-        otpStatusLabel.setText("Đang gửi lại mã OTP...");
-        AccountTaskRunner.run(() -> userRegisterService.resendOtp(registrationId), response -> {
-            if (version != registrationVersion) {
-                return;
-            }
-            otpInputController.setBusy(false);
-            if (response.isSuccess()) {
-                otpStatusLabel.setStyle("-fx-text-fill: #16a34a;");
-                otpStatusLabel.setText("Đã gửi lại mã OTP mới tới " + currentRegistrationEmail);
-                otpInputController.clear();
-                otpInputController.restartCooldown();
-            } else {
-                showOtpFailure(response);
-            }
-        }, error -> {
-            if (version == registrationVersion) {
-                otpInputController.setBusy(false);
-                showError(otpStatusLabel, error);
-            }
-        });
+        if (currentRegistrationId != null && clientLoginService != null && clientLoginService.getChatClient() != null) {
+            otpStatusLabel.setStyle("-fx-text-fill: #0068ff;");
+            otpStatusLabel.setText("Đang gửi lại mã OTP...");
+            clientLoginService.getChatClient().sendResendOtp(currentRegistrationId);
+        }
     }
     @FXML
     private void onOtpBackClick() {
@@ -340,6 +279,128 @@ public class LoginController {
         }
     }
 
+    private ChatListener createAuthListener() {
+        return new ChatListener() {
+            @Override
+            public void onLoginSuccess(ProtocolMessage message) {
+                String authenticatedUsername = phoneField.getText() != null ? phoneField.getText().trim() : "";
+                if (message != null && message.content != null && !message.content.isBlank()) {
+                    try {
+                        vn.edu.ut.udm08.shared.dto.AuthUserDto userDto = vn.edu.ut.udm08.shared.protocol.JsonUtil.fromJson(message.content, vn.edu.ut.udm08.shared.dto.AuthUserDto.class);
+                        if (userDto != null && userDto.getUsername() != null) {
+                            authenticatedUsername = userDto.getUsername();
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+                final String finalUsername = authenticatedUsername;
+                conversationCache.setCurrentUser(finalUsername);
+                Platform.runLater(() -> openChatWindow(clientLoginService.getChatClient(), finalUsername));
+            }
+
+            @Override
+            public void onUserListUpdated(List<UserProfile> users) {
+                pendingUserList = users;
+                if (activeChatController != null) {
+                    activeChatController.updateOnlineUsers(users);
+                }
+            }
+
+            @Override
+            public void onMessageReceived(ProtocolMessage message) {
+                if (message == null || message.type == null) return;
+                switch (message.type) {
+                    case AUTH_REGISTER_OTP_REQUIRED -> Platform.runLater(() -> {
+                        setRegistrationBusy(false);
+                        try {
+                            RegisterResponse res = vn.edu.ut.udm08.shared.protocol.JsonUtil.fromJson(message.content, RegisterResponse.class);
+                            if (res != null) {
+                                currentRegistrationId = res.getRegistrationId();
+                            }
+                        } catch (Exception ignored) {
+                        }
+                        showOtpPane();
+                    });
+                    case AUTH_REGISTER_OK -> Platform.runLater(() -> {
+                        setRegistrationBusy(false);
+                        showInfoAlert("Đăng ký thành công", "Tài khoản của bạn đã được tạo thành công! Vui lòng đăng nhập.");
+                        showLoginTab();
+                    });
+                    case AUTH_FORGOT_OTP_REQUIRED -> Platform.runLater(() -> {
+                        if (forgotStatusLabel != null) {
+                            forgotStatusLabel.setStyle("-fx-text-fill: #16a34a;");
+                            forgotStatusLabel.setText(message.content != null ? message.content : "Đã gửi mã OTP.");
+                        }
+                    });
+                    case AUTH_FORGOT_OK -> Platform.runLater(() -> {
+                        showInfoAlert("Đặt lại mật khẩu thành công", "Mật khẩu của bạn đã được cập nhật. Vui lòng đăng nhập lại.");
+                        showLoginTab();
+                    });
+                    default -> {
+                        conversationCache.addRealtimeMessage(message);
+                        if (activeChatController != null) {
+                            activeChatController.receiveMessage(message);
+                        }
+                    }
+                }
+            }
+
+            @Override
+            public void onMessageSentSuccess(String messageId) {}
+
+            @Override
+            public void onMessageStatusUpdated(ProtocolMessage message) {
+                conversationCache.updateMessageStatus(message);
+            }
+
+            @Override
+            public void onErrorReceived(String errorCode, String errorMessage) {
+                Platform.runLater(() -> {
+                    setRegistrationBusy(false);
+                    if ("FORCE_LOGOUT".equalsIgnoreCase(errorCode)) {
+                        handleKickedSession(errorMessage);
+                    } else {
+                        if (loginBtn != null) loginBtn.setDisable(false);
+                        if (otpStatusLabel != null && otpPane.isVisible()) {
+                            showError(otpStatusLabel, errorMessage);
+                        } else if (regStatusLabel != null && registerPane.isVisible()) {
+                            showError(regStatusLabel, errorMessage);
+                        } else if (forgotStatusLabel != null && forgotPane.isVisible()) {
+                            showError(forgotStatusLabel, errorMessage);
+                        } else if (statusLabel != null) {
+                            showError(statusLabel, "Đăng nhập thất bại: " + errorMessage);
+                        }
+                    }
+                });
+            }
+
+            @Override
+            public void onConnectionLost(Throwable cause) {
+                conversationCache.clear();
+                Platform.runLater(() -> {
+                    setRegistrationBusy(false);
+                    if (activeChatController != null) {
+                        handleKickedSession("Tài khoản của bạn vừa đăng nhập ở một thiết bị khác");
+                    } else {
+                        if (loginBtn != null) loginBtn.setDisable(false);
+                        if (statusLabel != null) showError(statusLabel, "Không thể kết nối đến Server vui lòng bật ServerApp");
+                    }
+                });
+            }
+
+            @Override
+            public void onSessionExpired(String errorCode, String errorMessage) {
+                conversationCache.clear();
+                Platform.runLater(() -> handleKickedSession("Phiên đăng nhập hết hạn: " + errorMessage));
+            }
+
+            @Override
+            public void onLogoutSuccess() {
+                conversationCache.clear();
+            }
+        };
+    }
+
     @FXML
     private void onLoginClick() {
         String phoneOrUsername = phoneField.getText() != null ? phoneField.getText().trim() : "";
@@ -358,106 +419,13 @@ public class LoginController {
             return;
         }
 
-        String avatarId = "avatar1";
-        String loginSenderName = phoneOrUsername;
-
-        if (userLoginService == null) {
-            showError(statusLabel, "Không thể kết nối cơ sở dữ liệu tài khoản");
-            return;
-        }
-        vn.edu.ut.udm08.shared.dto.LoginResponse loginRes = userLoginService.login(new vn.edu.ut.udm08.shared.dto.LoginRequest(phoneOrUsername, password));
-            if (!loginRes.isSuccess()) {
-                showError(statusLabel, loginRes.getMessage());
-                return;
-            }
-            User authenticatedUser = loginRes.getUser();
-            if (authenticatedUser != null) {
-                if (authenticatedUser.getUsername() != null && !authenticatedUser.getUsername().isBlank()) {
-                    loginSenderName = authenticatedUser.getUsername();
-                }
-                if (authenticatedUser.getAvatarType() != null && !authenticatedUser.getAvatarType().isBlank()) {
-                    avatarId = ("custom".equalsIgnoreCase(authenticatedUser.getAvatarType()) && authenticatedUser.getAvatarPath() != null)
-                            ? authenticatedUser.getAvatarPath()
-                            : authenticatedUser.getAvatarType();
-                }
-            }
-        final String finalSenderName = loginSenderName;
-        final String finalAvatarId = avatarId;
-
         loginBtn.setDisable(true);
-        if (statusLabel != null) statusLabel.setText(""); // Don't show status text on success
+        if (statusLabel != null) statusLabel.setText("");
         clientLoginService = new ClientLoginService();
 
         Thread connectThread = new Thread(() -> {
             try {
-                clientLoginService.connectAndLogin(host, port, finalSenderName, finalAvatarId, new ChatListener() {
-                    @Override
-                    public void onLoginSuccess(ProtocolMessage message) {
-                        conversationCache.setCurrentUser(finalSenderName);
-                        Platform.runLater(() -> openChatWindow(clientLoginService.getChatClient(), finalSenderName));
-                    }
-
-                    @Override
-                    public void onUserListUpdated(List<UserProfile> users) {
-                        pendingUserList = users;
-                        if (activeChatController != null) {
-                            activeChatController.updateOnlineUsers(users);
-                        }
-                    }
-
-                    @Override
-                    public void onMessageReceived(ProtocolMessage message) {
-                        conversationCache.addRealtimeMessage(message);
-                        if (activeChatController != null) {
-                            activeChatController.receiveMessage(message);
-                        }
-                    }
-
-                    @Override
-                    public void onMessageSentSuccess(String messageId) {
-                    }
-
-                    @Override
-                    public void onMessageStatusUpdated(ProtocolMessage message) {
-                        conversationCache.updateMessageStatus(message);
-                    }
-
-                    @Override
-                    public void onErrorReceived(String errorCode, String errorMessage) {
-                        Platform.runLater(() -> {
-                            if ("FORCE_LOGOUT".equalsIgnoreCase(errorCode)) {
-                                handleKickedSession(errorMessage);
-                            } else {
-                                if (loginBtn != null) loginBtn.setDisable(false);
-                                if (statusLabel != null) showError(statusLabel, "Đăng nhập thất bại " + errorMessage);
-                            }
-                        });
-                    }
-
-                    @Override
-                    public void onConnectionLost(Throwable cause) {
-                        conversationCache.clear();
-                        Platform.runLater(() -> {
-                            if (activeChatController != null) {
-                                handleKickedSession("Tài khoản của bạn vừa đăng nhập ở một thiết bị khác");
-                            } else {
-                                if (loginBtn != null) loginBtn.setDisable(false);
-                                if (statusLabel != null) showError(statusLabel, "Không thể kết nối đến Server (" + host + ":" + port + ") vui lòng bật ServerApp");
-                            }
-                        });
-                    }
-
-                    @Override
-                    public void onSessionExpired(String errorCode, String errorMessage) {
-                        conversationCache.clear();
-                        Platform.runLater(() -> handleKickedSession("Phiên đăng nhập hết hạn: " + errorMessage));
-                    }
-
-                    @Override
-                    public void onLogoutSuccess() {
-                        conversationCache.clear();
-                    }
-                });
+                clientLoginService.connectAndAuthLogin(host, port, phoneOrUsername, password, createAuthListener());
             } catch (Exception e) {
                 Platform.runLater(() -> {
                     if (loginBtn != null) loginBtn.setDisable(false);
@@ -471,60 +439,44 @@ public class LoginController {
 
     @FXML
     private void onForgotSendOtpClick() {
-        if (userLoginService == null || sharedOtpService == null) {
-            showError(forgotStatusLabel, "Không thể kết nối dịch vụ tài khoản");
+        String identifier = forgotPhoneField.getText() != null ? forgotPhoneField.getText().trim() : "";
+        if (identifier.isBlank()) {
+            showError(forgotStatusLabel, "Vui lòng nhập Số điện thoại hoặc Email");
             return;
         }
-        String identifier = forgotPhoneField.getText().trim();
-        forgotSendOtpBtn.setDisable(true);
-        forgotStatusLabel.setText("loading...");
-        AccountTaskRunner.run(() -> {
-            userLoginService.requestPasswordReset(identifier, sharedOtpService);
-            return true;
-        }, result -> {
-            forgotStatusLabel.setText("Đã gửi mã xác thực tới email mã có hiệu lực 5 phút");
-
-        startOtpResendCountdown(forgotSendOtpBtn, 60);
-        }, error -> {
-            forgotSendOtpBtn.setDisable(false);
-            showError(forgotStatusLabel, error);
+        final String host = "127.0.0.1";
+        final int port = 8080;
+        if (clientLoginService == null) clientLoginService = new ClientLoginService();
+        Thread thread = new Thread(() -> {
+            try {
+                if (!clientLoginService.getChatClient().isConnected()) {
+                    clientLoginService.getChatClient().connectWithoutHello(host, port, createAuthListener());
+                }
+                clientLoginService.getChatClient().sendForgotInit(identifier);
+            } catch (Exception e) {
+                Platform.runLater(() -> showError(forgotStatusLabel, "Không thể kết nối Server: " + e.getMessage()));
+            }
         });
+        thread.setDaemon(true);
+        thread.start();
     }
 
     @FXML
     private void onResetPasswordClick() {
-        String phone = forgotPhoneField.getText() != null ? forgotPhoneField.getText().trim() : "";
-        String otpCode = forgotOtpField.getText() != null ? forgotOtpField.getText().trim() : "";
-        String newPassword = forgotNewPasswordField.getText() != null ? forgotNewPasswordField.getText() : "";
-        String confirmPassword = forgotConfirmPasswordField.getText() != null ? forgotConfirmPasswordField.getText() : "";
-
-        if (phone.isEmpty() || otpCode.isEmpty() || newPassword.isEmpty() || confirmPassword.isEmpty()) {
-            showError(forgotStatusLabel, "Vui lòng nhập đầy đủ thông tin");
+        String otp = forgotOtpField.getText() != null ? forgotOtpField.getText().trim() : "";
+        String newPass = forgotNewPasswordField.getText();
+        String confirmPass = forgotConfirmPasswordField.getText();
+        String identifier = forgotPhoneField.getText() != null ? forgotPhoneField.getText().trim() : "";
+        if (otp.isBlank()) {
+            showError(forgotStatusLabel, "Vui lòng nhập mã OTP");
             return;
         }
-        if (!newPassword.equals(confirmPassword)) {
-            showError(forgotStatusLabel, "Mật khẩu mới xác nhận không trùng khớp");
+        if (newPass == null || newPass.isBlank() || !newPass.equals(confirmPass)) {
+            showError(forgotStatusLabel, "Mật khẩu mới không khớp hoặc bị trống");
             return;
         }
-        if (newPassword.length() < 8) {
-            showError(forgotStatusLabel, "Mật khẩu mới phải từ 8 ký tự");
-            return;
-        }
-        if (userLoginService != null) {
-            boolean success = userLoginService.resetPassword(phone, otpCode, newPassword, sharedOtpService);
-            if (success) {
-                Platform.runLater(() -> {
-                    phoneField.setText(phone);
-                    passwordField.setText(newPassword);
-                    clearStatusLabels();
-                    showInfoAlert("Đổi mật khẩu thành công", "Mật khẩu đã được cập nhật thành công vui lòng đăng nhập");
-                    showLoginTab();
-                });
-            } else {
-                showError(forgotStatusLabel, "Đặt lại mật khẩu thất bại mã OTP không đúng hết hạn hoặc tài khoản không hợp lệ");
-            }
-        } else {
-            showError(forgotStatusLabel, "Lỗi kết nối cơ sở dữ liệu vui lòng thử lại sau");
+        if (clientLoginService != null && clientLoginService.getChatClient() != null) {
+            clientLoginService.getChatClient().sendForgotReset(identifier, otp, newPass);
         }
     }
 
@@ -562,37 +514,33 @@ public class LoginController {
             return;
         }
 
-        if (userRegisterService == null) {
-            showError(regStatusLabel, "Không thể kết nối dịch vụ tài khoản");
-            return;
-        }
-        String avatarType = customAvatarPath != null ? "custom" : regAvatarChoiceBox.getValue();
-        String avatarPath = customAvatarPath != null ? customAvatarPath : avatarType + ".jpg";
-        RegisterRequest request = new RegisterRequest(username, phone, email, password, avatarType, avatarPath);
+        final String host = "127.0.0.1";
+        final int port = 8080;
         setRegistrationBusy(true);
-        regStatusLabel.setStyle("-fx-text-fill: #0068ff;");
-        regStatusLabel.setText("loading...");
-        AccountTaskRunner.run(() -> userRegisterService.register(request), response -> {
-            setRegistrationBusy(false);
+        if (regStatusLabel != null) regStatusLabel.setText("");
 
-            if (!response.isSuccess()) {
-                showError(regStatusLabel, response.getMessage());
-                return;
+        if (clientLoginService == null || clientLoginService.getChatClient() == null) {
+            clientLoginService = new ClientLoginService();
+        }
+
+        Thread thread = new Thread(() -> {
+            try {
+                if (!clientLoginService.getChatClient().isConnected()) {
+                    clientLoginService.getChatClient().connectWithoutHello(host, port, createAuthListener());
+                }
+                vn.edu.ut.udm08.shared.dto.RegisterInitRequest req = new vn.edu.ut.udm08.shared.dto.RegisterInitRequest(
+                    username, phone, email, password, "PRESET", regAvatarChoiceBox.getValue()
+                );
+                clientLoginService.getChatClient().sendRegisterInit(req);
+            } catch (Exception e) {
+                Platform.runLater(() -> {
+                    setRegistrationBusy(false);
+                    showError(regStatusLabel, "Không thể kết nối Server: " + e.getMessage());
+                });
             }
-            currentRegistrationId = response.getRegistrationId();
-            currentRegistrationEmail = email;
-            currentRegistrationPhone = phone;
-            regPasswordField.clear();
-            regConfirmPasswordField.clear();
-            regStatusLabel.setText("");
-            if (otpTargetLabel != null) {
-                otpTargetLabel.setText("Nhập mã OTP gồm 6 chữ số đã được gửi tới " + email);
-            }
-            showOtpPane();
-                }, message -> {
-            setRegistrationBusy(false);
-                showError(regStatusLabel, message);
-            });
+        });
+        thread.setDaemon(true);
+        thread.start();
     }
     private void setRegistrationBusy(boolean busy) {
         registerPane.setDisable(busy);
@@ -623,6 +571,7 @@ public class LoginController {
                 chatController.updateOnlineUsers(pendingUserList);
             }
             Stage stage = (Stage) loginBtn.getScene().getWindow();
+            this.activeStage = stage;
             stage.setTitle("UDM08 Chat - " + username);
             stage.addEventHandler(WindowEvent.WINDOW_HIDDEN, event -> chatController.disposeSidebar());
             stage.setScene(chatScene);
@@ -638,8 +587,8 @@ public class LoginController {
             clientLoginService.disconnect();
         }
 
-        Stage stage = null;
-        if (loginBtn != null && loginBtn.getScene() != null) {
+        Stage stage = activeStage;
+        if (stage == null && loginBtn != null && loginBtn.getScene() != null) {
             stage = (Stage) loginBtn.getScene().getWindow();
         }
 

@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.function.Consumer;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
 import vn.edu.ut.udm08.shared.model.User;
+import vn.edu.ut.udm08.shared.validation.UsernameValidator;
 import vn.edu.ut.udm08.shared.protocol.JsonUtil;
 
 public class ClientSession implements Runnable {
@@ -17,11 +18,12 @@ public class ClientSession implements Runnable {
     public static final String ANONYMOUS_USER_ID = "anonymous";
 
     private final Socket socket;
+    private final String sessionId;
 
     private BufferedReader reader;
     private PrintWriter writer;
-    private User user;
-    private String username;
+    private volatile User user;
+    private volatile String username;
     private String avatarId;
     private Consumer<ProtocolMessage> messageHandler;
     private Runnable disconnectHandler;
@@ -30,6 +32,7 @@ public class ClientSession implements Runnable {
 
     private ClientSession(Socket socket) {
         this.socket = socket;
+        this.sessionId = java.util.UUID.randomUUID().toString();
     }
 
     public static ClientSession createAnonymous(Socket socket) {
@@ -103,7 +106,7 @@ public class ClientSession implements Runnable {
 
         this.user = user;
         this.username = user.getUsername();
-        this.avatarId = user.getAvatarType() != null && !user.getAvatarType().isBlank() ? user.getAvatarType() : user.getAvatarPath();
+        this.avatarId = user.getAvatarPath();
         if (this.avatarId == null) {
             this.avatarId = "default";
         }
@@ -126,10 +129,13 @@ public class ClientSession implements Runnable {
 
         this.username = username;
         this.avatarId = avatarId;
-
         return true;
     }
-
+    public void unauthenticate() {
+        this.user = null;
+        this.username = null;
+        this.avatarId = null;
+    }
     public ProtocolMessage readMessage() throws IOException {
         if (!isConnected()) {
             throw new IOException("Socket mat ket noi");
@@ -139,16 +145,21 @@ public class ClientSession implements Runnable {
             reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
         }
 
-        String json = reader.readLine();
+        String json = vn.edu.ut.udm08.shared.protocol.JsonLineReader.read(reader);
 
         if (json == null) {
             return null;
         }
 
-        return JsonUtil.fromJson(json);
+        try {
+            return JsonUtil.fromJson(json);
+        } catch (IOException e) {
+            sendError("INVALID_MESSAGE", "Invalid JSON frame");
+            throw e;
+        }
     }
 
-    public void sendMessage(ProtocolMessage message) throws IOException {
+    public synchronized void sendMessage(ProtocolMessage message) throws IOException {
         if (message == null) {
             throw new IllegalArgumentException("Message != null");
         }
@@ -161,7 +172,10 @@ public class ClientSession implements Runnable {
             writer = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
         }
 
-        writer.println(JsonUtil.toJson(message));
+        vn.edu.ut.udm08.shared.protocol.SocketWrites.line(socket, writer, JsonUtil.toJson(message), 15000);
+        java.util.logging.Logger.getLogger(ClientSession.class.getName()).info(
+            "RESPONSE session=" + sessionId + " type=" + message.type +
+            (message.errorCode == null ? "" : " code=" + message.errorCode));
 
         if (writer.checkError()) {
             throw new IOException("Khong the gui tin nhan");
@@ -169,7 +183,11 @@ public class ClientSession implements Runnable {
     }
 
     public void sendError(String errorCode, String errorMessage) {
+        sendError(null, errorCode, errorMessage);
+    }
+    public void sendError(String requestId, String errorCode, String errorMessage) {
         ProtocolMessage msg = new ProtocolMessage(vn.edu.ut.udm08.shared.model.MessageType.ERROR);
+        msg.requestId = requestId;
         msg.sender = "SERVER";
         msg.errorCode = errorCode;
         msg.errorMessage = errorMessage;
@@ -179,6 +197,25 @@ public class ClientSession implements Runnable {
         } catch (IOException ignored) {
         }
     }
+    public void kick(String reason) {
+        ProtocolMessage msg = new ProtocolMessage(vn.edu.ut.udm08.shared.model.MessageType.SESSION_KICKED);
+        msg.sender = "SERVER";
+        msg.errorCode = "SESSION_KICKED";
+        msg.errorMessage = reason != null ? reason : "Tài khoản của bạn vừa đăng nhập ở một thiết bị khác";
+        msg.timestamp = System.currentTimeMillis();
+        try {
+            sendMessage(msg);
+            if (writer != null) {
+                writer.flush();
+            }
+        } catch (IOException ignored) {
+        }
+        unauthenticate();
+        java.util.concurrent.CompletableFuture.delayedExecutor(500, java.util.concurrent.TimeUnit.MILLISECONDS).execute(this::close);
+    }
+    public String getSessionId() {
+        return sessionId;
+    }
 
     public boolean isConnected() {
         return socket.isConnected() && !socket.isClosed();
@@ -186,6 +223,14 @@ public class ClientSession implements Runnable {
 
     public void close() {
         running = false;
+
+        try {
+            if (socket != null && !socket.isClosed()) {
+                socket.close();
+            }
+        }
+        catch (IOException ignored) {
+        }
 
         try {
             if (reader != null) {
@@ -200,14 +245,6 @@ public class ClientSession implements Runnable {
         if (writer != null) {
             writer.close();
             writer = null;
-        }
-
-        try {
-            if (socket != null && !socket.isClosed()) {
-                socket.close();
-            }
-        }
-        catch (IOException ignored) {
         }
     }
 
@@ -231,5 +268,14 @@ public class ClientSession implements Runnable {
 
     public User getUser() {
         return user;
+    }
+
+    public void setUser(User user) {
+        if (user != null) {
+            this.user = user;
+            if (this.username == null || this.username.isBlank()) {
+                this.username = user.getUsername();
+            }
+        }
     }
 }

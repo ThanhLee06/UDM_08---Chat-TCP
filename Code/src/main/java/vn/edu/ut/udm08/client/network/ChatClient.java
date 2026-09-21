@@ -96,6 +96,76 @@ public class ChatClient {
         sendRawMessage(JsonUtil.toJson(helloMessage));
     }
 
+    public void connectAndAuthLogin(String host, int port, String usernameOrPhone, String password, ChatListener listener) throws IOException {
+        connectWithoutHello(host, port, listener);
+        this.username = usernameOrPhone;
+        sendAuthLogin(usernameOrPhone, password);
+    }
+
+    public void connectWithoutHello(String host, int port, ChatListener listener) throws IOException {
+        if (isConnected()) {
+            disconnect();
+        }
+        sessionEpoch.incrementAndGet();
+        this.socket = new Socket(host, port);
+        this.reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+        this.writer = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
+        this.listener = listener;
+
+        this.receiver = new ChatReceiver(this, reader, listener);
+        Thread receiverThread = new Thread(this.receiver, "ChatReceiverThread");
+        receiverThread.setDaemon(true);
+        receiverThread.start();
+    }
+
+    public void sendAuthLogin(String usernameOrPhone, String password) {
+        ProtocolMessage msg = new ProtocolMessage(MessageType.AUTH_LOGIN);
+        msg.requestId = UUID.randomUUID().toString();
+        msg.timestamp = System.currentTimeMillis();
+        msg.content = JsonUtil.toJson(new vn.edu.ut.udm08.shared.dto.AuthLoginRequest(usernameOrPhone, password));
+        sendRawMessage(JsonUtil.toJson(msg));
+    }
+
+    public void sendRegisterInit(vn.edu.ut.udm08.shared.dto.RegisterInitRequest req) {
+        ProtocolMessage msg = new ProtocolMessage(MessageType.AUTH_REGISTER_INIT);
+        msg.requestId = UUID.randomUUID().toString();
+        msg.timestamp = System.currentTimeMillis();
+        msg.content = JsonUtil.toJson(req);
+        sendRawMessage(JsonUtil.toJson(msg));
+    }
+
+    public void sendVerifyOtp(String registrationId, String otpCode) {
+        ProtocolMessage msg = new ProtocolMessage(MessageType.AUTH_REGISTER_VERIFY_OTP);
+        msg.requestId = UUID.randomUUID().toString();
+        msg.timestamp = System.currentTimeMillis();
+        msg.content = JsonUtil.toJson(new vn.edu.ut.udm08.shared.dto.RegisterOtpVerifyRequest(registrationId, otpCode));
+        sendRawMessage(JsonUtil.toJson(msg));
+    }
+
+    public void sendResendOtp(String registrationId) {
+        ProtocolMessage msg = new ProtocolMessage(MessageType.AUTH_REGISTER_RESEND_OTP);
+        msg.requestId = UUID.randomUUID().toString();
+        msg.timestamp = System.currentTimeMillis();
+        msg.content = registrationId;
+        sendRawMessage(JsonUtil.toJson(msg));
+    }
+
+    public void sendForgotInit(String phoneOrEmail) {
+        ProtocolMessage msg = new ProtocolMessage(MessageType.AUTH_FORGOT_INIT);
+        msg.requestId = UUID.randomUUID().toString();
+        msg.timestamp = System.currentTimeMillis();
+        msg.content = JsonUtil.toJson(new vn.edu.ut.udm08.shared.dto.ForgotInitRequest(phoneOrEmail));
+        sendRawMessage(JsonUtil.toJson(msg));
+    }
+
+    public void sendForgotReset(String resetId, String otpCode, String newPassword) {
+        ProtocolMessage msg = new ProtocolMessage(MessageType.AUTH_FORGOT_RESET);
+        msg.requestId = UUID.randomUUID().toString();
+        msg.timestamp = System.currentTimeMillis();
+        msg.content = JsonUtil.toJson(new vn.edu.ut.udm08.shared.dto.ForgotResetRequest(resetId, otpCode, newPassword));
+        sendRawMessage(JsonUtil.toJson(msg));
+    }
+
     public void sendRawMessage(String rawMessage) {
         if (writer != null) {
             writer.println(rawMessage);

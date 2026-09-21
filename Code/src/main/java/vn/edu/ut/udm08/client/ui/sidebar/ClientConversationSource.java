@@ -35,4 +35,7 @@ public final class ClientConversationSource implements IConversationSource {
         });
         return result;
     }
+    public ChatClient getClient() {
+        return client;
+    }
 }

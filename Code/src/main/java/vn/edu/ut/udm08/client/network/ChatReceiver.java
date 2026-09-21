@@ -68,7 +68,14 @@ public class ChatReceiver implements Runnable {
 
         switch (message.type) {
             case HELLO_OK:
+            case AUTH_LOGIN_OK:
                 listener.onLoginSuccess(message);
+                break;
+            case AUTH_REGISTER_OTP_REQUIRED:
+            case AUTH_REGISTER_OK:
+            case AUTH_FORGOT_OTP_REQUIRED:
+            case AUTH_FORGOT_OK:
+                listener.onMessageReceived(message);
                 break;
             case USER_LIST:
                 listener.onUserListUpdated(message.users != null ? message.users : Collections.emptyList());
@@ -127,8 +134,9 @@ public class ChatReceiver implements Runnable {
                 }
                 break;
             case SESSION_EXPIRED:
+            case SESSION_KICKED:
                 if (client != null) {
-                    client.handleSessionExpired(message.errorCode, message.errorMessage, listener);
+                    client.handleSessionExpired(message.errorCode != null ? message.errorCode : "KICKED", message.errorMessage != null ? message.errorMessage : "Tài khoản được đăng nhập từ thiết bị khác", listener);
                 } else {
                     listener.onSessionExpired(message.errorCode, message.errorMessage);
                 }

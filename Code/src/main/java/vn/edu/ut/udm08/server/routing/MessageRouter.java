@@ -12,21 +12,30 @@ import java.util.List;
 public class MessageRouter implements IMessageRouter {
     private final OnlineUserRegistry registry;
     private final IConversationRegistry conversationRegistry;
+    private final vn.edu.ut.udm08.server.service.IChatStorageService chatStorageService;
+    private final vn.edu.ut.udm08.server.repository.IConversationDao conversationDao;
+    private final vn.edu.ut.udm08.server.repository.IUserRepository userRepository;
+    private vn.edu.ut.udm08.server.repository.IMessageDao messageDao;
 
     public MessageRouter(OnlineUserRegistry registry) {
-        if (registry == null) {
-            throw new IllegalArgumentException("Registry must not be null!");
-        }
-        this.registry = registry;
-        this.conversationRegistry = null;
+        this(registry, null);
     }
     public MessageRouter(IConversationRegistry conversationRegistry) {
-        this.registry = null;
-        this.conversationRegistry = conversationRegistry;
+        this(null, conversationRegistry);
     }
     public MessageRouter(OnlineUserRegistry registry, IConversationRegistry conversationRegistry) {
+        this(registry, conversationRegistry, new vn.edu.ut.udm08.server.config.DatabaseConnectionFactory());
+    }
+    public MessageRouter(OnlineUserRegistry registry, IConversationRegistry conversationRegistry, vn.edu.ut.udm08.server.config.DatabaseConnectionFactory dbFactory) {
+        this(registry, conversationRegistry, new vn.edu.ut.udm08.server.service.ChatStorageService(dbFactory), new vn.edu.ut.udm08.server.repository.ConversationDao(dbFactory), new vn.edu.ut.udm08.server.repository.UserRepository(dbFactory));
+        this.messageDao = new vn.edu.ut.udm08.server.repository.MessageDao(dbFactory);
+    }
+    public MessageRouter(OnlineUserRegistry registry, IConversationRegistry conversationRegistry, vn.edu.ut.udm08.server.service.IChatStorageService chatStorageService, vn.edu.ut.udm08.server.repository.IConversationDao conversationDao, vn.edu.ut.udm08.server.repository.IUserRepository userRepository) {
         this.registry = registry;
         this.conversationRegistry = conversationRegistry;
+        this.chatStorageService = chatStorageService;
+        this.conversationDao = conversationDao;
+        this.userRepository = userRepository;
     }
 
     // Xu ly dinh tuyen tin nhan CHAT rieng tu nguoi gui den nguoi nhan
@@ -53,6 +62,15 @@ public class MessageRouter implements IMessageRouter {
                 return;
             }
 
+            if (convId == null || convId.isBlank()) {
+                if ("PUBLIC".equalsIgnoreCase(targetUser) || ConvId.isPublicRoom(targetUser)) {
+                    convId = ConvId.PUBLIC_ROOM_ID;
+                } else {
+                    convId = ConvId.forDm(senderSession.getUsername(), targetUser);
+                }
+                msg.convId = convId;
+            }
+
             // 4. Kiem tra noi dung tin nhan (content) khong duoc rong hoac qua dai (> 5000 ky tu)
             if (msg.content == null || msg.content.trim().isEmpty()) {
                 sendErrorMessage(senderSession, msg.messageId, "INVALID_CONTENT", "Noi dung tin nhan khong duoc de trong");
@@ -70,6 +88,29 @@ public class MessageRouter implements IMessageRouter {
                 }
             }
 
+            vn.edu.ut.udm08.shared.model.User senderUser = getCurrentUser(senderSession);
+            if (ConvId.isDm(convId)) {
+                String other = ConvId.getOtherUser(convId, senderSession.getUsername());
+                if (other == null || (targetUser != null && !targetUser.equals(other))) {
+                    sendErrorMessage(senderSession, msg.messageId, "NOT_A_MEMBER", "Invalid conversation participants");
+                    return;
+                }
+                if (userRepository != null && userRepository.findByUsername(other).isEmpty()) {
+                    sendErrorMessage(senderSession, msg.messageId, "USER_NOT_FOUND", "Recipient does not exist");
+                    return;
+                }
+                targetUser = other;
+                ensureDmConversation(convId, senderSession.getUsername(), targetUser, senderUser);
+            }
+            if (msg.messageId == null || msg.messageId.isBlank() || msg.messageId.length() > 128) {
+                sendErrorMessage(senderSession, msg.messageId, "INVALID_MESSAGE_ID", "A message ID is required");
+                return;
+            }
+            msg.timestamp = System.currentTimeMillis();
+            msg.avatarId = senderSession.getAvatarId();
+            msg.replyTo = msg.replyToMessageId != null ? msg.replyToMessageId : msg.replyTo;
+            if (messageDao != null && !validateReferences(senderSession, msg)) return;
+
             if (msg.replyTo != null) {
                 if (msg.replyTo.isBlank()) {
                     sendErrorMessage(senderSession, msg.messageId, "INVALID_REPLY_TARGET", "Tin goc khong ton tai hoac khong thuoc hoi thoai nay");
@@ -80,8 +121,9 @@ public class MessageRouter implements IMessageRouter {
                 }
             }
 
-            if (msg.fwdFrom != null) {
-                if (msg.fwdFrom.isBlank()) {
+            String fwdSource = msg.fwdFrom != null ? msg.fwdFrom : (msg.forwardFromConvId != null ? msg.forwardFromConvId : msg.forwardFromMessageId);
+            if (fwdSource != null) {
+                if (fwdSource.isBlank()) {
                     sendErrorMessage(senderSession, msg.messageId, "INVALID_FORWARD_SOURCE", "Tin nguon khong ton tai hoac khong co quyen doc");
                     return;
                 }
@@ -90,34 +132,32 @@ public class MessageRouter implements IMessageRouter {
                 }
             }
 
+            vn.edu.ut.udm08.server.model.ChatMessage chatMsg = new vn.edu.ut.udm08.server.model.ChatMessage(
+                    msg.messageId,
+                    msg.convId,
+                    senderSession.getUsername(),
+                    msg.content,
+                    msg.timestamp != null ? msg.timestamp : System.currentTimeMillis()
+            );
+            chatMsg.setKind(msg.kind != null ? msg.kind : "text");
+            chatMsg.setReplyToMessageId(msg.replyToMessageId != null ? msg.replyToMessageId : msg.replyTo);
+            chatMsg.setForwardFromMessageId(msg.forwardFromMessageId != null ? msg.forwardFromMessageId : msg.fwdFrom);
+            chatMsg.setForwardFromConvId(msg.forwardFromConvId);
+
+            if (chatStorageService != null) {
+                chatStorageService.saveMessageWithTransaction(chatMsg);
+            }
+
             // 5. Tim ClientSession cua nguoi nhan trong OnlineUserRegistry
             List<ClientSession> targets = findTargetSessions(senderSession, convId, targetUser);
-            List<ClientSession> recipients = new ArrayList<>();
-            for (ClientSession session : targets) {
-                if (session != null && session.isConnected() && !session.equals(senderSession)) {
-                    recipients.add(session);
+
+            for (ClientSession recipient : targets) {
+                if (recipient != null && recipient.isConnected() && !recipient.equals(senderSession)) {
+                    try {
+                        recipient.sendMessage(msg);
+                    } catch (Exception ignored) {
+                    }
                 }
-            }
-
-            if (recipients.isEmpty()) {
-                // Nguoi nhan khong ton tai hoac da offline
-                sendErrorMessage(senderSession, msg.messageId, "USER_OFFLINE", "Nguoi nhan khong ton tai hoac da offline trong hoi thoai");
-                return;
-            }
-
-            // 6. Chuyen tiep nguyen ven goi tin CHAT sang nguoi nhan
-            boolean anyDelivered = false;
-            for (ClientSession recipient : recipients) {
-                try {
-                    recipient.sendMessage(msg);
-                    anyDelivered = true;
-                } catch (Exception ignored) {
-                }
-            }
-
-            if (!anyDelivered) {
-                sendErrorMessage(senderSession, msg.messageId, "DELIVERY_FAILED", "Khong the gui tin nhan toi hoi thoai");
-                return;
             }
 
             // 7. Phan hoi goi tin CHAT_OK ve cho nguoi gui xac nhan da toi dich
@@ -136,6 +176,260 @@ public class MessageRouter implements IMessageRouter {
             sendErrorMessage(senderSession, msg != null ? msg.messageId : null, "ERROR", "Loi he thong dinh tuyen");
         }
     }
+
+    public void handleConversationListRequest(ClientSession session, ProtocolMessage msg) {
+        try {
+            vn.edu.ut.udm08.shared.model.User user = getCurrentUser(session);
+            if (user == null || user.getId() == null) {
+                sendErrorMessage(session, msg != null ? msg.requestId : null, "UNAUTHORIZED", "Chua dang nhap");
+                return;
+            }
+
+            List<vn.edu.ut.udm08.server.model.Conversation> dbConvs = conversationDao != null ? conversationDao.getInboxForUser(user.getId()) : List.of();
+            List<vn.edu.ut.udm08.shared.model.ConversationSummary> summaries = new ArrayList<>();
+            for (vn.edu.ut.udm08.server.model.Conversation c : dbConvs) {
+                vn.edu.ut.udm08.shared.model.ConversationSummary summary = new vn.edu.ut.udm08.shared.model.ConversationSummary();
+                summary.convId = c.getConvId();
+                summary.chatType = c.getType();
+                if (ConvId.isPublicRoom(c.getConvId())) {
+                    summary.displayName = "Phòng chung";
+                    summary.avatar = "default";
+                } else if (ConvId.isDm(c.getConvId())) {
+                    String other = ConvId.getOtherUser(c.getConvId(), user.getUsername());
+                    summary.displayName = (other != null && !other.isBlank()) ? other : (c.getName() != null ? c.getName() : "Người dùng");
+                    summary.avatar = "default";
+                    if (other != null && userRepository != null) {
+                        userRepository.findByUsername(other).ifPresent(peer -> summary.avatar = peer.getAvatarPath());
+                    }
+                } else {
+                    summary.displayName = c.getName() != null ? c.getName() : c.getConvId();
+                    summary.avatar = "default";
+                }
+                summary.lastMessage = c.getLastMessagePreview();
+                summary.lastActivity = c.getLastActivity();
+                summaries.add(summary);
+            }
+
+            ProtocolMessage response = new ProtocolMessage(MessageType.CONVERSATION_LIST_RESPONSE);
+            response.requestId = msg != null ? msg.requestId : null;
+            response.sender = "SERVER";
+            response.conversations = summaries;
+            response.timestamp = System.currentTimeMillis();
+
+            session.sendMessage(response);
+        } catch (Exception e) {
+            System.err.println("Loi xu ly CONVERSATION_LIST_REQUEST: " + e.getMessage());
+            sendErrorMessage(session, msg != null ? msg.requestId : null, "ERROR", "Loi tai danh sach hoi thoai");
+        }
+    }
+
+    public void handleHistoryRequest(ClientSession session, ProtocolMessage msg) {
+        try {
+            vn.edu.ut.udm08.shared.model.User user = getCurrentUser(session);
+            if (user == null) {
+                sendErrorMessage(session, msg != null ? msg.requestId : null, "UNAUTHORIZED", "Chua dang nhap");
+                return;
+            }
+
+            String convId = msg != null ? msg.convId : null;
+            if (convId == null || convId.isBlank()) {
+                sendErrorMessage(session, msg != null ? msg.requestId : null, "INVALID_TARGET", "Thieu convId");
+                return;
+            }
+            if (!canRead(user, convId)) {
+                sendErrorMessage(session, msg.requestId, "NOT_A_MEMBER", "No access to this conversation");
+                return;
+            }
+            if (msg.limit != null && (msg.limit < 1 || msg.limit > 100)) {
+                sendErrorMessage(session, msg.requestId, "INVALID_LIMIT", "History limit must be between 1 and 100");
+                return;
+            }
+
+            Long beforeSeq = null;
+            if (msg.cursor != null && !msg.cursor.isBlank()) {
+                try {
+                    beforeSeq = Long.parseLong(msg.cursor);
+                } catch (NumberFormatException invalidCursor) {
+                    sendErrorMessage(session, msg.requestId, "INVALID_CURSOR", "Invalid history cursor");
+                    return;
+                }
+            }
+            int limit = (msg.limit != null && msg.limit > 0) ? msg.limit : 30;
+
+            vn.edu.ut.udm08.server.model.MessagePagedResult paged = conversationDao != null ? conversationDao.getMessages(convId, beforeSeq, limit) : new vn.edu.ut.udm08.server.model.MessagePagedResult(List.of(), null, false);
+            List<ProtocolMessage> messageList = new ArrayList<>();
+            for (vn.edu.ut.udm08.server.model.ChatMessage row : paged.getMessages()) {
+                ProtocolMessage m = new ProtocolMessage(MessageType.CHAT);
+                m.messageId = row.getMessageId();
+                m.convId = row.getConvId();
+                m.sender = row.getSenderUsername();
+                m.content = row.getContent();
+                m.timestamp = row.getTimestamp();
+                m.kind = row.getKind();
+                m.replyToMessageId = row.getReplyToMessageId();
+                m.forwardFromMessageId = row.getForwardFromMessageId();
+                m.forwardFromConvId = row.getForwardFromConvId();
+                if (messageDao != null && m.replyToMessageId != null) {
+                    messageDao.findByMessageId(m.replyToMessageId).ifPresent(original -> {
+                        if (convId.equals(original.getConvId())) {
+                            m.replyToSender = original.getSenderUsername();
+                            m.replyToContent = original.getContent();
+                        }
+                    });
+                }
+                if (messageDao != null && m.forwardFromMessageId != null) {
+                    messageDao.findByMessageId(m.forwardFromMessageId).ifPresent(original -> m.forwardedFromSender = original.getSenderUsername());
+                }
+                if (userRepository != null) userRepository.findByUsername(m.sender).ifPresent(sender -> m.avatarId = sender.getAvatarPath());
+                if (row.getForwardFromMessageId() != null || "forward".equalsIgnoreCase(row.getKind())) {
+                    m.isForwarded = true;
+                }
+                messageList.add(m);
+            }
+
+            ProtocolMessage response = new ProtocolMessage(MessageType.HISTORY_RESPONSE);
+            response.requestId = msg != null ? msg.requestId : null;
+            response.convId = convId;
+            response.sender = "SERVER";
+            response.messages = messageList;
+            response.nextCursor = paged.getNextCursor() != null ? String.valueOf(paged.getNextCursor()) : null;
+            response.hasMore = paged.isHasMore();
+            response.timestamp = System.currentTimeMillis();
+
+            session.sendMessage(response);
+        } catch (Exception e) {
+            System.err.println("Loi xu ly HISTORY_REQUEST: " + e.getMessage());
+            sendErrorMessage(session, msg != null ? msg.requestId : null, "ERROR", "Loi tai lich su tin nhan");
+        }
+    }
+
+    public void handleOpenDmRequest(ClientSession session, ProtocolMessage msg) {
+        try {
+            vn.edu.ut.udm08.shared.model.User user = getCurrentUser(session);
+            if (user == null || user.getId() == null) {
+                sendErrorMessage(session, msg != null ? msg.requestId : null, "UNAUTHORIZED", "Chua dang nhap");
+                return;
+            }
+
+            String targetUserIdOrName = msg != null ? msg.targetUserId : null;
+            if (targetUserIdOrName == null || targetUserIdOrName.isBlank()) {
+                sendErrorMessage(session, msg != null ? msg.requestId : null, "INVALID_TARGET", "Thieu targetUserId");
+                return;
+            }
+
+            vn.edu.ut.udm08.shared.model.User targetUser = userRepository != null ? userRepository.findByUsername(targetUserIdOrName).orElse(null) : null;
+            if (targetUser == null && userRepository != null) {
+                try {
+                    long tid = Long.parseLong(targetUserIdOrName);
+                    targetUser = userRepository.findById(tid).orElse(null);
+                } catch (Exception ignored) {
+                }
+            }
+
+            if (targetUser == null) {
+                sendErrorMessage(session, msg != null ? msg.requestId : null, "USER_NOT_FOUND", "Khong tim thay nguoi dung");
+                return;
+            }
+
+            String convId = ConvId.forDm(user.getUsername(), targetUser.getUsername());
+            ensureDmConversation(convId, user.getUsername(), targetUser.getUsername(), user);
+
+            vn.edu.ut.udm08.shared.model.ConversationSummary summary = new vn.edu.ut.udm08.shared.model.ConversationSummary();
+            summary.convId = convId;
+            summary.chatType = "DM";
+            summary.displayName = targetUser.getUsername();
+            summary.avatar = targetUser.getAvatarPath();
+
+            ProtocolMessage response = new ProtocolMessage(MessageType.OPEN_DM_RESPONSE);
+            response.requestId = msg != null ? msg.requestId : null;
+            response.sender = "SERVER";
+            response.conversation = summary;
+            response.timestamp = System.currentTimeMillis();
+
+            session.sendMessage(response);
+        } catch (Exception e) {
+            System.err.println("Loi xu ly OPEN_DM_REQUEST: " + e.getMessage());
+            sendErrorMessage(session, msg != null ? msg.requestId : null, "ERROR", "Loi mo hoi thoai rieng");
+        }
+    }
+
+    private void ensureDmConversation(String convId, String senderUsername, String targetUser, vn.edu.ut.udm08.shared.model.User senderUser) {
+        if (conversationDao == null || convId == null) return;
+        if (conversationDao.findById(convId).isPresent()) return;
+
+        vn.edu.ut.udm08.server.model.Conversation conv = new vn.edu.ut.udm08.server.model.Conversation(convId, "DM", null);
+        conversationDao.createConversation(conv);
+
+        if (senderUser != null && senderUser.getId() != null) {
+            conversationDao.addMember(convId, senderUser.getId(), "member");
+        }
+
+        String otherName = (targetUser != null && !targetUser.isBlank() && !"PUBLIC".equalsIgnoreCase(targetUser)) ? targetUser : ConvId.getOtherUser(convId, senderUsername);
+        if (otherName != null && userRepository != null) {
+            userRepository.findByUsername(otherName).ifPresent(otherUser -> {
+                if (otherUser.getId() != null) {
+                    conversationDao.addMember(convId, otherUser.getId(), "member");
+                }
+            });
+        }
+    }
+
+    private vn.edu.ut.udm08.shared.model.User getCurrentUser(ClientSession session) {
+        if (session == null) return null;
+        if (session.getUser() != null) return session.getUser();
+        if (session.getUsername() != null && !session.getUsername().isBlank() && userRepository != null) {
+            vn.edu.ut.udm08.shared.model.User user = userRepository.findByUsername(session.getUsername()).orElse(null);
+            if (user != null) {
+                session.setUser(user);
+            }
+            return user;
+        }
+        return null;
+    }
+
+    private boolean canRead(vn.edu.ut.udm08.shared.model.User user, String convId) {
+        if (user == null || user.getId() == null) return false;
+        if (ConvId.isPublicRoom(convId)) return true;
+        return conversationDao != null && conversationDao.isMember(convId, user.getId());
+    }
+
+    private boolean validateReferences(ClientSession session, ProtocolMessage message) {
+        message.replyToSender = null;
+        message.replyToContent = null;
+        message.forwardedFromSender = null;
+        message.isForwarded = false;
+        message.kind = message.replyTo == null ? "text" : "reply";
+        if (message.replyTo != null) {
+            var original = messageDao.findByMessageId(message.replyTo).orElse(null);
+            if (original == null || !message.convId.equals(original.getConvId())) {
+                sendErrorMessage(session, message.messageId, "INVALID_REPLY_TARGET", "Original message is not in this conversation");
+                return false;
+            }
+            message.replyToMessageId = original.getMessageId();
+            message.replyToSender = original.getSenderUsername();
+            message.replyToContent = original.getContent();
+        }
+        String forwardId = message.forwardFromMessageId != null ? message.forwardFromMessageId : message.fwdFrom;
+        if (forwardId == null && message.forwardFromConvId != null) {
+            sendErrorMessage(session, message.messageId, "INVALID_FORWARD_SOURCE", "Source message ID is required");
+            return false;
+        }
+        if (forwardId != null) {
+            var original = messageDao.findByMessageId(forwardId).orElse(null);
+            if (original == null || !canRead(session.getUser(), original.getConvId())) {
+                sendErrorMessage(session, message.messageId, "INVALID_FORWARD_SOURCE", "Original message is not accessible");
+                return false;
+            }
+            message.forwardFromMessageId = original.getMessageId();
+            message.forwardFromConvId = original.getConvId();
+            message.forwardedFromSender = original.getSenderUsername();
+            message.content = original.getContent();
+            message.isForwarded = true;
+            message.kind = "forward";
+        }
+        return true;
+    }
+
     private List<ClientSession> findTargetSessions(ClientSession senderSession, String convId, String targetUser) {
         List<ClientSession> result = new ArrayList<>();
         if (ConvId.isPublicRoom(convId) || "PUBLIC".equalsIgnoreCase(targetUser)) {
@@ -187,6 +481,7 @@ public class MessageRouter implements IMessageRouter {
         try {
             ProtocolMessage err = new ProtocolMessage(MessageType.ERROR);
             err.messageId = messageId;
+            err.requestId = messageId;
             err.sender = "SERVER";
             err.errorCode = errorCode;
             err.errorMessage = errorMessage;

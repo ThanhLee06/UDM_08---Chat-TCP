@@ -1,7 +1,7 @@
 package vn.edu.ut.udm08.client.controller;
 
 import java.util.regex.Pattern;
-import vn.edu.ut.udm08.server.session.UsernameValidator;
+import vn.edu.ut.udm08.shared.validation.UsernameValidator;
 
 public class RegisterFormValidator {
 

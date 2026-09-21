@@ -1,5 +1,6 @@
 package vn.edu.ut.udm08.server.session;
 import vn.edu.ut.udm08.shared.model.UserProfile;
+import vn.edu.ut.udm08.shared.validation.UsernameValidator;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,11 +24,20 @@ public class OnlineUserRegistry {
     return sessions.get(key);
   }
   public boolean remove(ClientSession session) {
-    if (session == null || !session.isAuthenticated()) {
+    if (session == null) {
         return false;
     }
-    String key = normalizeKey(session.getUsername());
-    return sessions.remove(key, session);
+    String username = session.getUsername();
+    if (username == null || username.isBlank()) {
+        return false;
+    }
+    String key = normalizeKey(username);
+    ClientSession existing = sessions.get(key);
+    if (existing != null && existing.getSessionId() != null && session.getSessionId() != null
+            && existing.getSessionId().equals(session.getSessionId())) {
+        return sessions.remove(key, existing);
+    }
+    return false;
   }
   public List<UserProfile> getOnlineUsers() {
     List<UserProfile> users = new ArrayList<>();
@@ -44,6 +54,9 @@ public class OnlineUserRegistry {
     return result;
   }
   public boolean kickSession(String usernameOrPhone, String reason) {
+    return kickSession(usernameOrPhone, reason, null);
+  }
+  public boolean kickSession(String usernameOrPhone, String reason, ClientSession newSession) {
     if (usernameOrPhone == null || usernameOrPhone.isBlank()) {
         return false;
     }
@@ -60,10 +73,9 @@ public class OnlineUserRegistry {
             }
         }
     }
-    if (targetSession != null) {
+    if (targetSession != null && (newSession == null || (targetSession != newSession && !targetSession.getSessionId().equals(newSession.getSessionId())))) {
         sessions.remove(targetKey, targetSession);
-        targetSession.sendError("FORCE_LOGOUT", reason != null ? reason : "Tài khoản của bạn vừa đăng nhập ở một thiết bị khác.");
-        targetSession.close();
+        targetSession.kick(reason != null ? reason : "Tài khoản của bạn vừa đăng nhập ở một thiết bị khác");
         return true;
     }
     return false;

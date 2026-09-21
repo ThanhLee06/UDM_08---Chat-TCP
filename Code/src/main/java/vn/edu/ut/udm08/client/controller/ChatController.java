@@ -1,7 +1,9 @@
 package vn.edu.ut.udm08.client.controller;
 import vn.edu.ut.udm08.client.ui.sidebar.SidebarController;
+import vn.edu.ut.udm08.client.ui.sidebar.SidebarConversation;
 import vn.edu.ut.udm08.client.ui.sidebar.IConversationSource;
 import vn.edu.ut.udm08.shared.protocol.ConvId;
+import vn.edu.ut.udm08.shared.protocol.ConvType;
 
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -30,6 +32,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
+import javafx.fxml.FXMLLoader;
+import javafx.scene.Scene;
+import javafx.stage.Stage;
+
 public class ChatController {
 
     @FXML private SidebarController sidebarController;
@@ -47,13 +53,14 @@ public class ChatController {
 
     private String currentUsername;
     private UserProfile selectedUser; 
-    //luu lai tin nhan duoc chon de reply
     private ProtocolMessage replyingToMessage;
-    //thanh quote hien dang hien thi 
     private HBox replyBar;
-    //luu tam lich su tin nhan
-     private final java.util.Map<String, ProtocolMessage> messageHistory = new java.util.HashMap<>();
-     private final java.util.Map<String, javafx.scene.Node> messageNodeIndex = new java.util.HashMap<>();
+    private final java.util.Map<String, ProtocolMessage> messageHistory = new java.util.HashMap<>();
+    private final java.util.Map<String, javafx.scene.Node> messageNodeIndex = new java.util.HashMap<>();
+
+    private Long nextCursor;
+    private boolean hasMoreHistory;
+    private boolean isLoadingHistory;
 
     private static final String[] AVATAR_COLORS = {
             "#0068ff", "#00c853", "#ff6d00", "#e91e63",
@@ -70,14 +77,20 @@ public class ChatController {
 
     @FXML
     public void initialize() {
+        sidebarController.setLogoutListener(this::handleLogout);
         sidebarController.setSelectionListener(conversation -> {
-            String other = ConvId.getOtherUser(conversation.getId(), currentUsername);
-            if (other != null) {
+            if (conversation.getType() == ConvType.PUBLIC) {
+                selectPublicRoom();
+            } else if (conversation.getType() == ConvType.GROUP) {
+                selectGroupRoom(conversation);
+            } else {
+                String other = ConvId.getOtherUser(conversation.getId(), currentUsername);
+                if (other == null) {
+                    other = conversation.getName();
+                }
                 this.selectedConvId = conversation.getId();
                 selectUser(new UserProfile(other, conversation.getAvatar()));
                 chatPartnerName.setText(conversation.getName());
-            } else {
-                selectPublicRoom();
             }
         });
 
@@ -88,7 +101,35 @@ public class ChatController {
             }
         });
 
+        messageScrollPane.vvalueProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null && newVal.doubleValue() <= 0.05 && hasMoreHistory && !isLoadingHistory) {
+                loadMoreHistory();
+            }
+        });
+
         showEmptyState();
+    }
+    public void handleLogout() {
+        if (sidebarController != null && sidebarController.getClient() != null) {
+            try {
+                sidebarController.getClient().logout();
+            } catch (Exception ignored) {
+            }
+        }
+        if (sidebarController != null) {
+            sidebarController.dispose();
+        }
+        Platform.runLater(() -> {
+            try {
+                Stage stage = (Stage) messageInput.getScene().getWindow();
+                FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/LoginView.fxml"));
+                Scene loginScene = new Scene(loader.load());
+                stage.setTitle("UDM08 Chat - Đăng nhập");
+                stage.setScene(loginScene);
+                stage.setResizable(false);
+            } catch (Exception ignored) {
+            }
+        });
     }
 
     public void showEmptyState() {
@@ -104,14 +145,37 @@ public class ChatController {
     public void selectPublicRoom() {
         this.selectedUser = null;
         this.selectedConvId = ConvId.PUBLIC_ROOM_ID;
+        if (sidebarController != null) {
+            sidebarController.markAsRead(selectedConvId);
+        }
         chatPartnerName.setText("Phòng chung");
         chatPartnerInitial.setText("#");
         chatPartnerAvatar.setStyle("-fx-background-color: #0068ff;");
         messageContainer.getChildren().clear();
+        messageNodeIndex.clear();
         messageInput.clear();
         messageInput.setDisable(false);
         sendButton.setDisable(false);
         emptyStatePane.setVisible(false);
+        loadInitialHistory();
+    }
+
+    public void selectGroupRoom(SidebarConversation group) {
+        this.selectedUser = null;
+        this.selectedConvId = group.getId();
+        cancelReply();
+        if (sidebarController != null) {
+            sidebarController.markAsRead(selectedConvId);
+        }
+        chatPartnerName.setText(group.getName());
+        chatPartnerInitial.setText(group.getName() != null && !group.getName().isBlank() ? group.getName().substring(0, 1).toUpperCase() : "#");
+        chatPartnerAvatar.setStyle("-fx-background-color: #5e35b1;");
+        messageContainer.getChildren().clear();
+        messageNodeIndex.clear();
+        messageInput.setDisable(false);
+        sendButton.setDisable(false);
+        emptyStatePane.setVisible(false);
+        loadInitialHistory();
     }
 
     public void setCurrentUsername(String username) {
@@ -127,6 +191,113 @@ public class ChatController {
     }
     public void setSendListener(MessageSendListener listener) {
         this.sendListener = listener;
+    }
+
+    private void loadInitialHistory() {
+        String convId = selectedConvId;
+        if (convId == null || sidebarController == null) {
+            return;
+        }
+        vn.edu.ut.udm08.client.network.ChatClient client = sidebarController.getClient();
+        if (client == null || !client.isConnected()) {
+            return;
+        }
+        nextCursor = null;
+        hasMoreHistory = false;
+        isLoadingHistory = true;
+        try {
+            client.requestMessageHistory(convId, 30, null, new vn.edu.ut.udm08.client.network.MessageHistoryCallback() {
+                @Override
+                public void onSuccess(vn.edu.ut.udm08.client.network.MessageHistoryPage page) {
+                    Platform.runLater(() -> {
+                        isLoadingHistory = false;
+                        if (!convId.equals(selectedConvId)) {
+                            return;
+                        }
+                        if (page != null && page.getMessages() != null) {
+                            for (ProtocolMessage message : page.getMessages()) {
+                                boolean isMine = currentUsername != null && currentUsername.equals(message.sender);
+                                addMessageBubble(message, isMine);
+                            }
+                            if (page.getNextCursor() != null && !page.getNextCursor().isBlank()) {
+                                try {
+                                    nextCursor = Long.parseLong(page.getNextCursor());
+                                } catch (Exception e) {
+                                    nextCursor = null;
+                                }
+                            } else {
+                                nextCursor = null;
+                            }
+                            hasMoreHistory = page.hasMore();
+                        }
+                    });
+                }
+
+                @Override
+                public void onFailure(String requestId, String errorCode, String errorMessage) {
+                    Platform.runLater(() -> isLoadingHistory = false);
+                }
+            });
+        } catch (Exception ignored) {
+            isLoadingHistory = false;
+        }
+    }
+
+    private void loadMoreHistory() {
+        String convId = selectedConvId;
+        if (convId == null || !hasMoreHistory || isLoadingHistory || nextCursor == null || sidebarController == null) {
+            return;
+        }
+        vn.edu.ut.udm08.client.network.ChatClient client = sidebarController.getClient();
+        if (client == null || !client.isConnected()) {
+            return;
+        }
+        isLoadingHistory = true;
+        try {
+            client.requestMessageHistory(convId, 30, String.valueOf(nextCursor), new vn.edu.ut.udm08.client.network.MessageHistoryCallback() {
+                @Override
+                public void onSuccess(vn.edu.ut.udm08.client.network.MessageHistoryPage page) {
+                    Platform.runLater(() -> {
+                        isLoadingHistory = false;
+                        if (!convId.equals(selectedConvId)) {
+                            return;
+                        }
+                        if (page != null && page.getMessages() != null) {
+                            double oldHeight = messageContainer.getHeight();
+                            List<ProtocolMessage> olderMessages = page.getMessages();
+                            for (int i = olderMessages.size() - 1; i >= 0; i--) {
+                                ProtocolMessage msg = olderMessages.get(i);
+                                boolean isMine = currentUsername != null && currentUsername.equals(msg.sender);
+                                prependMessageBubble(msg, isMine);
+                            }
+                            if (page.getNextCursor() != null && !page.getNextCursor().isBlank()) {
+                                try {
+                                    nextCursor = Long.parseLong(page.getNextCursor());
+                                } catch (Exception e) {
+                                    nextCursor = null;
+                                }
+                            } else {
+                                nextCursor = null;
+                            }
+                            hasMoreHistory = page.hasMore();
+                            messageScrollPane.layout();
+                            messageContainer.layout();
+                            double newHeight = messageContainer.getHeight();
+                            if (newHeight > oldHeight && newHeight > 0) {
+                                messageScrollPane.setVvalue((newHeight - oldHeight) / newHeight);
+                            }
+                        }
+                    });
+                }
+
+                @Override
+                public void onFailure(String requestId, String errorCode, String errorMessage) {
+                    Platform.runLater(() -> isLoadingHistory = false);
+                }
+            });
+        } catch (Exception ignored) {
+            isLoadingHistory = false;
+        }
     }
 
     public void updateOnlineUsers(List<UserProfile> users) {
@@ -145,6 +316,39 @@ public class ChatController {
         });
     }
 
+    public static String formatMessagePreview(ProtocolMessage message, boolean isMine) {
+        if (message == null || message.content == null || message.content.isBlank()) {
+            return "";
+        }
+        String content = message.content.trim();
+        String prefix = isMine ? "Bạn: " : "";
+        String lower = content.toLowerCase();
+
+        if (message.isForwarded) {
+            return prefix + "[Chuyển tiếp] " + content;
+        }
+        if (content.startsWith("[IMAGE]") || lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".gif")) {
+            return prefix + "[Hình ảnh]";
+        }
+        if (content.startsWith("[VIDEO]") || lower.endsWith(".mp4") || lower.endsWith(".mkv")) {
+            return prefix + "[Video]";
+        }
+        if (content.startsWith("[FILE]")) {
+            String name = content.length() > 6 ? content.substring(6).trim() : "Tập tin";
+            return prefix + "[File] " + name;
+        }
+        if (content.startsWith("[STICKER]")) {
+            return prefix + "[Sticker]";
+        }
+        if (content.startsWith("[CALL]")) {
+            return "Cuộc gọi thoại";
+        }
+        if (content.startsWith("[SYSTEM]") || content.startsWith("[REVOKED]")) {
+            return "Tin nhắn đã được thu hồi";
+        }
+        return prefix + content;
+    }
+
     public void receiveMessage(ProtocolMessage message) {
         Platform.runLater(() -> {
             if (message == null) {
@@ -160,18 +364,25 @@ public class ChatController {
                     convId = ConvId.forDm(currentUsername, message.sender);
                 }
             }
-            if (convId != null && !ConvId.isPublicRoom(convId) && sidebarController != null) {
-                String other = isMine ? message.target : message.sender;
-                if (other != null && !other.isBlank()) {
-                    sidebarController.ensureConversation(convId, other, "avatar1");
-                }
-            }
 
             boolean belongsToCurrentChat = false;
             if (ConvId.isPublicRoom(selectedConvId)) {
                 belongsToCurrentChat = ConvId.isPublicRoom(convId) || "PUBLIC".equalsIgnoreCase(message.target);
             } else if (selectedConvId != null && !selectedConvId.isBlank()) {
                 belongsToCurrentChat = selectedConvId.equalsIgnoreCase(convId);
+            }
+
+            if (convId != null && sidebarController != null) {
+                if (!ConvId.isPublicRoom(convId)) {
+                    String other = isMine ? message.target : message.sender;
+                    if (other != null && !other.isBlank()) {
+                        sidebarController.ensureConversation(convId, other, "avatar1");
+                    }
+                }
+                long ts = message.timestamp != 0 ? message.timestamp : System.currentTimeMillis();
+                String snippet = formatMessagePreview(message, isMine);
+                boolean incrementUnread = !isMine && !belongsToCurrentChat;
+                sidebarController.updateLastMessage(convId, snippet, ts, incrementUnread);
             }
 
             if (belongsToCurrentChat) {
@@ -186,6 +397,9 @@ public class ChatController {
             this.selectedConvId = ConvId.forDm(currentUsername, user.username);
         }
         cancelReply();
+        if (sidebarController != null && selectedConvId != null) {
+            sidebarController.markAsRead(selectedConvId);
+        }
 
         chatPartnerName.setText(user.username);
         chatPartnerInitial.setText(user.username.substring(0, 1).toUpperCase());
@@ -197,6 +411,7 @@ public class ChatController {
         sendButton.setDisable(false);
         messageInput.setDisable(false);
         emptyStatePane.setVisible(false);
+        loadInitialHistory();
     }
 
     @FXML
@@ -218,6 +433,8 @@ public class ChatController {
                 } else if (selectedUser != null) {
                     message.target = selectedUser.username;
                 }
+            } else {
+                message.target = selectedConvId;
             }
         } else if (selectedUser != null) {
             message.convId = ConvId.forDm(currentUsername, selectedUser.username);
@@ -226,11 +443,14 @@ public class ChatController {
         message.content = content;                           
         message.timestamp = System.currentTimeMillis(); 
         if (replyingToMessage != null) {
-        message.replyToMessageId = replyingToMessage.messageId;
-        message.replyToSender = replyingToMessage.sender;
-        message.replyToContent = replyingToMessage.content;
+            message.replyToMessageId = replyingToMessage.messageId;
+            message.replyToSender = replyingToMessage.sender;
+            message.replyToContent = replyingToMessage.content;
         }       
         addMessageBubble(message, true);
+        if (sidebarController != null && message.convId != null) {
+            sidebarController.updateLastMessage(message.convId, formatMessagePreview(message, true), message.timestamp, false);
+        }
         messageInput.clear(); 
         cancelReply();
 
@@ -303,65 +523,59 @@ private void insertEmojiAtCaret(String emoji) {
 
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
 
-    // Tạo 1 bubble tin nhắn (kèm avatar, tên, timestamp) và thêm vào khung chat
-       private void addMessageBubble(ProtocolMessage message, boolean isMine) {
-         if (message.messageId != null) {
+    private HBox createMessageRow(ProtocolMessage message, boolean isMine) {
+        if (message.messageId != null) {
             messageHistory.put(message.messageId, message);
         }
-        Label contentLabel = new Label(message.content);
+        Label contentLabel = new Label(message.content != null ? message.content : "");
         contentLabel.getStyleClass().add("message-bubble-text");
         contentLabel.setWrapText(true);
-         VBox bubble = new VBox(4);
+        VBox bubble = new VBox(4);
         bubble.getStyleClass().add(isMine ? "message-bubble-sent" : "message-bubble-received");
         bubble.setMaxWidth(400);
         bubble.setUserData(message);
-        if (message.isForwarded && message.forwardedFromSender != null)  
-        {
-        Label forwardedLabel = new Label("↪ Đã chuyển tiếp từ " + message.forwardedFromSender);
-        forwardedLabel.getStyleClass().add("forwarded-label");
-        bubble.getChildren().add(forwardedLabel);
+        if ((message.isForwarded || "forward".equalsIgnoreCase(message.kind)) && message.forwardedFromSender != null) {
+            Label forwardedLabel = new Label("↪ Đã chuyển tiếp từ " + message.forwardedFromSender);
+            forwardedLabel.getStyleClass().add("forwarded-label");
+            bubble.getChildren().add(forwardedLabel);
         }
-         if (message.replyToMessageId != null) {
+        if (message.replyToMessageId != null) {
             ProtocolMessage original = messageHistory.get(message.replyToMessageId);
             String quoteText;
-           if (original != null)
-             {
-               quoteText = original.sender + ": " + original.content;
-            } 
-           else if (message.replyToSender != null && message.replyToContent != null) 
-            {
-               quoteText = message.replyToSender + ": " + message.replyToContent;
-           } else 
-            {
-               quoteText = "Tin nhắn gốc không khả dụng";
-         }
-         Label quoteBlock = new Label(quoteText);
+            if (original != null) {
+                quoteText = original.sender + ": " + original.content;
+            } else if (message.replyToSender != null && message.replyToContent != null) {
+                quoteText = message.replyToSender + ": " + message.replyToContent;
+            } else {
+                quoteText = "Tin nhắn gốc không khả dụng";
+            }
+            Label quoteBlock = new Label(quoteText);
             quoteBlock.getStyleClass().add("reply-quote-block");
             quoteBlock.setWrapText(true);
             quoteBlock.setStyle("-fx-cursor: hand;");
             final String targetId = message.replyToMessageId;
-        quoteBlock.setOnMouseClicked(e -> {
-        boolean found = scrollToMessage(targetId);
-        if (!found) {
-            showMessageNotFoundHint(quoteBlock);
-        }
-    });
+            quoteBlock.setOnMouseClicked(e -> {
+                boolean found = scrollToMessage(targetId);
+                if (!found) {
+                    showMessageNotFoundHint(quoteBlock);
+                }
+            });
             bubble.getChildren().add(quoteBlock);
         }
 
         bubble.getChildren().add(contentLabel);
-        
+
         ContextMenu contextMenu = new ContextMenu();
         MenuItem replyItem = new MenuItem("Trả lời");
         replyItem.setOnAction(e -> startReply(message));
-       MenuItem forwardItem = new MenuItem("Chuyển tiếp");
+        MenuItem forwardItem = new MenuItem("Chuyển tiếp");
         forwardItem.setOnAction(e -> openForwardDialog(message));
         contextMenu.getItems().addAll(replyItem, forwardItem);
         bubble.setOnContextMenuRequested(e ->
                 contextMenu.show(bubble, e.getScreenX(), e.getScreenY())
         );
 
-        String timeText = Instant.ofEpochMilli(message.timestamp)
+        String timeText = Instant.ofEpochMilli(message.timestamp != null ? message.timestamp : System.currentTimeMillis())
                 .atZone(ZoneId.systemDefault())
                 .format(TIME_FORMAT);
         Label timeLabel = new Label(timeText);
@@ -377,27 +591,48 @@ private void insertEmojiAtCaret(String emoji) {
             column.getChildren().addAll(bubble, timeLabel);
             row.getChildren().add(column);
         } else {
-            Label initial = new Label(message.sender.substring(0, 1).toUpperCase());
+            String senderName = message.sender != null ? message.sender : "Unknown";
+            Label initial = new Label(senderName.substring(0, 1).toUpperCase());
             initial.getStyleClass().add("avatar-text-small");
 
             StackPane avatar = new StackPane(initial);
             avatar.getStyleClass().add("avatar-circle-small");
-            avatar.setStyle("-fx-background-color: " + avatarColorFor(message.sender) + ";");
+            avatar.setStyle("-fx-background-color: " + avatarColorFor(senderName) + ";");
 
-            Label nameLabel = new Label(message.sender);
+            Label nameLabel = new Label(senderName);
             nameLabel.getStyleClass().add("message-sender-name");
 
             column.getChildren().addAll(nameLabel, bubble, timeLabel);
             row.getChildren().addAll(avatar, column);
         }
-
-        messageContainer.getChildren().add(row);
-         if (message.messageId != null) {
-        messageNodeIndex.put(message.messageId, row);
+        return row;
     }
+
+    private void addMessageBubble(ProtocolMessage message, boolean isMine) {
+        if (message == null) return;
+        if (message.messageId != null && messageNodeIndex.containsKey(message.messageId)) {
+            return;
+        }
+        HBox row = createMessageRow(message, isMine);
+        messageContainer.getChildren().add(row);
+        if (message.messageId != null) {
+            messageNodeIndex.put(message.messageId, row);
+        }
 
         messageScrollPane.layout();
         messageScrollPane.setVvalue(1.0);
+    }
+
+    private void prependMessageBubble(ProtocolMessage message, boolean isMine) {
+        if (message == null) return;
+        if (message.messageId != null && messageNodeIndex.containsKey(message.messageId)) {
+            return;
+        }
+        HBox row = createMessageRow(message, isMine);
+        messageContainer.getChildren().add(0, row);
+        if (message.messageId != null) {
+            messageNodeIndex.put(message.messageId, row);
+        }
     }
      private void startReply(ProtocolMessage message) {
         this.replyingToMessage = message;
@@ -454,8 +689,13 @@ private void forwardMessage(ProtocolMessage original, UserProfile target) {
     forwarded.messageId = UUID.randomUUID().toString();
     forwarded.sender = currentUsername;
     forwarded.target = target.username;
+    forwarded.convId = ConvId.forDm(currentUsername, target.username);
     forwarded.content = original.content;
     forwarded.timestamp = System.currentTimeMillis();
+    forwarded.kind = "forward";
+    forwarded.forwardFromMessageId = original.messageId;
+    forwarded.forwardFromConvId = original.convId;
+    forwarded.fwdFrom = original.messageId;
     forwarded.forwardedFromSender = original.sender;
     forwarded.isForwarded = true;
 

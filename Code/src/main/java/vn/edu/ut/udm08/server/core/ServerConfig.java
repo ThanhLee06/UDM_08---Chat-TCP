@@ -10,9 +10,20 @@ public final class ServerConfig {
     private static final String PORT_KEY = "server.port";
 
     private final int port;
+    private final String dbUrl;
+    private final int dbBusyTimeout;
+    private final int messageMaxLength;
+    private final int historyMaxLimit;
+    private final int searchMaxLength;
+    private int idleTimeoutMs = 300000;
 
-    private ServerConfig(int port) {
+    private ServerConfig(int port, String dbUrl, int dbBusyTimeout, int messageMaxLength, int historyMaxLimit, int searchMaxLength) {
         this.port = port;
+        this.dbUrl = dbUrl;
+        this.dbBusyTimeout = dbBusyTimeout;
+        this.messageMaxLength = messageMaxLength;
+        this.historyMaxLimit = historyMaxLimit;
+        this.searchMaxLength = searchMaxLength;
     }
 
     public static ServerConfig load() {
@@ -31,10 +42,16 @@ public final class ServerConfig {
             throw new IllegalStateException("Failed to load server configuration", e);
         }
 
+        java.nio.file.Path external = java.nio.file.Path.of(System.getProperty("udm08.server.config", "config/server.properties"));
+        if (java.nio.file.Files.exists(external)) {
+            try (InputStream input = java.nio.file.Files.newInputStream(external)) { properties.load(input); }
+            catch (IOException e) { throw new IllegalStateException("Cannot read server configuration", e); }
+        }
+
         return fromProperties(properties);
     }
 
-    static ServerConfig fromProperties(Properties properties) {
+    public static ServerConfig fromProperties(Properties properties) {
         String portValue = properties.getProperty(PORT_KEY);
 
         if (portValue == null || portValue.isBlank()) {
@@ -53,10 +70,51 @@ public final class ServerConfig {
             throw new IllegalStateException("Server port must be between 1 and 65535: " + port);
         }
 
-        return new ServerConfig(port);
+        String dbUrl = properties.getProperty("db.url", "jdbc:sqlite:data/udm08_chat.db").trim();
+        int busyTimeout = parseOrDefault(properties.getProperty("db.busyTimeout"), 5000);
+        int msgMax = parseOrDefault(properties.getProperty("message.maxLength"), 5000);
+        int histMax = parseOrDefault(properties.getProperty("history.maxLimit"), 100);
+        int searchMax = parseOrDefault(properties.getProperty("search.maxLength"), 100);
+
+        ServerConfig config = new ServerConfig(port, dbUrl, busyTimeout, msgMax, histMax, searchMax);
+        config.idleTimeoutMs = parseOrDefault(properties.getProperty("connection.idleTimeout"), 300000);
+        if (config.idleTimeoutMs < 1000 || config.idleTimeoutMs > 3600000) {
+            throw new IllegalStateException("connection.idleTimeout must be between 1000 and 3600000 ms");
+        }
+        return config;
+    }
+
+    private static int parseOrDefault(String val, int def) {
+        if (val == null || val.isBlank()) return def;
+        try {
+            return Integer.parseInt(val.trim());
+        } catch (NumberFormatException e) {
+            return def;
+        }
     }
 
     public int getPort() {
         return port;
+    }
+    public int getIdleTimeoutMs() { return idleTimeoutMs; }
+
+    public String getDbUrl() {
+        return dbUrl;
+    }
+
+    public int getDbBusyTimeout() {
+        return dbBusyTimeout;
+    }
+
+    public int getMessageMaxLength() {
+        return messageMaxLength;
+    }
+
+    public int getHistoryMaxLimit() {
+        return historyMaxLimit;
+    }
+
+    public int getSearchMaxLength() {
+        return searchMaxLength;
     }
 }

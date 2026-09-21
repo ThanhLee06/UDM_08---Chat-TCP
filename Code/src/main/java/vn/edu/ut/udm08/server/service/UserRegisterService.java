@@ -11,7 +11,7 @@ import vn.edu.ut.udm08.server.auth.EmailOtpService;
 import vn.edu.ut.udm08.server.auth.IOtpService;
 import vn.edu.ut.udm08.server.auth.SmtpOtpEmailSender;
 import vn.edu.ut.udm08.server.repository.IUserRepository;
-import vn.edu.ut.udm08.server.session.UsernameValidator;
+import vn.edu.ut.udm08.shared.validation.UsernameValidator;
 import vn.edu.ut.udm08.shared.dto.RegisterRequest;
 import vn.edu.ut.udm08.shared.dto.RegisterResponse;
 import vn.edu.ut.udm08.shared.mapper.UserMapper;
@@ -94,7 +94,12 @@ public class UserRegisterService {
         } catch (IllegalStateException e) {
             return RegisterResponse.fail(e.getMessage());
         }
-        pending.entrySet().removeIf(e -> user.getEmail().equals(e.getValue().getUser().getEmail()));
+        pending.entrySet().removeIf(e -> {
+            User p = e.getValue().getUser();
+            return (user.getEmail() != null && user.getEmail().equalsIgnoreCase(p.getEmail()))
+                || (user.getUsername() != null && user.getUsername().equalsIgnoreCase(p.getUsername()))
+                || (user.getPhoneNumber() != null && user.getPhoneNumber().equals(p.getPhoneNumber()));
+        });
         String id = UUID.randomUUID().toString();
         pending.put(id, new PendingRegistration(user, clock.instant().plus(REGISTRATION_TTL)));
         RegisterResponse response = RegisterResponse.ok("Đã gửi mã xác thực tới " + user.getEmail(), null);
