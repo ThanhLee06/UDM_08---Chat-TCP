@@ -7,6 +7,7 @@ import vn.edu.ut.udm08.shared.protocol.ConvId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -132,6 +133,56 @@ public class InMemoryConversationDao implements ConversationDao {
         String a = userAvatars.get(username);
         if (a != null) return a;
         return userAvatars.get(username.toLowerCase());
+    }
+
+    @Override
+    public Optional<String> findDmBetween(String userId1, String userId2) {
+        if (userId1 == null || userId2 == null || userId1.isBlank() || userId2.isBlank()) {
+            return Optional.empty();
+        }
+        String u1 = userId1.trim();
+        String u2 = userId2.trim();
+
+        for (ConversationData cd : conversationsMap.values()) {
+            String type = cd.type != null ? cd.type : (ConvId.isDm(cd.convId) ? "DM" : "ROOM");
+            if ("DM".equalsIgnoreCase(type)) {
+                boolean hasU1 = cd.members.contains(u1) || isMember(cd.convId, u1);
+                boolean hasU2 = cd.members.contains(u2) || isMember(cd.convId, u2);
+                if (hasU1 && hasU2) {
+                    return Optional.of(cd.convId);
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    @Override
+    public synchronized String getOrCreateDm(String userId1, String userId2) {
+        if (userId1 == null || userId2 == null || userId1.isBlank() || userId2.isBlank()) {
+            throw new IllegalArgumentException("User IDs must not be blank");
+        }
+        String u1 = userId1.trim();
+        String u2 = userId2.trim();
+
+        // Kiểm tra xem đã có DM giữa 2 người chưa (chống tạo trùng)
+        Optional<String> existing = findDmBetween(u1, u2);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+
+        // Tạo convId chuẩn qua ConvId.forDm
+        String convId;
+        try {
+            convId = ConvId.forDm(u1, u2);
+        } catch (Exception e) {
+            convId = "dm:" + (u1.compareTo(u2) <= 0 ? (u1 + ":" + u2) : (u2 + ":" + u1));
+        }
+
+        createConversation(convId, "DM", null);
+        addMember(convId, u1);
+        addMember(convId, u2);
+
+        return convId;
     }
 
     @Override

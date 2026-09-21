@@ -37,6 +37,10 @@ public class ProtocolMessage {
     public String forwardedFromSender;
     public boolean isForwarded;
     public MessageSendStatus sendStatus;
+    public Boolean isNew;
+    public String chatType;
+    public String displayName;
+    public String avatar;
 
     public ProtocolMessage() {}
 

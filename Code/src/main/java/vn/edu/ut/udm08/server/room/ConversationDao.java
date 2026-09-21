@@ -43,6 +43,16 @@ public interface ConversationDao {
     void createConversation(String convId, String type, String name, String avatar);
 
     /**
+     * Tim cuoc tro chuyen DM da ton tai giua 2 nguoi dung (ST-102 / ST-115).
+     */
+    java.util.Optional<String> findDmBetween(String userId1, String userId2);
+
+    /**
+     * Lay hoac tao moi cuoc tro chuyen DM giua 2 nguoi dung mot cach an toan (ST-115).
+     */
+    String getOrCreateDm(String userId1, String userId2);
+
+    /**
      * Dang ky avatar cho user (dung de hien thi avatar trong DM).
      */
     void setUserAvatar(String username, String avatar);

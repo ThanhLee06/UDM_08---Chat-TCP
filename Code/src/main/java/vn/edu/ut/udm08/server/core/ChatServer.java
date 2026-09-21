@@ -8,6 +8,7 @@ import java.util.concurrent.Executors;
 import vn.edu.ut.udm08.server.conversation.ConversationListHandler;
 import vn.edu.ut.udm08.server.conversation.ConversationRegistry;
 import vn.edu.ut.udm08.server.conversation.IConversationRegistry;
+import vn.edu.ut.udm08.server.conversation.OpenDmHandler;
 import vn.edu.ut.udm08.server.history.HistoryHandler;
 import vn.edu.ut.udm08.server.repository.UserRepository;
 import vn.edu.ut.udm08.server.room.ConversationDao;
@@ -30,6 +31,7 @@ public class ChatServer {
     private final ConversationDao conversationDao;
     private final HistoryHandler historyHandler;
     private final ConversationListHandler conversationListHandler;
+    private final OpenDmHandler openDmHandler;
     private final LoginHandler loginHandler;
     private final MessageRouter messageRouter;
     private final SessionValidator sessionValidator;
@@ -51,6 +53,7 @@ public class ChatServer {
         this.conversationDao = new InMemoryConversationDao();
         this.historyHandler = new HistoryHandler(conversationDao);
         this.conversationListHandler = new ConversationListHandler(conversationDao);
+        this.openDmHandler = new OpenDmHandler(conversationDao, new UserRepository(), registry);
         this.loginHandler = new LoginHandler(registry, conversationRegistry);
         this.messageRouter = new MessageRouter(registry, conversationRegistry, conversationDao, null);
         this.sessionValidator = new SessionValidator();
@@ -146,6 +149,7 @@ public class ChatServer {
             case USER_SEARCH_REQUEST -> userSearchHandler.handleSearchRequest(session, message);
             case HISTORY_REQUEST -> historyHandler.handleHistoryRequest(session, message);
             case CONVERSATION_LIST_REQUEST -> conversationListHandler.handleConversationListRequest(session, message);
+            case OPEN_DM_REQUEST -> openDmHandler.handleOpenDmRequest(session, message);
             case DISCONNECT -> {
                 loginHandler.handleDisconnect(session);
             }
@@ -164,6 +168,10 @@ public class ChatServer {
 
     public ConversationListHandler getConversationListHandler() {
         return conversationListHandler;
+    }
+
+    public OpenDmHandler getOpenDmHandler() {
+        return openDmHandler;
     }
 
     public synchronized void stop() {
