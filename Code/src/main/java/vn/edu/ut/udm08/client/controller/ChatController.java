@@ -322,6 +322,9 @@ public class ChatController {
         message.content = content;                           
         message.timestamp = System.currentTimeMillis(); 
         if (replyingToMessage != null) {
+            message.type = MessageType.REPLY;
+            message.kind = "reply";
+            message.replyTo = replyingToMessage.messageId;
             message.replyToMessageId = replyingToMessage.messageId;
             message.replyToSender = replyingToMessage.sender;
             message.replyToContent = replyingToMessage.content;
@@ -549,12 +552,16 @@ private void openForwardDialog(ProtocolMessage message) {
 }
 
 private void forwardMessage(ProtocolMessage original, UserProfile target) {
-    ProtocolMessage forwarded = new ProtocolMessage(MessageType.CHAT);
+    ProtocolMessage forwarded = new ProtocolMessage(MessageType.FORWARD);
     forwarded.messageId = UUID.randomUUID().toString();
     forwarded.sender = currentUsername;
     forwarded.target = target.username;
     forwarded.content = original.content;
     forwarded.timestamp = System.currentTimeMillis();
+    forwarded.kind = "forward";
+    forwarded.forwardFromMessageId = original.messageId;
+    forwarded.fwdFrom = original.messageId;
+    forwarded.forwardFromConvId = original.convId;
     forwarded.forwardedFromSender = original.sender;
     forwarded.isForwarded = true;
 
