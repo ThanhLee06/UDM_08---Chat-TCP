@@ -39,11 +39,11 @@ public class LoginIntegrationServiceTest {
         LoginIntegrationService service = new LoginIntegrationService();
         try (TestSocketConnection conn = new TestSocketConnection()) {
             ProtocolMessage hello = createHelloMessage("ThanhUser", "avatar1");
-            boolean loggedIn = service.processLogin(conn.session, hello);
+            boolean loggedIn = vn.edu.ut.udm08.support.TrustedLogin.establish(service.getLoginHandler(), conn.session, hello);
             assertTrue(loggedIn);
             ProtocolMessage helloOk = conn.readMessage();
             ProtocolMessage userList = conn.readMessage();
-            assertEquals(MessageType.HELLO_OK, helloOk.type);
+            assertEquals(MessageType.AUTH_LOGIN_OK, helloOk.type);
             assertEquals("ThanhUser", helloOk.target);
             assertEquals(MessageType.USER_LIST, userList.type);
             assertEquals(1, userList.users.size());
@@ -59,7 +59,7 @@ public class LoginIntegrationServiceTest {
             assertFalse(loggedIn);
             ProtocolMessage error = conn.readMessage();
             assertEquals(MessageType.ERROR, error.type);
-            assertEquals("INVALID_USERNAME", error.errorCode);
+            assertEquals("AUTH_REQUIRED", error.errorCode);
             assertFalse(conn.session.isAuthenticated());
         }
     }
@@ -68,10 +68,10 @@ public class LoginIntegrationServiceTest {
         LoginIntegrationService service = new LoginIntegrationService();
         try (TestSocketConnection conn1 = new TestSocketConnection();
              TestSocketConnection conn2 = new TestSocketConnection()) {
-            assertTrue(service.processLogin(conn1.session, createHelloMessage("UserA", "avatar1")));
+            assertTrue(vn.edu.ut.udm08.support.TrustedLogin.establish(service.getLoginHandler(), conn1.session, createHelloMessage("UserA", "avatar1")));
             conn1.readMessage();
             conn1.readMessage();
-            boolean secondLogin = service.processLogin(conn2.session, createHelloMessage("USERA", "avatar2"));
+            boolean secondLogin = vn.edu.ut.udm08.support.TrustedLogin.establish(service.getLoginHandler(), conn2.session, createHelloMessage("USERA", "avatar2"));
             assertTrue(secondLogin);
         }
     }
@@ -80,10 +80,10 @@ public class LoginIntegrationServiceTest {
         LoginIntegrationService service = new LoginIntegrationService();
         try (TestSocketConnection conn1 = new TestSocketConnection();
              TestSocketConnection conn2 = new TestSocketConnection()) {
-            service.processLogin(conn1.session, createHelloMessage("UserA", "avatar1"));
+            vn.edu.ut.udm08.support.TrustedLogin.establish(service.getLoginHandler(), conn1.session, createHelloMessage("UserA", "avatar1"));
             conn1.readMessage();
             conn1.readMessage();
-            service.processLogin(conn2.session, createHelloMessage("UserB", "avatar2"));
+            vn.edu.ut.udm08.support.TrustedLogin.establish(service.getLoginHandler(), conn2.session, createHelloMessage("UserB", "avatar2"));
             conn2.readMessage();
             conn2.readMessage();
             conn1.readMessage();

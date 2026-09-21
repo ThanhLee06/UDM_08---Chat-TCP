@@ -24,17 +24,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class LoginHandlerTest {
     @Test
-    void acceptsHelloAndSendsHelloOkAndUserList() throws Exception {
+    void acceptsVerifiedIdentityAndBroadcastsUserList() throws Exception {
         OnlineUserRegistry registry = new OnlineUserRegistry();
         LoginHandler handler = new LoginHandler(registry);
         try (TestConnection connection = new TestConnection()) {
             connection.sendHello("Thành", "01");
             ProtocolMessage hello = connection.session.readMessage();
-            boolean loggedIn = handler.handleHello(connection.session, hello);
+            boolean loggedIn = vn.edu.ut.udm08.support.TrustedLogin.establish(handler, connection.session, hello);
             ProtocolMessage helloOk = connection.readMessage();
             ProtocolMessage userList = connection.readMessage();
             assertTrue(loggedIn);
-            assertEquals(MessageType.HELLO_OK, helloOk.type);
+            assertEquals(MessageType.AUTH_LOGIN_OK, helloOk.type);
             assertEquals("Thành", helloOk.target);
             assertEquals(MessageType.USER_LIST, userList.type);
             assertEquals(1, userList.users.size());
@@ -52,7 +52,7 @@ public class LoginHandlerTest {
             ProtocolMessage error = connection.readMessage();
             assertFalse(loggedIn);
             assertEquals(MessageType.ERROR, error.type);
-            assertEquals("INVALID_USERNAME", error.errorCode);
+            assertEquals("AUTH_REQUIRED", error.errorCode);
             assertFalse(connection.session.isAuthenticated());
             assertTrue(registry.getOnlineUsers().isEmpty());
         }
@@ -65,7 +65,7 @@ public class LoginHandlerTest {
             boolean loggedIn = handler.handleHello(connection.session, hello("user1", "   "));
             ProtocolMessage error = connection.readMessage();
             assertFalse(loggedIn);
-            assertEquals("INVALID_AVATAR", error.errorCode);
+            assertEquals("AUTH_REQUIRED", error.errorCode);
             assertFalse(connection.session.isAuthenticated());
         }
     }
@@ -75,10 +75,10 @@ public class LoginHandlerTest {
         LoginHandler handler = new LoginHandler(registry);
         try (TestConnection first = new TestConnection();
              TestConnection second = new TestConnection()) {
-            assertTrue(handler.handleHello(first.session, hello("user1", "01")));
+            assertTrue(vn.edu.ut.udm08.support.TrustedLogin.establish(handler, first.session, hello("user1", "01")));
             first.readMessage();
             first.readMessage();
-            boolean secondLogin = handler.handleHello(second.session, hello("USER1", "02"));
+            boolean secondLogin = vn.edu.ut.udm08.support.TrustedLogin.establish(handler, second.session, hello("USER1", "02"));
             assertTrue(secondLogin);
             assertEquals(1, registry.getOnlineUsers().size());
             assertEquals("USER1", registry.find("user1").getUsername());
@@ -90,10 +90,10 @@ public class LoginHandlerTest {
         LoginHandler handler = new LoginHandler(registry);
         try (TestConnection first = new TestConnection();
             TestConnection second = new TestConnection()) {
-            assertTrue(handler.handleHello(first.session, hello("An", "01")));
+            assertTrue(vn.edu.ut.udm08.support.TrustedLogin.establish(handler, first.session, hello("An", "01")));
             first.readMessage();
             first.readMessage();
-            assertTrue(handler.handleHello(second.session, hello("Bình", "02")));
+            assertTrue(vn.edu.ut.udm08.support.TrustedLogin.establish(handler, second.session, hello("Bình", "02")));
             second.readMessage();
             ProtocolMessage listForSecond = second.readMessage();
             ProtocolMessage listForFirst = first.readMessage();
@@ -114,7 +114,7 @@ public class LoginHandlerTest {
         IConversationRegistry convRegistry = new ConversationRegistry();
         LoginHandler handler = new LoginHandler(registry, convRegistry);
         try (TestConnection connection = new TestConnection()) {
-            boolean loggedIn = handler.handleHello(connection.session, hello("user1", "01"));
+            boolean loggedIn = vn.edu.ut.udm08.support.TrustedLogin.establish(handler, connection.session, hello("user1", "01"));
             assertTrue(loggedIn);
             assertEquals(1, convRegistry.getSessions(ConvId.PUBLIC_ROOM_ID).size());
             assertEquals("user1", convRegistry.getSessions(ConvId.PUBLIC_ROOM_ID).get(0).getUsername());

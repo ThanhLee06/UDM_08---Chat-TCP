@@ -18,7 +18,7 @@ class UserRepositoryMigrationTest {
             stmt.execute(schema);
             stmt.execute("INSERT INTO users(username,phone_number,password_hash) VALUES('Legacy','0901234567','existing-hash')");
         }
-        var repo = new UserRepository(url);
+        var repo = vn.edu.ut.udm08.support.TestDatabase.repository(url);
         var legacy = repo.findByPhoneNumber("0901234567").orElseThrow();
         assertNull(legacy.getEmail());
         assertEquals("existing-hash", legacy.getPasswordHash());
@@ -27,7 +27,7 @@ class UserRepositoryMigrationTest {
         added.setEmail("New@Gmail.com"); added.setPasswordHash("new-hash");
         added.setAvatarType("PRESET"); added.setAvatarPath("01.png");
         assertNotNull(repo.save(added));
-        var reopened = new UserRepository(url);
+        var reopened = vn.edu.ut.udm08.support.TestDatabase.repository(url);
         assertEquals(2, reopened.findAll().size());
         assertEquals("new@gmail.com", reopened.findByEmail("NEW@gmail.com").orElseThrow().getEmail());
         try (var conn = DriverManager.getConnection(url); var stmt = conn.createStatement()) {

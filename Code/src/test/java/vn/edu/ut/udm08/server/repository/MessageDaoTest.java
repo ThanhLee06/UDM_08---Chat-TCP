@@ -23,7 +23,7 @@ class MessageDaoTest {
         tempDbFile = File.createTempFile("test_msg_dao_", ".db");
         String dbUrl = "jdbc:sqlite:" + tempDbFile.getAbsolutePath();
         connectionFactory = new DatabaseConnectionFactory(dbUrl);
-        userRepository = new UserRepository(dbUrl);
+        userRepository = vn.edu.ut.udm08.support.TestDatabase.repository(dbUrl);
         messageDao = new MessageDao(connectionFactory);
         User user = new User();
         user.setUsername("hieu_test");

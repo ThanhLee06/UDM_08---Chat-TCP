@@ -67,7 +67,7 @@ class ChatServerTest {
             BufferedReader reader = reader(client);
             PrintWriter writer = writer(client);
 
-            ProtocolMessage hello = new ProtocolMessage(MessageType.HELLO);
+            ProtocolMessage hello = vn.edu.ut.udm08.support.TestServer.login("alice");
 
             hello.sender = "alice";
             hello.avatarId = "avatar-01";
@@ -78,7 +78,7 @@ class ChatServerTest {
 
             ProtocolMessage userList = readMessage(reader);
 
-            assertEquals(MessageType.HELLO_OK, helloOk.type);
+            assertEquals(MessageType.AUTH_LOGIN_OK, helloOk.type);
             assertEquals("SERVER", helloOk.sender);
             assertEquals("alice", helloOk.target);
 
@@ -223,20 +223,7 @@ class ChatServerTest {
         assertThrows(IllegalStateException.class, () -> server.start());
     }
 
-    private ChatServer createServer() {
-
-        Properties properties = new Properties();
-
-        /*
-         * Port 0 lets the operating system assign
-         * an available ephemeral port.
-         */
-        properties.setProperty("server.port", "0");
-
-        ServerConfig config = ServerConfig.fromProperties(properties);
-
-        return new ChatServer(config);
-    }
+    private ChatServer createServer() throws Exception { return vn.edu.ut.udm08.support.TestServer.create(); }
 
     private void startServer() throws Exception {
 
@@ -272,14 +259,8 @@ class ChatServerTest {
     }
 
     private void sendHello(PrintWriter writer, String username, String avatarId) throws IOException {
-        ProtocolMessage hello = new ProtocolMessage(MessageType.HELLO);
-
-        hello.sender = username;
-        hello.avatarId = avatarId;
-
-        writer.println(JsonUtil.toJson(hello));
+        writer.println(JsonUtil.toJson(vn.edu.ut.udm08.support.TestServer.login(username)));
     }
-
     private ProtocolMessage readMessage(BufferedReader reader) throws IOException {
 
         String json = reader.readLine();
@@ -339,7 +320,7 @@ class ChatServerTest {
             TimeUnit.MILLISECONDS.sleep(100);
 
             // Client B must still be able to communicate normally.
-            ProtocolMessage hello = new ProtocolMessage(MessageType.HELLO);
+            ProtocolMessage hello = vn.edu.ut.udm08.support.TestServer.login("bob");
             hello.sender = "bob";
             hello.avatarId = "avatar-02";
 
@@ -348,7 +329,7 @@ class ChatServerTest {
             ProtocolMessage helloOk = readMessage(validReader);
             ProtocolMessage userList = readMessage(validReader);
 
-            assertEquals(MessageType.HELLO_OK, helloOk.type);
+            assertEquals(MessageType.AUTH_LOGIN_OK, helloOk.type);
             assertEquals("bob", helloOk.target);
 
             assertEquals(MessageType.USER_LIST, userList.type);
@@ -386,7 +367,7 @@ class ChatServerTest {
                 ProtocolMessage helloOk = readMessage(reader);
                 ProtocolMessage userList = readMessage(reader);
 
-                assertEquals(MessageType.HELLO_OK, helloOk.type);
+                assertEquals(MessageType.AUTH_LOGIN_OK, helloOk.type);
                 assertEquals("charlie", helloOk.target);
 
                 assertEquals(MessageType.USER_LIST, userList.type);

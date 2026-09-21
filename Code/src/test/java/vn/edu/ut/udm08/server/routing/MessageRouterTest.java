@@ -39,7 +39,7 @@ class MessageRouterTest {
     @BeforeEach
     void setUp() throws IOException {
         convRegistry = new ConversationRegistry();
-        router = new MessageRouter(convRegistry);
+        router = new MessageRouter(null, convRegistry, null, null, null);
 
         SocketPair alicePair = createClientSocket();
         SocketPair bobPair = createClientSocket();
@@ -139,7 +139,7 @@ class MessageRouterTest {
     }
 
     @Test
-    void shouldRejectOfflineConvIdWhenNoOtherMembersOnline() throws Exception {
+    void shouldAcknowledgeAcceptedMessageWithoutOnlineRecipient() throws Exception {
         convRegistry.join("conv-solo", alice);
 
         ProtocolMessage msg = new ProtocolMessage(MessageType.CHAT);
@@ -152,8 +152,8 @@ class MessageRouterTest {
 
         ProtocolMessage error = readMessage(aliceReader);
 
-        assertEquals(MessageType.ERROR, error.type);
-        assertEquals("USER_OFFLINE", error.errorCode);
+        assertEquals(MessageType.CHAT_OK, error.type);
+        assertNull(error.errorCode);
         assertEquals("103", error.messageId);
     }
 
@@ -319,6 +319,7 @@ class MessageRouterTest {
     private SocketPair createClientSocket() throws IOException {
         ServerSocket serverSocket = new ServerSocket(0);
         Socket clientSocket = new Socket("localhost", serverSocket.getLocalPort());
+        clientSocket.setSoTimeout(2000);
         Socket serverSideSocket = serverSocket.accept();
         serverSocket.close();
         return new SocketPair(clientSocket, serverSideSocket);
