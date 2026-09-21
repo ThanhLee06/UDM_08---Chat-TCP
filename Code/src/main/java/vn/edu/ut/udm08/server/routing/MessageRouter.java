@@ -242,6 +242,9 @@ public class MessageRouter implements IMessageRouter {
 
             if (conversationDao != null) {
                 String effectiveConvId = (convId != null && !convId.isBlank()) ? convId : targetUser;
+                if (messageToSend.convId == null || messageToSend.convId.isBlank()) {
+                    messageToSend.convId = effectiveConvId;
+                }
                 conversationDao.addMessage(effectiveConvId, messageToSend);
             }
 
@@ -255,20 +258,7 @@ public class MessageRouter implements IMessageRouter {
             }
 
             if (transaction != null) {
-                // Xu ly rot mang nguoi nhan: Neu gui Realtime cho nguoi nhan bi loi (do nguoi nhan rot mang dung luc do)
-                // thi KHONG bao loi cho nguoi gui. Tin nhan van da nam an toan trong DB, nguoi nhan se doc lai qua lich su khi online lai.
-                for (ClientSession recipient : recipients) {
-                    try {
-                        recipient.sendMessage(messageToSend);
-                    } catch (Exception e) {
-                        System.err.println("Goi tin realtime toi nguoi nhan that bai (rot mang): " + e.getMessage());
-                        if (registry != null && !recipient.isConnected()) {
-                            registry.remove(recipient);
-                        }
-                    }
-                }
-
-                // 8. Phan hoi cho nguoi gui: Tra ve goi tin xac nhan (type = "MESSAGE_ACK")
+                // 8. Phan hoi cho nguoi gui truoc: Tra ve goi tin xac nhan (type = "MESSAGE_ACK")
                 // kem messageId, timestamp chinh thuc va trang thai SENT cho nguoi gui
                 ProtocolMessage ackMsg = new ProtocolMessage(MessageType.MESSAGE_ACK);
                 ackMsg.messageId = messageToSend.messageId;
@@ -283,6 +273,19 @@ public class MessageRouter implements IMessageRouter {
                     senderSession.sendMessage(ackMsg);
                 } catch (Exception e) {
                     System.err.println("Khong the gui MESSAGE_ACK ve cho sender (da ngat ket noi): " + e.getMessage());
+                }
+
+                // 9. Thu gui Realtime cho nguoi nhan: Neu Online thi gui, neu Offline thi bo qua buoc nay
+                // Neu nguoi nhan bi rot mang hoac loi Socket thi KHONG bao loi cho nguoi gui vi tin da luu an toan vao DB
+                for (ClientSession recipient : recipients) {
+                    try {
+                        recipient.sendMessage(messageToSend);
+                    } catch (Exception e) {
+                        System.err.println("Goi tin realtime toi nguoi nhan that bai (rot mang): " + e.getMessage());
+                        if (registry != null && !recipient.isConnected()) {
+                            registry.remove(recipient);
+                        }
+                    }
                 }
             } else {
                 // Luong mac dinh cu khi khong dung transaction: Giu nguyen de khong anh huong code cu cua nguoi khac
