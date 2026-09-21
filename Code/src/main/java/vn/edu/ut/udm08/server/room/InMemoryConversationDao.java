@@ -192,11 +192,17 @@ public class InMemoryConversationDao implements ConversationDao {
             inbox.add(summary);
         }
 
-        // Sắp xếp theo lastActivity giảm dần (mới nhất lên đầu)
+        // Sắp xếp theo lastActivity giảm dần (mới nhất lên đầu), nếu bằng nhau thì sắp theo convId để đảm bảo thứ tự ổn định
         inbox.sort((a, b) -> {
             long t1 = a.lastActivity != null ? a.lastActivity : 0L;
             long t2 = b.lastActivity != null ? b.lastActivity : 0L;
-            return Long.compare(t2, t1);
+            int cmp = Long.compare(t2, t1);
+            if (cmp != 0) {
+                return cmp;
+            }
+            String id1 = a.convId != null ? a.convId : "";
+            String id2 = b.convId != null ? b.convId : "";
+            return id1.compareTo(id2);
         });
 
         return inbox;
