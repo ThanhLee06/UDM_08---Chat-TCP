@@ -26,7 +26,7 @@ public class DatabaseInitializer {
             java.io.File file = new java.io.File(pathStr);
             java.io.File parent = file.getParentFile();
             if (parent != null && !parent.exists()) {
-                parent.mkdirs();
+                if (!parent.mkdirs()) throw new IllegalStateException("Cannot create database directory");
             }
         }
     }
@@ -35,7 +35,7 @@ public class DatabaseInitializer {
         try (Connection conn = connectionFactory.getConnection();
              Statement stmt = conn.createStatement()) {
             stmt.execute("PRAGMA journal_mode=WAL;");
-        } catch (Exception ignored) {
+        } catch (Exception failure) { throw new IllegalStateException("Database initialization failed", failure);
         }
     }
     private void initAuthSchema() {
@@ -101,7 +101,7 @@ public class DatabaseInitializer {
             if (!exists) {
                 stmt.execute(alterSql);
             }
-        } catch (Exception ignored) {
+        } catch (Exception failure) { throw new IllegalStateException("Database initialization failed", failure);
         }
     }
 }

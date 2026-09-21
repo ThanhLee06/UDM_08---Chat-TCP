@@ -30,7 +30,9 @@ public class ChatStorageService implements IChatStorageService {
         this.conversationDao = conversationDao;
     }
     @Override
-    public ChatMessage saveMessageWithTransaction(ChatMessage message) {
+    // SQLite permits one writer. Serialize writes in this server's shared storage service
+    // instead of letting a burst of sessions starve each other at the database lock.
+    public synchronized ChatMessage saveMessageWithTransaction(ChatMessage message) {
         if (message == null || message.getMessageId() == null || message.getMessageId().isBlank()) {
             throw new IllegalArgumentException("Tin nhắn hoặc messageId không được null");
         }
@@ -69,24 +71,15 @@ public class ChatStorageService implements IChatStorageService {
         }
     }
 
-    private void ensureSenderUserExists(Connection conn, String username) {
-        if (username == null || username.isBlank()) return;
+    private void ensureSenderUserExists(Connection conn, String username) throws SQLException {
+        if (username == null || username.isBlank()) throw new IllegalArgumentException("Sender is required");
         try (PreparedStatement check = conn.prepareStatement("SELECT 1 FROM users WHERE LOWER(username) = ?")) {
             check.setString(1, username.trim().toLowerCase(java.util.Locale.ROOT));
-            if (!check.executeQuery().next()) {
-                try (PreparedStatement insert = conn.prepareStatement(
-                        "INSERT INTO users (username, phone_number, password_hash) VALUES (?, ?, ?)")) {
-                    insert.setString(1, username.trim());
-                    insert.setString(2, "090000" + String.format("%06d", Math.abs(username.hashCode()) % 1000000));
-                    insert.setString(3, "preset-hash");
-                    insert.executeUpdate();
-                } catch (Exception ignored) {
-                }
+            try (var rows = check.executeQuery()) {
+                if (!rows.next()) throw new IllegalArgumentException("Sender account does not exist");
             }
-        } catch (Exception ignored) {
         }
     }
-
     private ChatMessage resolveDuplicate(ChatMessage message) {
         ChatMessage existing = messageDao.findByMessageId(message.getMessageId())
                 .orElseThrow(() -> new IllegalStateException("Không tìm thấy tin nhắn trùng"));

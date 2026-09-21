@@ -20,7 +20,6 @@ public class UserRepository implements IUserRepository {
             throw new IllegalArgumentException("ConnectionFactory != null");
         }
         this.connectionFactory = connectionFactory;
-        new vn.edu.ut.udm08.server.config.DatabaseInitializer(connectionFactory).initialize();
     }
 
     private Connection getConnection() throws SQLException {

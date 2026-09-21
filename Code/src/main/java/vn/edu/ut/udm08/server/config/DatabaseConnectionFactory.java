@@ -25,6 +25,9 @@ public class DatabaseConnectionFactory {
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("PRAGMA foreign_keys = ON;");
             stmt.execute("PRAGMA busy_timeout = " + busyTimeout + ";");
+        } catch (SQLException e) {
+            try { conn.close(); } catch (SQLException closeFailure) { e.addSuppressed(closeFailure); }
+            throw e;
         }
         return conn;
     }
