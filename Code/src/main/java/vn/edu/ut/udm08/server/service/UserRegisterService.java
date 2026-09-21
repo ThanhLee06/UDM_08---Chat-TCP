@@ -115,7 +115,9 @@ public class UserRegisterService {
         try {
             otpService.sendOtp(key(registration.getUser().getEmail()), registration.getUser().getEmail());
             pending.put(registrationId, new PendingRegistration(registration.getUser(), clock.instant().plus(REGISTRATION_TTL)));
-            return RegisterResponse.ok("Đã gửi lại mã OTP", null);
+            RegisterResponse response = RegisterResponse.ok("Đã gửi lại mã OTP", null);
+            response.setRegistrationId(registrationId);
+            return response;
         } catch (IllegalStateException e) {
             return RegisterResponse.fail(e.getMessage());
         }

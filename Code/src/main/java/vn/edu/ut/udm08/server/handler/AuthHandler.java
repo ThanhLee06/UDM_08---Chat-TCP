@@ -30,7 +30,7 @@ public class AuthHandler {
         this.loginService = loginService;
         this.onlineUserRegistry = onlineUserRegistry;
         this.conversationRegistry = conversationRegistry;
-        this.loginHandler = loginHandler;
+        this.loginHandler = loginHandler != null ? loginHandler : new LoginHandler(onlineUserRegistry, conversationRegistry);
     }
 
     public void handleLogin(ClientSession session, ProtocolMessage message) {
@@ -41,7 +41,7 @@ public class AuthHandler {
         try {
             AuthLoginRequest req = JsonUtil.fromJson(message.content, AuthLoginRequest.class);
             if (req == null || req.getUsernameOrPhone() == null || req.getPassword() == null) {
-                sendError(session, message.messageId, "INVALID_REQUEST", "Thông tin đăng nhập không hợp lệ");
+                sendError(session, message.requestId != null ? message.requestId : message.messageId, "INVALID_REQUEST", "Thông tin đăng nhập không hợp lệ");
                 return;
             }
 
@@ -49,40 +49,34 @@ public class AuthHandler {
             LoginResponse response = loginService.login(loginReq);
 
             if (!response.isSuccess() || response.getUser() == null) {
-                sendError(session, message.messageId, "LOGIN_FAILED", response.getMessage() != null ? response.getMessage() : "Tài khoản hoặc mật khẩu không chính xác");
+                sendError(session, message.requestId != null ? message.requestId : message.messageId, "LOGIN_FAILED", response.getMessage() != null ? response.getMessage() : "Tài khoản hoặc mật khẩu không chính xác");
                 return;
             }
 
             vn.edu.ut.udm08.shared.model.User user = response.getUser();
 
-            session.authenticate(user);
-            if (onlineUserRegistry != null) {
-                onlineUserRegistry.kickSession(user.getUsername(), "Tài khoản của bạn vừa đăng nhập ở một thiết bị khác", session);
-                onlineUserRegistry.register(session);
+            if (!loginHandler.handleLoginSuccess(session, user, false)) {
+                return;
             }
-            if (conversationRegistry != null) {
-                conversationRegistry.join(ConvId.PUBLIC_ROOM_ID, session);
-            }
-            if (loginHandler != null) {
-                loginHandler.broadcastUserList();
-            }
-
             ProtocolMessage responseMsg = new ProtocolMessage(MessageType.AUTH_LOGIN_OK);
             responseMsg.messageId = message.messageId;
+            responseMsg.requestId = message.requestId;
             responseMsg.sender = "SERVER";
             responseMsg.target = user.getUsername();
             responseMsg.content = JsonUtil.toJson(new AuthUserDto(user));
             responseMsg.timestamp = System.currentTimeMillis();
             session.sendMessage(responseMsg);
+            loginHandler.broadcastUserList();
 
         } catch (Exception e) {
-            sendError(session, message.messageId, "SERVER_ERROR", "Lỗi hệ thống khi đăng nhập: " + e.getMessage());
+            sendError(session, message.requestId != null ? message.requestId : message.messageId, "SERVER_ERROR", "Lỗi hệ thống khi đăng nhập: " + e.getMessage());
         }
     }
 
     private void sendError(ClientSession session, String messageId, String errorCode, String errorMessage) {
         ProtocolMessage err = new ProtocolMessage(MessageType.ERROR);
         err.messageId = messageId;
+        err.requestId = messageId;
         err.sender = "SERVER";
         err.errorCode = errorCode;
         err.errorMessage = errorMessage;
