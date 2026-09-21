@@ -1,6 +1,7 @@
 package vn.edu.ut.udm08.server.routing;
 import vn.edu.ut.udm08.server.conversation.IConversationRegistry;
 import vn.edu.ut.udm08.server.room.ConversationDao;
+import vn.edu.ut.udm08.server.room.InMemoryMessageDao;
 import vn.edu.ut.udm08.server.room.MessageDao;
 import vn.edu.ut.udm08.server.room.Transaction;
 import vn.edu.ut.udm08.server.session.ClientSession;
@@ -44,11 +45,15 @@ public class MessageRouter implements IMessageRouter {
     }
 
     public MessageRouter(OnlineUserRegistry registry, IConversationRegistry conversationRegistry, ConversationDao conversationDao, Transaction transaction) {
+        this(registry, conversationRegistry, conversationDao, null, transaction);
+    }
+
+    public MessageRouter(OnlineUserRegistry registry, IConversationRegistry conversationRegistry, ConversationDao conversationDao, MessageDao messageDao, Transaction transaction) {
         this.registry = registry;
         this.conversationRegistry = conversationRegistry;
         this.conversationDao = conversationDao;
+        this.messageDao = messageDao != null ? messageDao : (transaction != null ? transaction.getMessageDao() : new InMemoryMessageDao());
         this.transaction = transaction;
-        this.messageDao = (transaction != null) ? transaction.getMessageDao() : null;
     }
 
     public MessageDao getMessageDao() {
@@ -114,6 +119,11 @@ public class MessageRouter implements IMessageRouter {
                             return;
                         }
                     } else {
+                        boolean isFwd = (msg.type == MessageType.FORWARD) || (msg.fwdFrom != null) || (msg.forwardFromMessageId != null) || "forward".equalsIgnoreCase(msg.kind);
+                        if (isFwd) {
+                            sendErrorMessage(senderSession, msg.messageId, "FORBIDDEN", "Khong co quyen gui tin vao hoi thoai dich");
+                            return;
+                        }
                         conversationDao.addMember(effectiveConvId, senderId);
                         if (targetUser != null && !targetUser.isBlank() && !targetUser.equals(senderId)) {
                             conversationDao.addMember(effectiveConvId, targetUser.trim());
@@ -127,24 +137,88 @@ public class MessageRouter implements IMessageRouter {
                 }
             }
 
-            if (msg.replyTo != null) {
-                if (msg.replyTo.isBlank()) {
+            // 5b. Xu ly logic Reply: Tra cuu tin goc tu DB Server de dam bao trich dan luon dung
+            boolean isReply = (msg.type == MessageType.REPLY) || (msg.replyTo != null) || (msg.replyToMessageId != null) || "reply".equalsIgnoreCase(msg.kind);
+            if (isReply) {
+                String targetMsgId = (msg.replyToMessageId != null && !msg.replyToMessageId.isBlank()) ? msg.replyToMessageId.trim()
+                        : (msg.replyTo != null ? msg.replyTo.trim() : null);
+
+                if (targetMsgId == null || targetMsgId.isBlank()) {
                     sendErrorMessage(senderSession, msg.messageId, "INVALID_REPLY_TARGET", "Tin goc khong ton tai hoac khong thuoc hoi thoai nay");
                     return;
                 }
-                if (msg.kind == null || msg.kind.isBlank()) {
-                    msg.kind = "reply";
+
+                if (conversationDao != null) {
+                    ProtocolMessage origMsg = messageDao != null ? messageDao.findByMessageId(targetMsgId) : null;
+                    if (origMsg == null) {
+                        sendErrorMessage(senderSession, msg.messageId, "MESSAGE_NOT_FOUND", "Tin nhan goc khong ton tai");
+                        return;
+                    }
+
+                    // Kiem tra quyen Reply: Tin goc phai thuoc dung cuoc tro chuyen dang chat
+                    String currentConvId = (convId != null && !convId.isBlank()) ? convId : targetUser;
+                    if (origMsg.convId == null || !origMsg.convId.equals(currentConvId)) {
+                        sendErrorMessage(senderSession, msg.messageId, "INVALID_REPLY_TARGET", "Tin goc khong thuoc hoi thoai nay");
+                        return;
+                    }
+
+                    // Lay Metadata chuan tu DB: Server tu lay ten nguoi gui goc va noi dung tin goc
+                    msg.replyTo = origMsg.messageId;
+                    msg.replyToMessageId = origMsg.messageId;
+                    msg.replyToSender = origMsg.sender;
+                    msg.replyToContent = origMsg.content;
+                } else {
+                    msg.replyTo = targetMsgId;
+                    msg.replyToMessageId = targetMsgId;
                 }
+                msg.kind = "reply";
+                msg.type = MessageType.REPLY;
             }
 
-            if (msg.fwdFrom != null) {
-                if (msg.fwdFrom.isBlank()) {
+            // 5c. Xu ly logic Forward: Tra cuu tin goc tu DB Server va kiem tra quyen nguon/dich
+            boolean isForward = (msg.type == MessageType.FORWARD) || (msg.fwdFrom != null) || (msg.forwardFromMessageId != null) || "forward".equalsIgnoreCase(msg.kind);
+            if (isForward) {
+                String sourceMsgId = (msg.forwardFromMessageId != null && !msg.forwardFromMessageId.isBlank()) ? msg.forwardFromMessageId.trim()
+                        : (msg.fwdFrom != null ? msg.fwdFrom.trim() : null);
+
+                if (sourceMsgId == null || sourceMsgId.isBlank()) {
                     sendErrorMessage(senderSession, msg.messageId, "INVALID_FORWARD_SOURCE", "Tin nguon khong ton tai hoac khong co quyen doc");
                     return;
                 }
-                if (msg.kind == null || msg.kind.isBlank()) {
-                    msg.kind = "forward";
+
+                if (conversationDao != null) {
+                    ProtocolMessage origMsg = messageDao != null ? messageDao.findByMessageId(sourceMsgId) : null;
+                    if (origMsg == null) {
+                        sendErrorMessage(senderSession, msg.messageId, "MESSAGE_NOT_FOUND", "Tin nhan goc khong ton tai");
+                        return;
+                    }
+
+                    // Kiem tra quyen Forward: User phai co quyen doc tin o nguon goc (la thanh vien convId nguon)
+                    String sourceConvId = origMsg.convId;
+                    if (sourceConvId != null && !conversationDao.isMember(sourceConvId, senderId)) {
+                        sendErrorMessage(senderSession, msg.messageId, "FORBIDDEN", "Khong co quyen doc tin o hoi thoai nguon");
+                        return;
+                    }
+
+                    // Kiem tra quyen Forward: User phai co quyen gui tin o noi dich (la thanh vien convId dich)
+                    String targetConvId = (convId != null && !convId.isBlank()) ? convId : targetUser;
+                    if (targetConvId != null && !conversationDao.isMember(targetConvId, senderId)) {
+                        sendErrorMessage(senderSession, msg.messageId, "FORBIDDEN", "Khong co quyen gui tin vao hoi thoai dich");
+                        return;
+                    }
+
+                    // Lay Metadata chuan tu DB: Server tu lay metadata nguon
+                    msg.fwdFrom = origMsg.messageId;
+                    msg.forwardFromMessageId = origMsg.messageId;
+                    msg.forwardFromConvId = origMsg.convId;
+                    msg.forwardedFromSender = origMsg.sender;
+                } else {
+                    msg.fwdFrom = sourceMsgId;
+                    msg.forwardFromMessageId = sourceMsgId;
                 }
+                msg.isForwarded = true;
+                msg.kind = "forward";
+                msg.type = MessageType.FORWARD;
             }
 
             // 6. Luu DB truoc: Goi Transaction cua TV2 (ST-103) de luu tin vao SQLite/DB
@@ -160,6 +234,9 @@ public class MessageRouter implements IMessageRouter {
             } else {
                 if (messageToSend.timestamp == null || messageToSend.timestamp <= 0) {
                     messageToSend.timestamp = System.currentTimeMillis();
+                }
+                if (messageDao != null) {
+                    messageDao.save(messageToSend);
                 }
             }
 

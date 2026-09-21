@@ -144,7 +144,7 @@ public class ChatServer {
 
         switch (message.type) {
             case HELLO -> loginHandler.handleHello(session, message);
-            case CHAT -> messageRouter.handleChatMessage(session, message);
+            case CHAT, REPLY, FORWARD -> messageRouter.handleChatMessage(session, message);
             case LOGOUT -> loginHandler.handleLogout(session, message);
             case USER_SEARCH_REQUEST -> userSearchHandler.handleSearchRequest(session, message);
             case HISTORY_REQUEST -> historyHandler.handleHistoryRequest(session, message);

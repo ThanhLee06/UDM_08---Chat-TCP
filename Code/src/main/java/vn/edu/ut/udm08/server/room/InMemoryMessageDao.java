@@ -24,6 +24,11 @@ public class InMemoryMessageDao implements MessageDao {
     }
 
     @Override
+    public ProtocolMessage findByMessageId(String messageId) {
+        return findById(messageId);
+    }
+
+    @Override
     public void save(ProtocolMessage message) {
         if (message != null && message.messageId != null) {
             messages.put(message.messageId, message);

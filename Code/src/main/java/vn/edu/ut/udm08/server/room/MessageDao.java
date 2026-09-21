@@ -8,6 +8,9 @@ import java.util.List;
  */
 public interface MessageDao {
     ProtocolMessage findById(String messageId);
+    default ProtocolMessage findByMessageId(String messageId) {
+        return findById(messageId);
+    }
     void save(ProtocolMessage message);
     boolean isUserInConversation(String username, String convId);
     List<String> getConversationMembers(String convId);
