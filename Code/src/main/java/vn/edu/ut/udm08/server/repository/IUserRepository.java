@@ -10,6 +10,8 @@ public interface IUserRepository {
     Optional<User> findByEmail(String email);
     User save(User user);
     Optional<User> findByPhoneNumber(String phoneNumber);
+    default Optional<User> findByUsername(String username) { return Optional.empty(); }
+    default Optional<User> findById(long id) { return Optional.empty(); }
     boolean updatePassword(String phoneNumber, String newPasswordHash);
     default java.util.List<User> findAll() { return java.util.Collections.emptyList(); }
     default java.util.List<vn.edu.ut.udm08.shared.model.UserProfile> searchUsers(String query, String excludeUsername, int limit) { return searchUsers(query, 0L, excludeUsername, limit); }

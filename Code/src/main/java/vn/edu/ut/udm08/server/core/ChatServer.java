@@ -69,6 +69,7 @@ public class ChatServer {
             running = true;
         }
 
+        new vn.edu.ut.udm08.server.config.DatabaseInitializer().initialize();
         System.out.println("ChatServer started on port " + boundPort);
 
         try {
@@ -134,6 +135,9 @@ public class ChatServer {
             case CHAT -> messageRouter.handleChatMessage(session, message);
             case LOGOUT -> loginHandler.handleLogout(session, message);
             case USER_SEARCH_REQUEST -> userSearchHandler.handleSearchRequest(session, message);
+            case CONVERSATION_LIST_REQUEST -> messageRouter.handleConversationListRequest(session, message);
+            case HISTORY_REQUEST -> messageRouter.handleHistoryRequest(session, message);
+            case OPEN_DM_REQUEST -> messageRouter.handleOpenDmRequest(session, message);
             case DISCONNECT -> {
                 loginHandler.handleDisconnect(session);
             }
