@@ -33,6 +33,8 @@ public class ProtocolMessage {
     public String replyToSender;
     public String replyToContent;
     public String forwardedFromSender;
+    public String forwardFromMessageId;
+    public String forwardFromConvId;
     public boolean isForwarded;
     public MessageSendStatus sendStatus;
 

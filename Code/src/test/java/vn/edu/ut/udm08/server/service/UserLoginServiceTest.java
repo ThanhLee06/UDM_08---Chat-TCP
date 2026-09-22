@@ -123,6 +123,17 @@ public class UserLoginServiceTest {
         }
 
         @Override
+        public Optional<User> findByUsername(String username) {
+            if (username == null) return Optional.empty();
+            return Optional.ofNullable(usersByUsername.get(username.trim().toLowerCase()));
+        }
+
+        @Override
+        public Optional<User> findById(long id) {
+            return usersByUsername.values().stream().filter(u -> u.getId() != null && u.getId() == id).findFirst();
+        }
+
+        @Override
         public boolean updatePassword(String phoneNumber, String newPasswordHash) {
             Optional<User> userOpt = findByPhoneNumber(phoneNumber);
             if (userOpt.isPresent()) {

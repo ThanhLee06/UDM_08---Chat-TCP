@@ -47,13 +47,18 @@ public class ChatStorageService implements IChatStorageService {
                 ChatMessage saved = messageDao.insertMessage(conn, message);
                 boolean updated = conversationDao.updateLastMessage(conn, message.getConvId(), message.getContent(), message.getTimestamp());
                 if (!updated) {
-                    if (vn.edu.ut.udm08.shared.protocol.ConvId.isPublicRoom(message.getConvId())) {
+                    if (vn.edu.ut.udm08.shared.protocol.ConvId.isPublicRoom(message.getConvId()) || "GENERAL".equalsIgnoreCase(message.getConvId())) {
                         vn.edu.ut.udm08.server.model.Conversation conv = new vn.edu.ut.udm08.server.model.Conversation(message.getConvId(), "PUBLIC", "Phòng chung");
                         conv.setLastMessagePreview(message.getContent());
                         conv.setLastActivity(message.getTimestamp());
                         conversationDao.createConversation(conn, conv);
+                    } else if (vn.edu.ut.udm08.shared.protocol.ConvId.isDm(message.getConvId()) || message.getConvId().startsWith("conv-dm-")) {
+                        vn.edu.ut.udm08.server.model.Conversation conv = new vn.edu.ut.udm08.server.model.Conversation(message.getConvId(), "DM", null);
+                        conv.setLastMessagePreview(message.getContent());
+                        conv.setLastActivity(message.getTimestamp());
+                        conversationDao.createConversation(conn, conv);
                     } else {
-                        throw new IllegalArgumentException("Hội thoại không tồn tại: " + message.getConvId());
+                        throw new IllegalStateException("Hội thoại không tồn tại: " + message.getConvId());
                     }
                 }
                 conn.commit();
@@ -95,7 +100,7 @@ public class ChatStorageService implements IChatStorageService {
         while (current != null) {
             if (current instanceof SQLException sqlEx) {
                 String msg = sqlEx.getMessage();
-                if (msg != null && (msg.contains("UNIQUE") || msg.contains("unique") || sqlEx.getErrorCode() == 19)) {
+                if (msg != null && (msg.contains("messages.message_id") || (msg.contains("UNIQUE") && msg.contains("message_id")))) {
                     return true;
                 }
             }

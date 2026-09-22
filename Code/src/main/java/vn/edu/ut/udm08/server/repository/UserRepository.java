@@ -163,6 +163,37 @@ public class UserRepository implements IUserRepository {
         return Optional.empty();
     }
     @Override
+    public Optional<User> findByUsername(String username) {
+        if (username == null || username.isBlank()) {
+            return Optional.empty();
+        }
+        String sql = "SELECT * FROM users WHERE LOWER(username) = ?";
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, username.trim().toLowerCase(java.util.Locale.ROOT));
+            try (ResultSet rows = pstmt.executeQuery()) {
+                return rows.next() ? Optional.of(mapResultSetToUser(rows)) : Optional.empty();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return Optional.empty();
+        }
+    }
+    @Override
+    public Optional<User> findById(long id) {
+        String sql = "SELECT * FROM users WHERE id = ?";
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setLong(1, id);
+            try (ResultSet rows = pstmt.executeQuery()) {
+                return rows.next() ? Optional.of(mapResultSetToUser(rows)) : Optional.empty();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return Optional.empty();
+        }
+    }
+    @Override
     public boolean updatePassword(String phoneNumber, String newPasswordHash) {
         if (phoneNumber == null || newPasswordHash == null) {
             return false;
