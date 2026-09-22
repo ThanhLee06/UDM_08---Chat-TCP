@@ -61,18 +61,29 @@ public class MessageDao implements IMessageDao {
             throw new IllegalStateException("Không thể lưu tin nhắn vào CSDL", e);
         }
     }
+
     @Override
     public Optional<ChatMessage> findByMessageId(String messageId) {
+        try (Connection conn = connectionFactory.getConnection()) {
+            return findByMessageId(conn, messageId);
+        } catch (SQLException e) {
+            throw new IllegalStateException("Không thể tra cứu tin nhắn theo ID", e);
+        }
+    }
+
+    @Override
+    public Optional<ChatMessage> findByMessageId(Connection conn, String messageId) {
         if (messageId == null || messageId.isBlank()) {
             return Optional.empty();
         }
+
         String sql = """
                 SELECT sequence_id, message_id, conv_id, sender_username, content, timestamp, kind, reply_to_message_id, forward_from_message_id, forward_from_conv_id
                 FROM messages
                 WHERE message_id = ?
                 """;
-        try (Connection conn = connectionFactory.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, messageId.trim());
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
@@ -84,6 +95,7 @@ public class MessageDao implements IMessageDao {
         }
         return Optional.empty();
     }
+
     @Override
     public List<ChatMessage> findByConvId(String convId, Long beforeSequenceId, int limit) {
         if (convId == null || convId.isBlank() || limit <= 0) {
