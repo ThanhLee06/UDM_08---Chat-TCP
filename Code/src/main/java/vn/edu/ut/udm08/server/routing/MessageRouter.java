@@ -40,7 +40,7 @@ public class MessageRouter implements IMessageRouter {
 
     // Xu ly dinh tuyen tin nhan CHAT rieng tu nguoi gui den nguoi nhan
     @Override
-    public void handleChatMessage(ClientSession senderSession, ProtocolMessage msg) {
+    public synchronized void handleChatMessage(ClientSession senderSession, ProtocolMessage msg) {
         try {
             // 1. Kiem tra phien lam viec nguoi gui
             if (senderSession == null || senderSession.getUsername() == null) {
@@ -144,12 +144,13 @@ public class MessageRouter implements IMessageRouter {
             chatMsg.setForwardFromMessageId(msg.forwardFromMessageId != null ? msg.forwardFromMessageId : msg.fwdFrom);
             chatMsg.setForwardFromConvId(msg.forwardFromConvId);
 
+            boolean alreadyStored = messageDao != null && messageDao.findByMessageId(msg.messageId).isPresent();
             if (chatStorageService != null) {
                 chatStorageService.saveMessageWithTransaction(chatMsg);
             }
 
             // 5. Tim ClientSession cua nguoi nhan trong OnlineUserRegistry
-            List<ClientSession> targets = findTargetSessions(senderSession, convId, targetUser);
+            List<ClientSession> targets = alreadyStored ? List.of() : findTargetSessions(senderSession, convId, targetUser);
 
             for (ClientSession recipient : targets) {
                 if (recipient != null && recipient.isConnected() && !recipient.equals(senderSession)) {

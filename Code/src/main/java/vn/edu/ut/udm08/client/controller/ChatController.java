@@ -49,6 +49,34 @@ public class ChatController {
     @FXML private Button sendButton;
     @FXML private VBox emptyStatePane;    
     @FXML private Label emojiIcon;
+    @FXML private HBox connectionBar;
+    @FXML private Label connectionStatus;
+    @FXML private Button reconnectButton;
+    private Runnable reconnectAction;
+    private boolean connectionAvailable = true;
+    public void setReconnectAction(Runnable action) {
+        reconnectAction = action;
+        reconnectButton.setOnAction(event -> { if (reconnectAction != null) reconnectAction.run(); });
+    }
+    public void setConnectionState(boolean connected, String text, boolean busy) {
+        connectionAvailable = connected;
+        connectionBar.setVisible(!connected);
+        connectionBar.setManaged(!connected);
+        connectionStatus.setText(text);
+        reconnectButton.setDisable(busy);
+        sendButton.setDisable(!connected || selectedConvId == null);
+    }
+    public void connectionRestored() {
+        setConnectionState(true, "", false);
+        loadInitialHistory();
+    }
+    private void retryMessage(ProtocolMessage message) {
+        if (!connectionAvailable || sendListener == null || message.sendStatus == vn.edu.ut.udm08.shared.model.MessageSendStatus.PENDING || message.sendStatus == vn.edu.ut.udm08.shared.model.MessageSendStatus.SENT) return;
+        message.sendStatus = vn.edu.ut.udm08.shared.model.MessageSendStatus.PENDING;
+        message.errorMessage = null;
+        updateDeliveryStatus(message);
+        sendListener.onSendMessage(message);
+    }
 
     private final ObservableList<UserProfile> onlineUsers = FXCollections.observableArrayList();
 
@@ -168,7 +196,7 @@ public class ChatController {
         messageNodeIndex.clear();
         messageInput.clear();
         messageInput.setDisable(false);
-        sendButton.setDisable(false);
+        sendButton.setDisable(!connectionAvailable);
         emptyStatePane.setVisible(false);
         loadInitialHistory();
     }
@@ -187,7 +215,7 @@ public class ChatController {
         messageContainer.getChildren().clear();
         messageNodeIndex.clear();
         messageInput.setDisable(false);
-        sendButton.setDisable(false);
+        sendButton.setDisable(!connectionAvailable);
         emptyStatePane.setVisible(false);
         loadInitialHistory();
     }
@@ -429,7 +457,7 @@ public class ChatController {
         messageContainer.getChildren().clear();
         messageNodeIndex.clear();
 
-        sendButton.setDisable(false);
+        sendButton.setDisable(!connectionAvailable);
         messageInput.setDisable(false);
         emptyStatePane.setVisible(false);
         loadInitialHistory();
@@ -599,6 +627,13 @@ private void insertEmojiAtCaret(String emoji) {
         MenuItem forwardItem = new MenuItem("Chuyển tiếp");
         forwardItem.setOnAction(e -> openForwardDialog(message));
         contextMenu.getItems().addAll(replyItem, forwardItem);
+        if (isMine) {
+            MenuItem retry = new MenuItem("Gửi lại");
+            retry.setOnAction(event -> retryMessage(message));
+            contextMenu.getItems().add(retry);
+            contextMenu.setOnShowing(event -> retry.setDisable(!connectionAvailable || message.sendStatus != vn.edu.ut.udm08.shared.model.MessageSendStatus.FAILED && message.sendStatus != vn.edu.ut.udm08.shared.model.MessageSendStatus.UNKNOWN));
+            delivery.setOnMouseClicked(event -> retryMessage(message));
+        }
         bubble.setOnContextMenuRequested(e ->
                 contextMenu.show(bubble, e.getScreenX(), e.getScreenY())
         );
@@ -649,10 +684,11 @@ private void insertEmojiAtCaret(String emoji) {
         String text = message.sendStatus == null ? "" : switch (message.sendStatus) {
             case SENT -> "Đã gửi";
             case PENDING -> "Đang gửi…";
-            case FAILED -> "Gửi thất bại";
-            case UNKNOWN -> "Chưa xác nhận";
+            case FAILED -> "Gửi thất bại · Nhấn để gửi lại";
+            case UNKNOWN -> "Chưa xác nhận · Nhấn để gửi lại";
         };
         label.setText(text);
+        label.setTooltip(message.errorMessage == null ? null : new Tooltip(message.errorMessage));
         label.setVisible(!text.isEmpty());
         label.setManaged(!text.isEmpty());
     }

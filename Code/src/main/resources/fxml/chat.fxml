@@ -28,6 +28,10 @@
                     <Label text="🔍" styleClass="header-icon"/>
                 </HBox>
 
+                <HBox fx:id="connectionBar" visible="false" managed="false" spacing="12" alignment="CENTER_LEFT" style="-fx-padding: 10; -fx-background-color: #fff4d6;">
+                    <Label fx:id="connectionStatus" text="Mất kết nối" wrapText="true" HBox.hgrow="ALWAYS"/>
+                    <Button fx:id="reconnectButton" text="Kết nối lại"/>
+                </HBox>
                 <ScrollPane fx:id="messageScrollPane" fitToWidth="true" styleClass="message-scroll" VBox.vgrow="ALWAYS">
                     <VBox fx:id="messageContainer" spacing="10">
                         <padding><Insets top="18" right="18" bottom="18" left="18"/></padding>

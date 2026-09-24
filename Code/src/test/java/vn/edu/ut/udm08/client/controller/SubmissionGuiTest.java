@@ -180,7 +180,14 @@ class SubmissionGuiTest {
             assertFalse(sent.lookup("#delivery-status").getParent().getStyleClass().contains("message-bubble-sent"));
             message.sendStatus = vn.edu.ut.udm08.shared.model.MessageSendStatus.FAILED;
             Parent failed = (Parent) render.invoke(chat, message, true);
-            assertEquals("Gửi thất bại", ((Label) failed.lookup("#delivery-status")).getText());
+            assertEquals("Gửi thất bại · Nhấn để gửi lại", ((Label) failed.lookup("#delivery-status")).getText());
+            var sentMessages = new java.util.ArrayList<vn.edu.ut.udm08.shared.model.ProtocolMessage>();
+            chat.setSendListener(sentMessages::add);
+            ((Label) failed.lookup("#delivery-status")).getOnMouseClicked().handle(null);
+            assertEquals(1, sentMessages.size());
+            assertEquals("status-test", sentMessages.get(0).messageId);
+            ((Label) failed.lookup("#delivery-status")).getOnMouseClicked().handle(null);
+            assertEquals(1, sentMessages.size());
             chat.disposeSidebar();
         });
     }

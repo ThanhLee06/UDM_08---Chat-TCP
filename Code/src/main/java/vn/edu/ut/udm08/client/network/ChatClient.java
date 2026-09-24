@@ -54,6 +54,7 @@ public class ChatClient implements AutoCloseable {
     private final Map<String, PendingConversationListRequest> pendingConversationListRequests = new ConcurrentHashMap<>();
     private final Map<String, PendingUserSearchRequest> pendingUserSearchRequests = new ConcurrentHashMap<>();
     private final Map<String, PendingOpenDmRequest> pendingOpenDmRequests = new ConcurrentHashMap<>();
+    private final Map<String, Object> sendAttempts = new ConcurrentHashMap<>();
     private final Map<String, ProtocolMessage> outboundMessages = new ConcurrentHashMap<>();
     private final ScheduledExecutorService timeoutExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread thread = new Thread(r, "ChatClientTimeoutThread");
@@ -276,9 +277,11 @@ public class ChatClient implements AutoCloseable {
 
         outboundMessages.put(chatMessage.messageId, chatMessage);
         final String sentId = chatMessage.messageId;
+        final Object attempt = new Object();
+        sendAttempts.put(sentId, attempt);
         final long sendEpoch = sessionEpoch.get();
         timeoutExecutor.schedule(() -> {
-            if (isCurrentEpoch(sendEpoch)) markOutboundMessageFailed(sentId, "ACK_TIMEOUT", "Chưa nhận được xác nhận từ Server");
+            if (isCurrentEpoch(sendEpoch) && sendAttempts.remove(sentId, attempt)) markOutboundMessageFailed(sentId, "ACK_TIMEOUT", "Chưa nhận được xác nhận từ Server");
         }, requestTimeoutMs, TimeUnit.MILLISECONDS);
         notifyMessageStatusUpdated(chatMessage);
         sendRawMessage(JsonUtil.toJson(chatMessage));
@@ -875,6 +878,7 @@ public class ChatClient implements AutoCloseable {
             }
         }
         outboundMessages.clear();
+        sendAttempts.clear();
     }
 
     private void notifyMessageStatusUpdated(ProtocolMessage message) {
