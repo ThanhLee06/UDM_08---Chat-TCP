@@ -161,6 +161,7 @@ public class ChatController {
             sidebarController.markAsRead(selectedConvId);
         }
         chatPartnerName.setText("Phòng chung");
+        chatPartnerAvatar.getChildren().setAll(chatPartnerInitial);
         chatPartnerInitial.setText("#");
         chatPartnerAvatar.setStyle("-fx-background-color: #0068ff;");
         messageContainer.getChildren().clear();
@@ -180,6 +181,7 @@ public class ChatController {
             sidebarController.markAsRead(selectedConvId);
         }
         chatPartnerName.setText(group.getName());
+        chatPartnerAvatar.getChildren().setAll(chatPartnerInitial);
         chatPartnerInitial.setText(group.getName() != null && !group.getName().isBlank() ? group.getName().substring(0, 1).toUpperCase() : "#");
         chatPartnerAvatar.setStyle("-fx-background-color: #5e35b1;");
         messageContainer.getChildren().clear();
@@ -322,6 +324,12 @@ public class ChatController {
                     .filter(u -> u != null && u.username != null && !u.username.equalsIgnoreCase(currentUsername))
                     .toList();
             onlineUsers.setAll(otherUsers);
+            if (selectedUser != null) {
+                otherUsers.stream().filter(user -> user.username.equals(selectedUser.username)).findFirst().ifPresent(user -> {
+                    chatPartnerAvatar.getChildren().setAll(vn.edu.ut.udm08.client.ui.AvatarImages.view(user.avatarId, 42));
+                    chatPartnerName.setText(user.displayName == null ? user.username : user.displayName);
+                });
+            }
             if (sidebarController != null) {
                 sidebarController.updateOnlineUsers(users);
             }
@@ -414,6 +422,7 @@ public class ChatController {
         }
 
         chatPartnerName.setText(user.username);
+        chatPartnerAvatar.getChildren().setAll(vn.edu.ut.udm08.client.ui.AvatarImages.view(user.avatarId, 42));
         chatPartnerInitial.setText(user.username.substring(0, 1).toUpperCase());
         chatPartnerAvatar.setStyle("-fx-background-color: " + avatarColorFor(user.username) + ";");
 

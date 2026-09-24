@@ -23,6 +23,14 @@ import vn.edu.ut.udm08.shared.model.ProtocolMessage;
 import vn.edu.ut.udm08.shared.protocol.JsonUtil;
 
 public class ChatClient implements AutoCloseable {
+    private final ClientRequests featureRequests = new ClientRequests();
+    public java.util.concurrent.CompletableFuture<ProtocolMessage> requestFeature(MessageType type, String content) {
+        return featureRequests.send(type, content, request -> {
+            if (!isConnected()) throw new IllegalStateException("Mất kết nối với Server");
+            sendRawMessage(JsonUtil.toJson(request));
+        });
+    }
+    boolean completeFeatureRequest(ProtocolMessage message) { return featureRequests.complete(message); }
     private static final String ERROR_SESSION_INVALID = "SESSION_INVALID";
     private static final String ERROR_SESSION_EXPIRED = "SESSION_EXPIRED";
     private static final String ERROR_UNAUTHORIZED = "UNAUTHORIZED";
@@ -469,6 +477,7 @@ public class ChatClient implements AutoCloseable {
         return requestId;
     }
     public synchronized void disconnect() {
+        featureRequests.clear();
         try {
             if (writer != null && socket != null && !socket.isClosed()) {
                 ProtocolMessage disconnectMessage = new ProtocolMessage(MessageType.DISCONNECT);

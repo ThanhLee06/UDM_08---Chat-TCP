@@ -199,7 +199,7 @@ public class MessageRouter implements IMessageRouter {
                     summary.displayName = (other != null && !other.isBlank()) ? other : (c.getName() != null ? c.getName() : "Người dùng");
                     summary.avatar = "default";
                     if (other != null && userRepository != null) {
-                        userRepository.findByUsername(other).ifPresent(peer -> summary.avatar = peer.getAvatarPath());
+                        userRepository.findByUsername(other).ifPresent(peer -> { summary.avatar = peer.getAvatarPath(); summary.displayName = peer.getDisplayName(); });
                     }
                 } else {
                     summary.displayName = c.getName() != null ? c.getName() : c.getConvId();

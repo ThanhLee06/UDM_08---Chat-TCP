@@ -42,7 +42,9 @@ public class OnlineUserRegistry {
   public List<UserProfile> getOnlineUsers() {
     List<UserProfile> users = new ArrayList<>();
     for (ClientSession session : sessions.values()) {
-        users.add(new UserProfile(session.getUsername(), session.getAvatarId()));
+        UserProfile profile = new UserProfile(session.getUsername(), session.getAvatarId());
+        profile.displayName = session.getUser() == null ? session.getUsername() : session.getUser().getDisplayName();
+        users.add(profile);
     }
     return users;
   }

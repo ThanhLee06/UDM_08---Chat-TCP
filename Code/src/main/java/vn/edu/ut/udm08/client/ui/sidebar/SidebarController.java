@@ -150,7 +150,7 @@ public final class SidebarController {
         ContextMenu menu = new ContextMenu();
         menu.getStyleClass().add("custom-context-menu");
         MenuItem accountItem = new MenuItem("Tài khoản: " + currentUser);
-        accountItem.setDisable(true);
+        accountItem.setOnAction(event -> { if (getClient() != null) new vn.edu.ut.udm08.client.ui.ProfileDialog(getClient()).show(); });
         MenuItem logoutItem = new MenuItem("Đăng xuất");
         logoutItem.getStyleClass().add("menu-item-danger");
         logoutItem.setOnAction(evt -> {
@@ -223,6 +223,16 @@ public final class SidebarController {
 
     public void updateOnlineUsers(List<UserProfile> users) {
         this.onlineUsersList = (users != null) ? new ArrayList<>(users) : new ArrayList<>();
+        for (UserProfile user : onlineUsersList) {
+            if (user == null || user.username == null) continue;
+            if (user.username.equals(currentUser)) {
+                currentUserLabel.setText(user.displayName == null ? currentUser : user.displayName);
+                currentUserLabel.setGraphic(vn.edu.ut.udm08.client.ui.AvatarImages.view(user.avatarId, 32));
+            }
+            String id = ConvId.forDm(currentUser, user.username);
+            SidebarConversation existing = activeConversationsMap.get(id);
+            if (existing != null) activeConversationsMap.put(id, existing.withProfile(user.displayName == null ? user.username : user.displayName, user.avatarId));
+        }
         rebuildConversations();
     }
 

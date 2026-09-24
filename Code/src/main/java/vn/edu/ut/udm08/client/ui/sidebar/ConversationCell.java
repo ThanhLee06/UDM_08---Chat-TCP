@@ -191,18 +191,8 @@ public final class ConversationCell extends ListCell<SidebarConversation> {
         }
 
         initial.setText(item.getName().substring(0, item.getName().offsetByCodePoints(0, 1)).toUpperCase(Locale.ROOT));
-        String value = item.getAvatar();
-        if (value != null && value.matches("[a-zA-Z0-9_-]+(?:\\.(?:png|jpg|jpeg))?")) {
-            String filename = value.contains(".") ? value : value + ".jpg";
-            URL resource = getClass().getResource("/images/" + filename);
-            if (resource != null) {
-                Image picture = new Image(resource.toExternalForm(), 44, 44, false, true);
-                if (!picture.isError()) {
-                    image.setImage(picture);
-                    image.setVisible(true);
-                }
-            }
-        }
+        vn.edu.ut.udm08.client.ui.AvatarImages.apply(image, item.getAvatar());
+        image.setVisible(true);
 
         if (controller != null) {
             ContextMenu menu = new ContextMenu();

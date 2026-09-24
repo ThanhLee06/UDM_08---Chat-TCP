@@ -626,6 +626,7 @@ public class LoginController {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/chat.fxml"));
             Scene chatScene = new Scene(loader.load());
             ChatController chatController = loader.getController();
+            vn.edu.ut.udm08.client.ui.AvatarImages.configure(client);
             chatController.setCurrentUsername(username);
             chatController.loadSidebar(new ClientConversationSource(client));
             chatController.setSendListener(message -> java.util.concurrent.CompletableFuture.runAsync(() -> {
