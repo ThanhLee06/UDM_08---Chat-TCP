@@ -33,19 +33,20 @@ public final class EmojiInput extends StackPane {
     public EmojiInput() {
         getStyleClass().add("emoji-input");
         editor.getStyleClass().add("emoji-editor");
+        editor.setStyle("-fx-background-color: transparent;");
         editor.setWrapText(true);
         editor.setMinSize(0, 22);
         editor.setPrefHeight(22);
-        editor.setMaxHeight(88);
-        editor.setPrefHeight(44);
+        editor.setMaxHeight(80);
         prompt.setMouseTransparent(true);
         prompt.getStyleClass().add("emoji-input-prompt");
         prompt.visibleProperty().bind(editor.lengthProperty().map(length -> length == 0));
         StackPane.setAlignment(prompt, Pos.CENTER_LEFT);
         getChildren().addAll(editor, prompt);
         setMinWidth(0);
-        setPrefHeight(66);
-        setMaxHeight(110);
+        setMinHeight(38);
+        setPrefHeight(38);
+        setMaxHeight(100);
         addEventFilter(KeyEvent.KEY_PRESSED, event -> {
             if (event.getCode() == KeyCode.ENTER) {
                 if (event.isShiftDown()) editor.replaceSelection("\n");

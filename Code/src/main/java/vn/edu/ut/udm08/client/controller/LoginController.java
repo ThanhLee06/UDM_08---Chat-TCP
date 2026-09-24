@@ -727,11 +727,7 @@ public class LoginController {
             showError(statusLabel, msg);
         }
         try {
-            Alert alert = new Alert(Alert.AlertType.WARNING);
-            alert.setTitle("Đăng xuất thiết bị");
-            alert.setHeaderText("Tài khoản đã đăng nhập ở nơi khác");
-            alert.setContentText(msg);
-            alert.show();
+            vn.edu.ut.udm08.client.ui.components.AppDialog.info("Đăng xuất thiết bị", msg);
         } catch (Exception ignored) {
         }
     }
@@ -777,11 +773,7 @@ public class LoginController {
 
     private void showInfoAlert(String title, String message) {
         try {
-            Alert alert = new Alert(Alert.AlertType.INFORMATION);
-            alert.setTitle(title);
-            alert.setHeaderText(null);
-            alert.setContentText(message);
-            alert.showAndWait();
+            vn.edu.ut.udm08.client.ui.components.AppDialog.info(title, message);
         } catch (Exception ignored) {
         }
     }
