@@ -119,7 +119,7 @@ public class ClientSession implements Runnable {
             return false;
         }
 
-        if (!UsernameValidator.isValid(username)) {
+        if (username == null || username.isBlank()) {
             return false;
         }
 
@@ -182,9 +182,6 @@ public class ClientSession implements Runnable {
         }
     }
 
-    public void sendError(String errorCode, String errorMessage) {
-        sendError(null, errorCode, errorMessage);
-    }
     public void sendError(String requestId, String errorCode, String errorMessage) {
         ProtocolMessage msg = new ProtocolMessage(vn.edu.ut.udm08.shared.model.MessageType.ERROR);
         msg.requestId = requestId;
