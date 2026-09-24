@@ -1,0 +1,116 @@
+/* ===== Modern Custom Dialog System (dialog.css) ===== */
+
+.app-dialog-overlay {
+    -fx-background-color: rgba(15, 23, 42, 0.45);
+    -fx-alignment: center;
+}
+
+.app-dialog-card {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 14;
+    -fx-border-radius: 14;
+    -fx-border-color: #e2e8f0;
+    -fx-border-width: 1;
+    -fx-effect: dropshadow(three-pass-box, rgba(0, 0, 0, 0.18), 24, 0, 0, 8);
+    -fx-min-width: 360px;
+    -fx-max-width: 460px;
+    -fx-padding: 0;
+}
+
+.app-dialog-header {
+    -fx-padding: 20 24 12 24;
+    -fx-border-color: #f1f5f9;
+    -fx-border-width: 0 0 1 0;
+}
+
+.app-dialog-title {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #172b4d;
+}
+
+.app-dialog-close-btn {
+    -fx-background-color: transparent;
+    -fx-text-fill: #94a3b8;
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-padding: 0;
+    -fx-min-width: 28px;
+    -fx-max-width: 28px;
+    -fx-min-height: 28px;
+    -fx-max-height: 28px;
+    -fx-background-radius: 50%;
+    -fx-cursor: hand;
+}
+
+.app-dialog-close-btn:hover {
+    -fx-background-color: #f1f5f9;
+    -fx-text-fill: #1e293b;
+}
+
+.app-dialog-body {
+    -fx-padding: 20 24 20 24;
+    -fx-font-size: 14px;
+    -fx-text-fill: #475569;
+}
+
+.app-dialog-message {
+    -fx-font-size: 14px;
+    -fx-text-fill: #334155;
+    -fx-line-spacing: 4;
+}
+
+.app-dialog-input-field {
+    -fx-background-color: #f8fafc;
+    -fx-border-color: #cbd5e1;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-padding: 10 14;
+    -fx-font-size: 14px;
+    -fx-text-fill: #0f172a;
+}
+
+.app-dialog-input-field:focused {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #0068ff;
+    -fx-effect: dropshadow(three-pass-box, rgba(0, 104, 255, 0.2), 6, 0, 0, 0);
+}
+
+.app-dialog-footer {
+    -fx-padding: 12 24 20 24;
+    -fx-alignment: center-right;
+    -fx-spacing: 12;
+}
+
+.app-dialog-btn {
+    -fx-background-color: #f1f5f9;
+    -fx-text-fill: #334155;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 8;
+    -fx-padding: 8 20;
+    -fx-cursor: hand;
+    -fx-min-height: 36px;
+}
+
+.app-dialog-btn:hover {
+    -fx-background-color: #e2e8f0;
+}
+
+.app-dialog-btn-primary {
+    -fx-background-color: #0068ff;
+    -fx-text-fill: #ffffff;
+}
+
+.app-dialog-btn-primary:hover {
+    -fx-background-color: #0052cc;
+}
+
+.app-dialog-btn-danger {
+    -fx-background-color: #e11d48;
+    -fx-text-fill: #ffffff;
+}
+
+.app-dialog-btn-danger:hover {
+    -fx-background-color: #be123c;
+}

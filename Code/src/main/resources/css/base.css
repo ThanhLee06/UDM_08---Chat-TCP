@@ -31,3 +31,48 @@
   -fx-font-size: 14px;
   -fx-text-fill: #050505;
 }
+
+/* ===== Custom Dialog & Alert Styling ===== */
+.dialog-pane {
+  -fx-background-color: #ffffff;
+  -fx-background-radius: 14;
+  -fx-border-radius: 14;
+  -fx-border-color: #e2e8f0;
+  -fx-border-width: 1;
+  -fx-effect: dropshadow(three-pass-box, rgba(0, 0, 0, 0.12), 16, 0, 0, 4);
+}
+.dialog-pane .header-panel {
+  -fx-background-color: #ffffff;
+  -fx-padding: 16 20 8 20;
+}
+.dialog-pane > .label {
+  -fx-text-fill: #172b4d;
+  -fx-font-size: 16px;
+  -fx-font-weight: bold;
+}
+.dialog-pane .content {
+  -fx-padding: 12 20 16 20;
+}
+.dialog-pane .button-bar {
+  -fx-padding: 8 16 16 16;
+}
+.dialog-pane .button-bar .button {
+  -fx-background-color: #f1f5f9;
+  -fx-text-fill: #1e293b;
+  -fx-background-radius: 8;
+  -fx-padding: 8 18;
+  -fx-font-size: 13px;
+  -fx-font-weight: bold;
+  -fx-cursor: hand;
+}
+.dialog-pane .button-bar .button:default {
+  -fx-background-color: #0068ff;
+  -fx-text-fill: white;
+}
+.dialog-pane .button-bar .button:default:hover {
+  -fx-background-color: #0052cc;
+}
+.dialog-pane .button-bar .button:hover {
+  -fx-background-color: #e2e8f0;
+}
+

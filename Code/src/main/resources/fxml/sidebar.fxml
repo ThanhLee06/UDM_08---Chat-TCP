@@ -3,26 +3,33 @@
 <?import javafx.scene.layout.*?>
 <VBox xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
       fx:controller="vn.edu.ut.udm08.client.ui.sidebar.SidebarController"
-      styleClass="sidebar" minWidth="280" prefWidth="310" maxWidth="360">
+      styleClass="sidebar" minWidth="280" prefWidth="310" maxWidth="330">
     <fx:define><ToggleGroup fx:id="conversationTabs"/></fx:define>
-    <VBox styleClass="sidebar-heading" spacing="5">
-        <HBox alignment="CENTER_LEFT">
+    <VBox styleClass="sidebar-heading" spacing="8">
+        <HBox alignment="CENTER_LEFT" spacing="6">
             <Label text="Tin nhắn" styleClass="sidebar-title"/>
             <Pane HBox.hgrow="ALWAYS"/>
-            <Button text="+ Nhóm" onAction="#createGroup" accessibleText="Tạo nhóm mới"/>
-            <Button fx:id="refreshButton" text="↻" onAction="#reload" styleClass="sidebar-refresh" accessibleText="Tải lại danh sách hội thoại">
+            <Button fx:id="createGroupBtn" onAction="#createGroup" styleClass="sidebar-icon-btn" accessibleText="Tạo nhóm mới">
+                <tooltip><Tooltip text="Tạo nhóm mới"/></tooltip>
+            </Button>
+            <Button fx:id="findPhoneBtn" onAction="#findByPhone" styleClass="sidebar-icon-btn" accessibleText="Tìm bạn bằng số điện thoại">
+                <tooltip><Tooltip text="Tìm bạn qua số điện thoại"/></tooltip>
+            </Button>
+            <Button fx:id="refreshButton" onAction="#reload" styleClass="sidebar-icon-btn" accessibleText="Tải lại danh sách hội thoại">
                 <tooltip><Tooltip text="Tải lại hội thoại"/></tooltip>
             </Button>
         </HBox>
-        <Label fx:id="currentUserLabel" styleClass="sidebar-account"/>
-    </VBox>
-    <VBox styleClass="sidebar-search-box" style="-fx-padding: 0 12 8 12;">
-        <TextField fx:id="searchField" promptText="Lọc tên cuộc trò chuyện" styleClass="sidebar-search-input"/>
-    <Button text="Tìm bạn bằng số điện thoại" onAction="#findByPhone" maxWidth="Infinity"/>
+        <HBox alignment="CENTER_LEFT" spacing="6">
+            <Label fx:id="currentUserLabel" styleClass="sidebar-account"/>
+        </HBox>
+        <HBox styleClass="sidebar-search-box" alignment="CENTER_LEFT" spacing="6">
+            <Label fx:id="searchIconLabel" styleClass="sidebar-search-icon"/>
+            <TextField fx:id="searchField" promptText="Tìm kiếm..." styleClass="sidebar-search-input" HBox.hgrow="ALWAYS"/>
+        </HBox>
     </VBox>
     <HBox styleClass="sidebar-tabs" spacing="4">
-        <ToggleButton fx:id="directTab" text="💬 Đoạn chat" selected="true" toggleGroup="$conversationTabs" styleClass="sidebar-tab" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
-        <ToggleButton fx:id="roomsTab" text="👥 Online" toggleGroup="$conversationTabs" styleClass="sidebar-tab" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+        <ToggleButton fx:id="directTab" text="Đoạn chat" selected="true" toggleGroup="$conversationTabs" styleClass="sidebar-tab" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+        <ToggleButton fx:id="roomsTab" text="Đang online" toggleGroup="$conversationTabs" styleClass="sidebar-tab" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
     </HBox>
     <Label fx:id="conversationCount" styleClass="sidebar-count"/>
     <StackPane VBox.vgrow="ALWAYS">
@@ -35,3 +42,4 @@
         </VBox>
     </StackPane>
 </VBox>
+

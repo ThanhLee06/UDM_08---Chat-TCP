@@ -21,9 +21,12 @@
                     <StackPane fx:id="chatPartnerAvatar" styleClass="avatar-circle" prefWidth="42" prefHeight="42">
                         <Label fx:id="chatPartnerInitial" text="?" styleClass="avatar-text"/>
                     </StackPane>
-                    <Label minWidth="0" maxWidth="Infinity" HBox.hgrow="ALWAYS" fx:id="chatPartnerName" text="Chọn một người để chat" styleClass="chat-header-label"/>
+                    <VBox alignment="CENTER_LEFT" spacing="2" HBox.hgrow="ALWAYS">
+                        <Label minWidth="0" maxWidth="Infinity" fx:id="chatPartnerName" text="Chon mot nguoi de chat" styleClass="chat-header-label"/>
+                        <Label fx:id="chatPartnerStatus" text="" styleClass="chat-header-status"/>
+                    </VBox>
                     <Pane HBox.hgrow="ALWAYS"/>
-                    <Button text="Thông tin" onAction="#showConversationInfo" accessibleText="Thông tin hội thoại"/>
+                    <Button fx:id="infoButton" styleClass="header-info-btn" onAction="#showConversationInfo" accessibleText="Thông tin hội thoại"/>
                 </HBox>
 
                 <HBox fx:id="connectionBar" visible="false" managed="false" spacing="12" alignment="CENTER_LEFT" style="-fx-padding: 10; -fx-background-color: #fff4d6;">
@@ -42,23 +45,31 @@
 
                 <Button fx:id="newestButton" text="↓ Tin nhắn mới" visible="false" managed="false" styleClass="newest-button"/>
                 <VBox styleClass="input-bar">
-                    <HBox styleClass="toolbar-row" spacing="16" alignment="CENTER_LEFT">
-                        <padding><Insets top="8" right="16" bottom="4" left="16"/></padding>
-                       <Label fx:id="emojiIcon" text="😊" styleClass="toolbar-icon" onMouseClicked="#handleEmojiButtonClick"/>
-                        <Button text="Ảnh / Tệp" onAction="#chooseAttachment" accessibleText="Gửi ảnh hoặc tệp, tối đa 5 MB"/>
-                    </HBox>
-                    <HBox spacing="10" alignment="CENTER">
-                        <padding><Insets top="0" right="16" bottom="12" left="16"/></padding>
-                        <EmojiInput fx:id="messageInput" promptText="Nhập tin nhắn… (Shift+Enter để xuống dòng)" styleClass="message-input" HBox.hgrow="ALWAYS"/>
-                        <Button fx:id="sendButton" text="Gửi" styleClass="send-button" onAction="#handleSend"/>
+                    <HBox spacing="10" alignment="CENTER_LEFT">
+                        <padding><Insets top="8" right="14" bottom="10" left="14"/></padding>
+                        <HBox spacing="4" alignment="CENTER_LEFT">
+                            <Label fx:id="emojiIcon" styleClass="toolbar-icon" onMouseClicked="#handleEmojiButtonClick">
+                                <tooltip><Tooltip text="Chèn biểu cảm"/></tooltip>
+                            </Label>
+                            <Button fx:id="imageBtn" onAction="#chooseImageAttachment" styleClass="toolbar-btn" accessibleText="Gửi ảnh hoặc video">
+                                <tooltip><Tooltip text="Gửi ảnh hoặc video"/></tooltip>
+                            </Button>
+                            <Button fx:id="fileBtn" onAction="#chooseFileAttachment" styleClass="toolbar-btn" accessibleText="Đính kèm tệp">
+                                <tooltip><Tooltip text="Đính kèm tệp"/></tooltip>
+                            </Button>
+                        </HBox>
+                        <EmojiInput fx:id="messageInput" promptText="Nhập tin nhắn…" styleClass="message-input" HBox.hgrow="ALWAYS"/>
+                        <Button fx:id="sendButton" styleClass="send-button" onAction="#handleSend" accessibleText="Gửi tin nhắn">
+                            <tooltip><Tooltip text="Gửi tin nhắn"/></tooltip>
+                        </Button>
                     </HBox>
                 </VBox>
             </VBox>
 
-            <VBox fx:id="emptyStatePane" styleClass="empty-state" alignment="CENTER" spacing="10">
-                <Label text="UDM" styleClass="empty-state-brand"/>
-                <Label text="Chọn một cuộc trò chuyện" styleClass="empty-state-title"/>
-                <Label text="Tìm bạn bằng số điện thoại, tạo nhóm và bắt đầu trò chuyện" styleClass="empty-state-sub"/>
+            <VBox fx:id="emptyStatePane" styleClass="empty-state" alignment="CENTER" spacing="12">
+                <Label text="💬" styleClass="empty-state-icon"/>
+                <Label text="Bắt đầu trò chuyện" styleClass="empty-state-title"/>
+                <Label text="Chọn một cuộc trò chuyện từ danh sách hoặc tìm bạn để nhắn tin" styleClass="empty-state-sub"/>
             </VBox>
         </StackPane>
     </center>
