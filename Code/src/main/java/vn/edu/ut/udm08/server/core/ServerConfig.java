@@ -42,7 +42,10 @@ public final class ServerConfig {
             throw new IllegalStateException("Failed to load server configuration", e);
         }
 
-        java.nio.file.Path external = java.nio.file.Path.of(System.getProperty("udm08.server.config", "config/server.properties"));
+        String sysConfig = System.getProperty("udm08.server.config");
+        java.nio.file.Path external = (sysConfig != null && !sysConfig.isBlank())
+                ? java.nio.file.Path.of(sysConfig)
+                : java.nio.file.Path.of("config/server.properties");
         if (java.nio.file.Files.exists(external)) {
             try (InputStream input = java.nio.file.Files.newInputStream(external)) { properties.load(input); }
             catch (IOException e) { throw new IllegalStateException("Cannot read server configuration", e); }

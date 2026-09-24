@@ -9,6 +9,7 @@ public interface IUserRepository {
     boolean existsByEmail(String email);
     Optional<User> findByEmail(String email);
     default Optional<User> findByUsername(String username) { return Optional.empty(); }
+    default Optional<User> findById(long id) { return Optional.empty(); }
     User save(User user);
     Optional<User> findByPhoneNumber(String phoneNumber);
     boolean updatePassword(String phoneNumber, String newPasswordHash);

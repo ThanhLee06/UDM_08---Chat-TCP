@@ -119,7 +119,7 @@ public class ClientSession implements Runnable {
             return false;
         }
 
-        if (username == null || username.isBlank()) {
+        if (!UsernameValidator.isValid(username)) {
             return false;
         }
 
@@ -180,6 +180,10 @@ public class ClientSession implements Runnable {
         if (writer.checkError()) {
             throw new IOException("Khong the gui tin nhan");
         }
+    }
+
+    public void sendError(String errorCode, String errorMessage) {
+        sendError(null, errorCode, errorMessage);
     }
 
     public void sendError(String requestId, String errorCode, String errorMessage) {

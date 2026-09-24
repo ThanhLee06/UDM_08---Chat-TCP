@@ -25,7 +25,8 @@ class ProcessBoundaryTest {
         user.setEmail("processdemo@example.test"); user.setPasswordHash(new vn.edu.ut.udm08.shared.security.PasswordEncoder().encode("DemoPass123!")); users.save(user);
         Path file = dir.resolve("server.properties"); try (var out = Files.newOutputStream(file)) { config.store(out, "test"); }
         String executable = Path.of(System.getProperty("java.home"), "bin", System.getProperty("os.name").startsWith("Windows") ? "java.exe" : "java").toString();
-        Process server = new ProcessBuilder(executable, "-Dudm08.server.config=" + file, "-Dudm08.log.directory=" + dir.resolve("logs"),
+        String configPath = file.toAbsolutePath().toString().replace('\\', '/');
+        Process server = new ProcessBuilder(executable, "-Dudm08.server.config=" + configPath, "-Dudm08.log.directory=" + dir.resolve("logs"),
             "-cp", System.getProperty("java.class.path"), "vn.edu.ut.udm08.server.core.ServerApp")
             .redirectErrorStream(true).redirectOutput(dir.resolve("server-output.log").toFile()).start();
         try {

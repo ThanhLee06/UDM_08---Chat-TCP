@@ -2,6 +2,7 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
+<?import vn.edu.ut.udm08.client.ui.EmojiInput?>
 
 <BorderPane xmlns="http://javafx.com/javafx"
             xmlns:fx="http://javafx.com/fxml"
@@ -43,7 +44,7 @@
                     </HBox>
                     <HBox spacing="10" alignment="CENTER">
                         <padding><Insets top="0" right="16" bottom="12" left="16"/></padding>
-                        <TextField fx:id="messageInput" promptText="Nhập tin nhắn..." styleClass="message-input" HBox.hgrow="ALWAYS"/>
+                        <EmojiInput fx:id="messageInput" promptText="Nhập tin nhắn..." styleClass="message-input" HBox.hgrow="ALWAYS"/>
                         <Button fx:id="sendButton" text="Gửi" styleClass="send-button" onAction="#handleSend"/>
                     </HBox>
                 </VBox>
