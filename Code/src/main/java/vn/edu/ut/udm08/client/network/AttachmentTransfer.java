@@ -14,6 +14,14 @@ public final class AttachmentTransfer {
     public CompletableFuture<Attachment> upload(Path path,String convId,DoubleConsumer progress){return CompletableFuture.supplyAsync(()->{
         Attachment file=new Attachment();file.action="BEGIN";file.convId=convId;file.name=path.getFileName().toString();
         try{
+            if (vn.edu.ut.udm08.shared.protocol.ConvId.isDm(convId)) {
+                CompletableFuture<Void> opened = new CompletableFuture<>();
+                client.openDirectMessage(vn.edu.ut.udm08.shared.protocol.ConvId.getOtherUser(convId, client.getUsername()), new OpenDmCallback() {
+                    public void onSuccess(OpenDmResult result) { opened.complete(null); }
+                    public void onFailure(String id, String code, String message) { opened.completeExceptionally(new IllegalStateException(message)); }
+                });
+                opened.join();
+            }
             file.size=Files.size(path);if(file.size<1||file.size>5*1024*1024)throw new IllegalArgumentException("Chọn tệp từ 1 byte đến 5 MB");
             file=request(file);
             try(InputStream input=Files.newInputStream(path)){

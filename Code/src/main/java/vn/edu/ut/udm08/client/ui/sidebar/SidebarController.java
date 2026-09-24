@@ -141,6 +141,7 @@ public final class SidebarController {
     public void setLogoutListener(Runnable listener) {
         this.logoutListener = listener;
     }
+    public void focusSearch() { searchField.requestFocus(); searchField.selectAll(); }
     public ChatClient getClient() {
         return (source instanceof ClientConversationSource) ? ((ClientConversationSource) source).getClient() : null;
     }
@@ -453,10 +454,13 @@ public final class SidebarController {
     private void renderState() {
         conversationCount.setText(filtered.size() + " cuộc trò chuyện");
         refreshButton.setDisable(source == null || loading);
-        if (loadingIndicator != null) loadingIndicator.setVisible(false);
-        if (retryButton != null) retryButton.setVisible(false);
-        if (statusPane != null) statusPane.setVisible(false);
-        conversationList.setVisible(true);
+        if (loadingIndicator != null) { loadingIndicator.setVisible(loading); }
+        if (retryButton != null) { retryButton.setVisible(failed); }
+        boolean showState = loading && conversations.isEmpty() || failed || filtered.isEmpty();
+        if (statusPane != null) { statusPane.setVisible(showState); statusPane.setMouseTransparent(!showState); }
+        statusTitle.setText(loading ? "Đang tải hội thoại…" : failed ? "Chưa tải được hội thoại" : "Chưa có cuộc trò chuyện");
+        statusDetail.setText(failed ? "Kiểm tra kết nối rồi nhấn Thử lại." : "Tìm bạn bằng số điện thoại hoặc tạo nhóm để bắt đầu.");
+        conversationList.setVisible(!showState);
     }
 
     public SidebarConversation ensureConversation(String convId, String displayName, String avatar) {

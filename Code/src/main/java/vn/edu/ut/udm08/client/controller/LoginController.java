@@ -323,7 +323,7 @@ public class LoginController {
             if (selectedFile != null) {
                 Image img = new Image(selectedFile.toURI().toString());
                 setCroppedAvatarImage(regAvatarImage, img);
-                customAvatarPath = selectedFile.getAbsolutePath();
+                customAvatarPath = vn.edu.ut.udm08.client.ui.AvatarPayload.encode(selectedFile.toPath());
                 if (!regAvatarChoiceBox.getItems().contains("Tự chọn từ máy")) {
                     regAvatarChoiceBox.getItems().add("Tự chọn từ máy");
                 }
@@ -609,7 +609,7 @@ public class LoginController {
                     clientLoginService.getChatClient().connectWithoutHello(host, port, new vn.edu.ut.udm08.client.network.JavaFXChatListenerWrapper(createAuthListener()));
                 }
                 vn.edu.ut.udm08.shared.dto.RegisterInitRequest req = new vn.edu.ut.udm08.shared.dto.RegisterInitRequest(
-                    username, phone, email, password, "PRESET", regAvatarChoiceBox.getValue()
+                    username, phone, email, password, customAvatarPath == null ? "PRESET" : "UPLOAD", customAvatarPath == null ? regAvatarChoiceBox.getValue() : customAvatarPath
                 );
                 clientLoginService.getChatClient().sendRegisterInit(req);
             } catch (Exception e) {
@@ -660,6 +660,8 @@ public class LoginController {
             stage.setTitle("UDM08 Chat - " + username);
             stage.addEventHandler(WindowEvent.WINDOW_HIDDEN, event -> chatController.disposeSidebar());
             stage.setScene(chatScene);
+            stage.setMinWidth(820);
+            stage.setMinHeight(600);
             stage.setResizable(true);
         } catch (Exception e) {
             if (loginBtn != null) loginBtn.setDisable(false);

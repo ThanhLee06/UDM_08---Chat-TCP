@@ -52,6 +52,7 @@ public class ChatController {
     @FXML private HBox connectionBar;
     @FXML private Label connectionStatus;
     @FXML private Button reconnectButton;
+    @FXML private Button newestButton;
     private Runnable reconnectAction;
     private boolean connectionAvailable = true;
     public void setReconnectAction(Runnable action) {
@@ -143,6 +144,12 @@ public class ChatController {
         });
 
         messageInput.setOnAction(e -> handleSend());
+        newestButton.setOnAction(event -> { messageScrollPane.setVvalue(1); newestButton.setVisible(false); newestButton.setManaged(false); });
+        emojiIcon.setFocusTraversable(true);
+        emojiIcon.setOnKeyPressed(event -> { if (event.getCode() == KeyCode.ENTER || event.getCode() == KeyCode.SPACE) { handleEmojiButtonClick(); event.consume(); } });
+        messageInput.sceneProperty().addListener((observable, oldScene, scene) -> {
+            if (scene != null) scene.getAccelerators().put(new javafx.scene.input.KeyCodeCombination(KeyCode.F, javafx.scene.input.KeyCombination.CONTROL_DOWN), sidebarController::focusSearch);
+        });
         messageInput.setOnKeyPressed(e -> {
             if (e.getCode() == KeyCode.ESCAPE && replyingToMessage != null) {
                 cancelReply();
@@ -150,6 +157,7 @@ public class ChatController {
         });
 
         messageScrollPane.vvalueProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null && newVal.doubleValue() >= 0.95) { newestButton.setVisible(false); newestButton.setManaged(false); }
             if (newVal != null && newVal.doubleValue() <= 0.05 && hasMoreHistory && !isLoadingHistory) {
                 loadMoreHistory();
             }
@@ -385,6 +393,19 @@ public class ChatController {
                     .filter(u -> u != null && u.username != null && !u.username.equalsIgnoreCase(currentUsername))
                     .toList();
             onlineUsers.setAll(otherUsers);
+            for (ProtocolMessage message : new java.util.ArrayList<>(messageHistory.values())) {
+                if (!messageNodeIndex.containsKey(message.messageId) || java.util.Objects.equals(currentUsername, message.sender)) continue;
+                otherUsers.stream().filter(user -> user.username.equals(message.sender)).findFirst().ifPresent(user -> {
+                    message.avatarId = user.avatarId;
+                    Node previous = messageNodeIndex.get(message.messageId);
+                    int index = messageContainer.getChildren().indexOf(previous);
+                    if (index >= 0) {
+                        HBox row = createMessageRow(message, false);
+                        messageContainer.getChildren().set(index, row);
+                        messageNodeIndex.put(message.messageId, row);
+                    }
+                });
+            }
             if (selectedUser != null) {
                 otherUsers.stream().filter(user -> user.username.equals(selectedUser.username)).findFirst().ifPresent(user -> {
                     chatPartnerAvatar.getChildren().setAll(vn.edu.ut.udm08.client.ui.AvatarImages.view(user.avatarId, 42));
@@ -531,6 +552,8 @@ public class ChatController {
 
     @FXML
     private void handleSend() {
+        if (!connectionAvailable || selectedConvId == null) return;
+        if (messageInput.getText().length() > 5000) { historyStatus.setText("Tin nhắn tối đa 5.000 ký tự."); return; }
         String content = messageInput.getText().trim();
         if (content.isEmpty() || (selectedUser == null && (selectedConvId == null || selectedConvId.isBlank()))) return; 
 
@@ -650,7 +673,9 @@ private void insertEmojiAtCaret(String emoji) {
         EmojiText.install(contentLabel, 16, 300);
         VBox bubble = new VBox(4);
         bubble.getStyleClass().add(isMine ? "message-bubble-sent" : "message-bubble-received");
-        bubble.setMaxWidth(400);
+        bubble.maxWidthProperty().bind(javafx.beans.binding.Bindings.createDoubleBinding(() -> Math.max(160, Math.min(520, messageScrollPane.getViewportBounds().getWidth() - 100)), messageScrollPane.viewportBoundsProperty()));
+        contentLabel.setMinWidth(0);
+        contentLabel.maxWidthProperty().bind(bubble.maxWidthProperty().subtract(28));
         bubble.setUserData(message);
         if ((message.isForwarded || "forward".equalsIgnoreCase(message.kind)) && message.forwardedFromSender != null) {
             Label forwardedLabel = new Label("↪ Đã chuyển tiếp từ " + message.forwardedFromSender);
@@ -698,6 +723,7 @@ private void insertEmojiAtCaret(String emoji) {
         replyItem.setOnAction(e -> startReply(message));
         MenuItem forwardItem = new MenuItem("Chuyển tiếp");
         forwardItem.setOnAction(e -> openForwardDialog(message));
+        forwardItem.setDisable(message.content != null && message.content.startsWith("[FILE]"));
         contextMenu.getItems().addAll(replyItem, forwardItem);
         if (isMine) {
             MenuItem retry = new MenuItem("Gửi lại");
@@ -720,6 +746,7 @@ private void insertEmojiAtCaret(String emoji) {
         column.setAlignment(isMine ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
 
         HBox row = new HBox(8);
+        row.getProperties().put("timestamp", message.timestamp == null ? 0L : message.timestamp);
         row.setAlignment(isMine ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
 
         if (isMine) {
@@ -736,7 +763,8 @@ private void insertEmojiAtCaret(String emoji) {
             avatar.getStyleClass().add("avatar-circle-small");
             avatar.setStyle("-fx-background-color: " + avatarColorFor(senderName) + ";");
 
-            Label nameLabel = new Label(senderName);
+            String displayName = onlineUsers.stream().filter(user -> senderName.equals(user.username)).map(user -> user.displayName == null ? user.username : user.displayName).findFirst().orElse(senderName);
+            Label nameLabel = new Label(displayName);
             nameLabel.getStyleClass().add("message-sender-name");
 
             column.getChildren().addAll(nameLabel, bubble, timeLabel);
@@ -768,21 +796,34 @@ private void insertEmojiAtCaret(String emoji) {
     private void addMessageBubble(ProtocolMessage message, boolean isMine) {
         if (message == null) return;
         if (message.messageId != null && messageNodeIndex.containsKey(message.messageId)) {
+            ProtocolMessage existing = messageHistory.get(message.messageId);
+            if (isMine && message.sendStatus == null && existing != null) {
+                existing.sendStatus = vn.edu.ut.udm08.shared.model.MessageSendStatus.SENT;
+                updateDeliveryStatus(existing);
+            }
             return;
         }
+        boolean follow = isMine || messageScrollPane.getVvalue() >= 0.94 || messageContainer.getChildren().isEmpty();
         HBox row = createMessageRow(message, isMine);
         messageContainer.getChildren().add(row);
+        javafx.collections.FXCollections.sort(messageContainer.getChildren(), java.util.Comparator.comparingLong(node -> (Long) node.getProperties().getOrDefault("timestamp", 0L)));
         if (message.messageId != null) {
             messageNodeIndex.put(message.messageId, row);
         }
 
         messageScrollPane.layout();
-        messageScrollPane.setVvalue(1.0);
+        if (follow) Platform.runLater(() -> messageScrollPane.setVvalue(1));
+        else { newestButton.setVisible(true); newestButton.setManaged(true); }
     }
 
     private void prependMessageBubble(ProtocolMessage message, boolean isMine) {
         if (message == null) return;
         if (message.messageId != null && messageNodeIndex.containsKey(message.messageId)) {
+            ProtocolMessage existing = messageHistory.get(message.messageId);
+            if (isMine && message.sendStatus == null && existing != null) {
+                existing.sendStatus = vn.edu.ut.udm08.shared.model.MessageSendStatus.SENT;
+                updateDeliveryStatus(existing);
+            }
             return;
         }
         HBox row = createMessageRow(message, isMine);

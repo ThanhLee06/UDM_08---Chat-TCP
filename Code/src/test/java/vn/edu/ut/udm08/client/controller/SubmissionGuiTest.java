@@ -191,6 +191,26 @@ class SubmissionGuiTest {
             chat.disposeSidebar();
         });
     }
+    @Test void multilineComposerAndSmallChatWindowRemainUsable() throws Exception {
+        fx(() -> {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/chat.fxml"));
+            Parent root = loader.load(); new Scene(root, 820, 600);
+            ChatController chat = loader.getController(); chat.setCurrentUsername("alice"); chat.selectPublicRoom();
+            var input = (vn.edu.ut.udm08.client.ui.EmojiInput) root.lookup("#messageInput");
+            input.setText("Dòng một 😀\nDòng hai ❤️");
+            assertEquals("Dòng một 😀\nDòng hai ❤️", input.getText());
+            input.replaceSelection("\nDòng ba");
+            assertTrue(input.getText().endsWith("\nDòng ba"));
+            var sent = new java.util.ArrayList<vn.edu.ut.udm08.shared.model.ProtocolMessage>();
+            chat.setSendListener(sent::add);
+            ((Button) root.lookup("#sendButton")).fire();
+            assertEquals(1, sent.size()); assertTrue(sent.get(0).content.contains("\n"));
+            root.applyCss(); root.layout();
+            assertTrue(root.lookup("#sendButton").localToScene(root.lookup("#sendButton").getBoundsInLocal()).getMaxX() <= 820);
+            snapshot(root, "chat-small-ui.png");
+            chat.disposeSidebar();
+        });
+    }
     private static void fx(Checked action) throws Exception {
         FutureTask<Void> task = new FutureTask<>(() -> { action.run(); return null; });
         Platform.runLater(task); task.get(10, TimeUnit.SECONDS);

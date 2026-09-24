@@ -21,7 +21,7 @@
                     <StackPane fx:id="chatPartnerAvatar" styleClass="avatar-circle" prefWidth="42" prefHeight="42">
                         <Label fx:id="chatPartnerInitial" text="?" styleClass="avatar-text"/>
                     </StackPane>
-                    <Label fx:id="chatPartnerName" text="Chọn một người để chat" styleClass="chat-header-label"/>
+                    <Label minWidth="0" maxWidth="Infinity" HBox.hgrow="ALWAYS" fx:id="chatPartnerName" text="Chọn một người để chat" styleClass="chat-header-label"/>
                     <Pane HBox.hgrow="ALWAYS"/>
                     <Button text="Thông tin" onAction="#showConversationInfo" accessibleText="Thông tin hội thoại"/>
                 </HBox>
@@ -40,6 +40,7 @@
                     </VBox>
                 </ScrollPane>
 
+                <Button fx:id="newestButton" text="↓ Tin nhắn mới" visible="false" managed="false" styleClass="newest-button"/>
                 <VBox styleClass="input-bar">
                     <HBox styleClass="toolbar-row" spacing="16" alignment="CENTER_LEFT">
                         <padding><Insets top="8" right="16" bottom="4" left="16"/></padding>
@@ -48,16 +49,16 @@
                     </HBox>
                     <HBox spacing="10" alignment="CENTER">
                         <padding><Insets top="0" right="16" bottom="12" left="16"/></padding>
-                        <EmojiInput fx:id="messageInput" promptText="Nhập tin nhắn..." styleClass="message-input" HBox.hgrow="ALWAYS"/>
+                        <EmojiInput fx:id="messageInput" promptText="Nhập tin nhắn… (Shift+Enter để xuống dòng)" styleClass="message-input" HBox.hgrow="ALWAYS"/>
                         <Button fx:id="sendButton" text="Gửi" styleClass="send-button" onAction="#handleSend"/>
                     </HBox>
                 </VBox>
             </VBox>
 
             <VBox fx:id="emptyStatePane" styleClass="empty-state" alignment="CENTER" spacing="10">
-                <Label text="💬" styleClass="empty-state-icon"/>
+                <Label text="UDM" styleClass="empty-state-brand"/>
                 <Label text="Chọn một cuộc trò chuyện" styleClass="empty-state-title"/>
-                <Label text="Chọn một người ở danh sách bên trái để bắt đầu chat" styleClass="empty-state-sub"/>
+                <Label text="Tìm bạn bằng số điện thoại, tạo nhóm và bắt đầu trò chuyện" styleClass="empty-state-sub"/>
             </VBox>
         </StackPane>
     </center>

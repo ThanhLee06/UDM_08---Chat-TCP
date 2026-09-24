@@ -86,7 +86,7 @@ public class MessageRouter implements IMessageRouter {
             }
 
             if (convId != null && !convId.isBlank() && conversationRegistry != null) {
-                if (!ConvId.isDm(convId) && !(ConvId.isPublicRoom(convId) ? conversationRegistry.isMember(convId, senderSession) : canRead(getCurrentUser(senderSession), convId))) {
+                if (!ConvId.isDm(convId) && !((ConvId.isPublicRoom(convId) || conversationDao == null) ? conversationRegistry.isMember(convId, senderSession) : canRead(getCurrentUser(senderSession), convId))) {
                     sendErrorMessage(senderSession, msg.messageId, "NOT_A_MEMBER", "Khong co quyen gui tin vao hoi thoai nay");
                     return;
                 }
@@ -352,7 +352,7 @@ public class MessageRouter implements IMessageRouter {
             vn.edu.ut.udm08.shared.model.ConversationSummary summary = new vn.edu.ut.udm08.shared.model.ConversationSummary();
             summary.convId = convId;
             summary.chatType = "DM";
-            summary.displayName = targetUser.getUsername();
+            summary.displayName = targetUser.getDisplayName();
             summary.avatar = targetUser.getAvatarPath();
 
             ProtocolMessage response = new ProtocolMessage(MessageType.OPEN_DM_RESPONSE);

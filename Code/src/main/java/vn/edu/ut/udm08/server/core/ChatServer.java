@@ -76,7 +76,7 @@ public class ChatServer {
         this.profileHandler = new vn.edu.ut.udm08.server.handler.ProfileHandler(userRepository, new vn.edu.ut.udm08.server.service.AvatarStore(avatarDirectory), loginHandler);
 
         vn.edu.ut.udm08.server.service.UserLoginService loginService = new vn.edu.ut.udm08.server.service.UserLoginService(userRepository);
-        vn.edu.ut.udm08.server.service.UserRegisterService registerService = new vn.edu.ut.udm08.server.service.UserRegisterService(userRepository, new vn.edu.ut.udm08.shared.security.PasswordEncoder(), otpService);
+        vn.edu.ut.udm08.server.service.UserRegisterService registerService = new vn.edu.ut.udm08.server.service.UserRegisterService(userRepository, new vn.edu.ut.udm08.shared.security.PasswordEncoder(), otpService, new vn.edu.ut.udm08.server.service.AvatarStore(avatarDirectory));
 
         this.authHandler = new AuthHandler(loginService, registry, conversationRegistry, loginHandler);
         this.registerHandler = new RegisterHandler(registerService, loginService, otpService);
