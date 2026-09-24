@@ -138,7 +138,28 @@ public final class ConversationCell extends ListCell<SidebarConversation> {
         name.setText(item.getName());
         String lastMsg = item.getLastMessage();
         if (lastMsg != null && !lastMsg.isBlank()) {
-            detail.setText(lastMsg.trim());
+            String snippet = lastMsg.trim();
+            if (snippet.startsWith("[FILE]")) {
+                try {
+                    String jsonStr = snippet.substring(6);
+                    vn.edu.ut.udm08.shared.dto.Attachment att = vn.edu.ut.udm08.shared.protocol.JsonUtil.fromJson(jsonStr, vn.edu.ut.udm08.shared.dto.Attachment.class);
+                    if (att != null && att.name != null && !att.name.isBlank()) {
+                        String lower = att.name.toLowerCase();
+                        boolean isImg = lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".gif") || lower.endsWith(".webp");
+                        boolean isHash = att.name.length() > 24 && !att.name.contains(" ");
+                        if (isHash) {
+                            snippet = isImg ? "📷 Hình ảnh" : "📎 Đã gửi một tệp";
+                        } else {
+                            snippet = (isImg ? "📷 " : "📎 ") + att.name;
+                        }
+                    } else {
+                        snippet = "📎 Đã gửi một tệp";
+                    }
+                } catch (Exception e) {
+                    snippet = "📎 Đã gửi một tệp";
+                }
+            }
+            detail.setText(snippet);
         } else {
             detail.setText(item.getTypeLabel());
         }

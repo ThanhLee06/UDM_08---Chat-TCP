@@ -45,6 +45,9 @@ public final class SidebarController {
     @FXML private Label statusDetail;
     @FXML private Label conversationCount;
     @FXML private Label currentUserLabel;
+    @FXML private Button createGroupBtn;
+    @FXML private Button findPhoneBtn;
+    @FXML private Label searchIconLabel;
     @FXML private Button retryButton;
     @FXML private Button refreshButton;
 
@@ -67,6 +70,20 @@ public final class SidebarController {
 
     @FXML
     private void initialize() {
+        if (createGroupBtn != null) {
+            createGroupBtn.setGraphic(vn.edu.ut.udm08.client.ui.components.AppIcon.create(vn.edu.ut.udm08.client.ui.components.AppIcon.PATH_USERS, 16));
+        }
+        if (findPhoneBtn != null) {
+            findPhoneBtn.setGraphic(vn.edu.ut.udm08.client.ui.components.AppIcon.create(vn.edu.ut.udm08.client.ui.components.AppIcon.PATH_USER_PLUS, 16));
+        }
+        if (refreshButton != null) {
+            refreshButton.setGraphic(vn.edu.ut.udm08.client.ui.components.AppIcon.create(vn.edu.ut.udm08.client.ui.components.AppIcon.PATH_REFRESH, 16));
+        }
+        if (searchIconLabel != null) {
+            searchIconLabel.setGraphic(vn.edu.ut.udm08.client.ui.components.AppIcon.create(vn.edu.ut.udm08.client.ui.components.AppIcon.PATH_SEARCH, 14, javafx.scene.paint.Color.web("#94a3b8")));
+            searchIconLabel.setText("");
+        }
+
         if (currentUserLabel != null) {
             currentUserLabel.setCursor(javafx.scene.Cursor.HAND);
             currentUserLabel.setOnMouseClicked(e -> showUserMenu(e));
@@ -90,6 +107,21 @@ public final class SidebarController {
 
         if (searchField != null) {
             searchField.textProperty().addListener((obs, oldVal, newVal) -> applyFilter());
+            searchField.setOnAction(e -> {
+                String q = searchField.getText() != null ? searchField.getText().trim() : "";
+                if (!q.isEmpty() && getClient() != null) {
+                    vn.edu.ut.udm08.client.ui.PhoneLookupDialog.showWithQuery(getClient(), q, summary -> {
+                        SidebarConversation item = SidebarConversation.from(summary, currentUser);
+                        if (item == null) return;
+                        activeConversationsMap.put(item.getId(), item);
+                        selectedId = item.getId();
+                        directTab.setSelected(true);
+                        searchField.clear();
+                        rebuildConversations();
+                        selectionListener.accept(item);
+                    });
+                }
+            });
         }
 
         conversationTabs.selectedToggleProperty().addListener((observable, oldValue, value) -> {
@@ -366,15 +398,11 @@ public final class SidebarController {
 
     public void deleteConversationWithConfirmation(String convId, String convName) {
         if (convId == null || convId.isBlank()) return;
-        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-        alert.setTitle("Xóa cuộc trò chuyện");
-        alert.setHeaderText("Xóa cuộc trò chuyện với " + (convName != null ? convName : "người này") + "?");
-        alert.setContentText("Toàn bộ cuộc trò chuyện sẽ bị xóa khỏi danh sách. Bạn có chắc chắn không?");
-        alert.showAndWait().ifPresent(buttonType -> {
-            if (buttonType == ButtonType.OK) {
-                deleteConversation(convId);
-            }
-        });
+        boolean confirmed = vn.edu.ut.udm08.client.ui.components.AppDialog.confirmDanger("Xóa cuộc trò chuyện",
+                "Bạn có chắc muốn xóa cuộc trò chuyện với " + (convName != null ? convName : "người này") + "?", "Xóa");
+        if (confirmed) {
+            deleteConversation(convId);
+        }
     }
 
     public void updateLastMessage(String convId, String snippet, long timestamp, boolean incrementUnread) {
