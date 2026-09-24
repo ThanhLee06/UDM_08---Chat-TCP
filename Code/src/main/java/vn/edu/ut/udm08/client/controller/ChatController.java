@@ -415,7 +415,8 @@ public class ChatController {
             return prefix + "[Video]";
         }
         if (content.startsWith("[FILE]")) {
-            String name = content.length() > 6 ? content.substring(6).trim() : "Tập tin";
+            String name = "Tập tin";
+            try { name = vn.edu.ut.udm08.shared.protocol.JsonUtil.fromJson(content.substring(6), vn.edu.ut.udm08.shared.dto.Attachment.class).name; } catch (Exception ignored) {}
             return prefix + "[File] " + name;
         }
         if (content.startsWith("[STICKER]")) {
@@ -430,6 +431,26 @@ public class ChatController {
         return prefix + content;
     }
 
+    @FXML
+    private void chooseAttachment() {
+        if (selectedConvId == null || !connectionAvailable || sidebarController.getClient() == null) return;
+        javafx.stage.FileChooser chooser = new javafx.stage.FileChooser(); chooser.setTitle("Gửi ảnh hoặc tệp (tối đa 5 MB)");
+        java.io.File file = chooser.showOpenDialog(messageInput.getScene().getWindow()); if (file == null) return;
+        String convId = selectedConvId;
+        historyStatus.setText("Đang gửi tệp…");
+        new vn.edu.ut.udm08.client.network.AttachmentTransfer(sidebarController.getClient()).upload(file.toPath(), convId, value -> Platform.runLater(() -> historyStatus.setText("Đang gửi tệp " + Math.round(value * 100) + "%"))).whenComplete((attachment, error) -> Platform.runLater(() -> {
+            if (error != null) { historyStatus.setText("Gửi tệp thất bại. Tệp tối đa 5 MB; kiểm tra kết nối và thử lại."); return; }
+            historyStatus.setText("");
+            attachment.action = null; attachment.data = null;
+            ProtocolMessage message = new ProtocolMessage(MessageType.CHAT);
+            message.messageId = UUID.randomUUID().toString(); message.sender = currentUsername; message.convId = convId;
+            message.target = ConvId.isDm(convId) ? ConvId.getOtherUser(convId, currentUsername) : convId;
+            message.content = "[FILE]" + vn.edu.ut.udm08.shared.protocol.JsonUtil.toJson(attachment);
+            message.timestamp = System.currentTimeMillis(); message.sendStatus = vn.edu.ut.udm08.shared.model.MessageSendStatus.PENDING;
+            if (convId.equals(selectedConvId)) addMessageBubble(message, true);
+            if (sendListener != null) sendListener.onSendMessage(message);
+        }));
+    }
     @FXML
     private void showConversationInfo() {
         if (selectedConvId == null || sidebarController.getClient() == null) return;
@@ -661,7 +682,12 @@ private void insertEmojiAtCaret(String emoji) {
             bubble.getChildren().add(quoteBlock);
         }
 
-        bubble.getChildren().add(contentLabel);
+        if (message.content != null && message.content.startsWith("[FILE]")) {
+            try {
+                var file = vn.edu.ut.udm08.shared.protocol.JsonUtil.fromJson(message.content.substring(6), vn.edu.ut.udm08.shared.dto.Attachment.class);
+                bubble.getChildren().add(vn.edu.ut.udm08.client.ui.AttachmentView.create(sidebarController.getClient(), file));
+            } catch (Exception e) { bubble.getChildren().add(new Label("Tệp đính kèm không hợp lệ")); }
+        } else bubble.getChildren().add(contentLabel);
         Label delivery = new Label();
         delivery.setId("delivery-status");
         delivery.getStyleClass().add("message-delivery-status");

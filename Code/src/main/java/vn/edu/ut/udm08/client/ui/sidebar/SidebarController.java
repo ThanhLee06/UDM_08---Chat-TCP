@@ -123,8 +123,7 @@ public final class SidebarController {
         String query = (searchField != null && searchField.getText() != null) ? searchField.getText().trim().toLowerCase() : "";
         filtered.setPredicate(item -> {
             if (query.isEmpty()) return true;
-            return (item.getName() != null && item.getName().toLowerCase().contains(query)) ||
-                   (item.getLastMessage() != null && item.getLastMessage().toLowerCase().contains(query));
+            return item.getName() != null && item.getName().toLowerCase().contains(query);
         });
     }
 
@@ -162,6 +161,16 @@ public final class SidebarController {
         menu.show(currentUserLabel, Side.BOTTOM, 0, 4);
     }
 
+    @FXML
+    private void findByPhone() {
+        if (getClient() == null) return;
+        vn.edu.ut.udm08.client.ui.PhoneLookupDialog.show(getClient(), summary -> {
+            SidebarConversation item = SidebarConversation.from(summary, currentUser);
+            if (item == null) return;
+            activeConversationsMap.put(item.getId(), item); selectedId = item.getId();
+            directTab.setSelected(true); searchField.clear(); rebuildConversations(); selectionListener.accept(item);
+        });
+    }
     @FXML
     private void createGroup() {
         if (getClient() != null) new vn.edu.ut.udm08.client.ui.GroupDialog(getClient(), this::reload).create();

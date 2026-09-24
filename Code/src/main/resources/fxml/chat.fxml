@@ -44,9 +44,7 @@
                     <HBox styleClass="toolbar-row" spacing="16" alignment="CENTER_LEFT">
                         <padding><Insets top="8" right="16" bottom="4" left="16"/></padding>
                        <Label fx:id="emojiIcon" text="😊" styleClass="toolbar-icon" onMouseClicked="#handleEmojiButtonClick"/>
-                        <Label text="🖼" styleClass="toolbar-icon"/>
-                        <Label text="📎" styleClass="toolbar-icon"/>
-                        <Label text="✂" styleClass="toolbar-icon"/>
+                        <Button text="Ảnh / Tệp" onAction="#chooseAttachment" accessibleText="Gửi ảnh hoặc tệp, tối đa 5 MB"/>
                     </HBox>
                     <HBox spacing="10" alignment="CENTER">
                         <padding><Insets top="0" right="16" bottom="12" left="16"/></padding>

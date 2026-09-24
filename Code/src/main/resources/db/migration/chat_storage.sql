@@ -39,3 +39,12 @@ CREATE TABLE IF NOT EXISTS conversation_reads (
     FOREIGN KEY (conv_id) REFERENCES conversations(conv_id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS attachments (
+    id TEXT PRIMARY KEY,
+    conv_id TEXT NOT NULL,
+    owner_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    FOREIGN KEY (conv_id) REFERENCES conversations(conv_id) ON DELETE CASCADE,
+    FOREIGN KEY (owner_id) REFERENCES users(id)
+);

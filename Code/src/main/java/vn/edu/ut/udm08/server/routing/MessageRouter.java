@@ -16,6 +16,7 @@ public class MessageRouter implements IMessageRouter {
     private final vn.edu.ut.udm08.server.repository.IConversationDao conversationDao;
     private final vn.edu.ut.udm08.server.repository.IUserRepository userRepository;
     private vn.edu.ut.udm08.server.repository.IMessageDao messageDao;
+    private vn.edu.ut.udm08.server.repository.AttachmentRepository attachments;
     private vn.edu.ut.udm08.server.repository.ReadStateRepository readStates;
 
     public MessageRouter(OnlineUserRegistry registry) {
@@ -30,6 +31,7 @@ public class MessageRouter implements IMessageRouter {
     public MessageRouter(OnlineUserRegistry registry, IConversationRegistry conversationRegistry, vn.edu.ut.udm08.server.config.DatabaseConnectionFactory dbFactory) {
         this(registry, conversationRegistry, new vn.edu.ut.udm08.server.service.ChatStorageService(dbFactory), new vn.edu.ut.udm08.server.repository.ConversationDao(dbFactory), new vn.edu.ut.udm08.server.repository.UserRepository(dbFactory));
         this.messageDao = new vn.edu.ut.udm08.server.repository.MessageDao(dbFactory);
+        this.attachments = new vn.edu.ut.udm08.server.repository.AttachmentRepository(dbFactory);
         this.readStates = new vn.edu.ut.udm08.server.repository.ReadStateRepository(dbFactory);
     }
     public MessageRouter(OnlineUserRegistry registry, IConversationRegistry conversationRegistry, vn.edu.ut.udm08.server.service.IChatStorageService chatStorageService, vn.edu.ut.udm08.server.repository.IConversationDao conversationDao, vn.edu.ut.udm08.server.repository.IUserRepository userRepository) {
@@ -112,6 +114,15 @@ public class MessageRouter implements IMessageRouter {
             msg.avatarId = senderSession.getAvatarId();
             msg.replyTo = msg.replyToMessageId != null ? msg.replyToMessageId : msg.replyTo;
             if (messageDao != null && !validateReferences(senderSession, msg)) return;
+            if (msg.content.startsWith("[FILE]")) {
+                var requested = vn.edu.ut.udm08.shared.protocol.JsonUtil.fromJson(msg.content.substring(6), vn.edu.ut.udm08.shared.dto.Attachment.class);
+                var stored = attachments.find(requested.id);
+                if (!stored.convId.equals(msg.convId)) {
+                    sendErrorMessage(senderSession, msg.messageId, "INVALID_FILE", "Tệp không thuộc hội thoại này");
+                    return;
+                }
+                msg.content = "[FILE]" + vn.edu.ut.udm08.shared.protocol.JsonUtil.toJson(stored);
+            }
 
             if (msg.replyTo != null) {
                 if (msg.replyTo.isBlank()) {

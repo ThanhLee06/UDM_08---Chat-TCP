@@ -17,7 +17,8 @@
         <Label fx:id="currentUserLabel" styleClass="sidebar-account"/>
     </VBox>
     <VBox styleClass="sidebar-search-box" style="-fx-padding: 0 12 8 12;">
-        <TextField fx:id="searchField" promptText="🔎 Tìm bạn bè, nhóm và tin nhắn" styleClass="sidebar-search-input"/>
+        <TextField fx:id="searchField" promptText="Lọc tên cuộc trò chuyện" styleClass="sidebar-search-input"/>
+    <Button text="Tìm bạn bằng số điện thoại" onAction="#findByPhone" maxWidth="Infinity"/>
     </VBox>
     <HBox styleClass="sidebar-tabs" spacing="4">
         <ToggleButton fx:id="directTab" text="💬 Đoạn chat" selected="true" toggleGroup="$conversationTabs" styleClass="sidebar-tab" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
