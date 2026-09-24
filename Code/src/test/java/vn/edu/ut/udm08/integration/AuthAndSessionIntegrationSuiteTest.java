@@ -43,7 +43,7 @@ public class AuthAndSessionIntegrationSuiteTest {
     @BeforeEach
     public void setUp() {
         String testDb = "jdbc:sqlite:target/test_st111_" + System.currentTimeMillis() + ".db";
-        userRepository = new UserRepository(testDb);
+        userRepository = vn.edu.ut.udm08.support.TestDatabase.repository(testDb);
         registry = new OnlineUserRegistry();
         convRegistry = new ConversationRegistry();
         loginHandler = new LoginHandler(registry, convRegistry);
@@ -72,7 +72,7 @@ public class AuthAndSessionIntegrationSuiteTest {
     @Test
     void testLogoutAndSessionInvalidation() throws Exception {
         try (TestConnection conn = new TestConnection()) {
-            assertTrue(loginHandler.handleHello(conn.session, hello("usera", "avatar1")));
+            assertTrue(vn.edu.ut.udm08.support.TrustedLogin.establish(loginHandler, conn.session, hello("usera", "avatar1")));
             conn.readMessage();
             conn.readMessage();
             assertTrue(conn.session.isAuthenticated());
@@ -93,7 +93,7 @@ public class AuthAndSessionIntegrationSuiteTest {
     void testSingleSessionKickScenarios() throws Exception {
         try (TestConnection m1 = new TestConnection();
              TestConnection m2 = new TestConnection()) {
-            assertTrue(loginHandler.handleHello(m1.session, hello("usera", "avatar1")));
+            assertTrue(vn.edu.ut.udm08.support.TrustedLogin.establish(loginHandler, m1.session, hello("usera", "avatar1")));
             m1.readMessage();
             m1.readMessage();
             assertTrue(m1.session.isAuthenticated());
@@ -117,7 +117,7 @@ public class AuthAndSessionIntegrationSuiteTest {
     void testKickedSessionCannotCallProtectedApi() throws Exception {
         try (TestConnection m1 = new TestConnection();
              TestConnection m2 = new TestConnection()) {
-            assertTrue(loginHandler.handleHello(m1.session, hello("usera", "avatar1")));
+            assertTrue(vn.edu.ut.udm08.support.TrustedLogin.establish(loginHandler, m1.session, hello("usera", "avatar1")));
             m1.readMessage();
             m1.readMessage();
             assertTrue(m1.session.isAuthenticated());
@@ -140,7 +140,7 @@ public class AuthAndSessionIntegrationSuiteTest {
     @Test
     void testUserSearchIntegrationAndPrivacy() throws Exception {
         try (TestConnection conn = new TestConnection()) {
-            assertTrue(loginHandler.handleHello(conn.session, hello("usera", "avatar1")));
+            assertTrue(vn.edu.ut.udm08.support.TrustedLogin.establish(loginHandler, conn.session, hello("usera", "avatar1")));
             conn.readMessage();
             conn.readMessage();
 
@@ -176,7 +176,7 @@ public class AuthAndSessionIntegrationSuiteTest {
     @Test
     void testSearchTooLongKeywordHandledSafely() throws Exception {
         try (TestConnection conn = new TestConnection()) {
-            assertTrue(loginHandler.handleHello(conn.session, hello("usera", "avatar1")));
+            assertTrue(vn.edu.ut.udm08.support.TrustedLogin.establish(loginHandler, conn.session, hello("usera", "avatar1")));
             conn.readMessage();
             conn.readMessage();
 
@@ -193,7 +193,7 @@ public class AuthAndSessionIntegrationSuiteTest {
     @Test
     void testAccountSwitchingOnSameClient() throws Exception {
         try (TestConnection conn1 = new TestConnection()) {
-            assertTrue(loginHandler.handleHello(conn1.session, hello("usera", "avatar1")));
+            assertTrue(vn.edu.ut.udm08.support.TrustedLogin.establish(loginHandler, conn1.session, hello("usera", "avatar1")));
             conn1.readMessage();
             conn1.readMessage();
             assertEquals("usera", conn1.session.getUsername());
@@ -205,7 +205,7 @@ public class AuthAndSessionIntegrationSuiteTest {
             assertFalse(conn1.session.isAuthenticated());
 
             try (TestConnection conn2 = new TestConnection()) {
-                assertTrue(loginHandler.handleHello(conn2.session, hello("userb", "avatar2")));
+                assertTrue(vn.edu.ut.udm08.support.TrustedLogin.establish(loginHandler, conn2.session, hello("userb", "avatar2")));
                 conn2.readMessage();
                 conn2.readMessage();
                 assertEquals("userb", conn2.session.getUsername());
@@ -217,7 +217,7 @@ public class AuthAndSessionIntegrationSuiteTest {
     @Test
     void testUnexpectedDisconnectCleanupAndReLogin() throws Exception {
         try (TestConnection conn1 = new TestConnection()) {
-            assertTrue(loginHandler.handleHello(conn1.session, hello("usera", "avatar1")));
+            assertTrue(vn.edu.ut.udm08.support.TrustedLogin.establish(loginHandler, conn1.session, hello("usera", "avatar1")));
             conn1.readMessage();
             conn1.readMessage();
             assertEquals(conn1.session, registry.find("usera"));
@@ -226,7 +226,7 @@ public class AuthAndSessionIntegrationSuiteTest {
             assertNull(registry.find("usera"));
 
             try (TestConnection conn2 = new TestConnection()) {
-                assertTrue(loginHandler.handleHello(conn2.session, hello("userb", "avatar1")));
+                assertTrue(vn.edu.ut.udm08.support.TrustedLogin.establish(loginHandler, conn2.session, hello("userb", "avatar1")));
                 conn2.readMessage();
                 conn2.readMessage();
                 assertEquals(conn2.session, registry.find("userb"));

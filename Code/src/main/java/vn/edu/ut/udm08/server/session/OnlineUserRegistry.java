@@ -1,5 +1,6 @@
 package vn.edu.ut.udm08.server.session;
 import vn.edu.ut.udm08.shared.model.UserProfile;
+import vn.edu.ut.udm08.shared.validation.UsernameValidator;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;

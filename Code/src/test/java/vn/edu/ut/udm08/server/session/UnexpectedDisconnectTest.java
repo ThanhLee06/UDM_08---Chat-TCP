@@ -25,11 +25,11 @@ public class UnexpectedDisconnectTest {
 
         try (TestConnection userA = new TestConnection();
              TestConnection userB = new TestConnection()) {
-            assertTrue(handler.handleHello(userA.session, hello("userA", "01")));
+            assertTrue(vn.edu.ut.udm08.support.TrustedLogin.establish(handler, userA.session, hello("userA", "01")));
             userA.readMessage();
             userA.readMessage();
 
-            assertTrue(handler.handleHello(userB.session, hello("userB", "02")));
+            assertTrue(vn.edu.ut.udm08.support.TrustedLogin.establish(handler, userB.session, hello("userB", "02")));
             userB.readMessage();
             userB.readMessage();
             userA.readMessage();
@@ -51,12 +51,12 @@ public class UnexpectedDisconnectTest {
 
         try (TestConnection s1 = new TestConnection();
              TestConnection s2 = new TestConnection()) {
-            assertTrue(handler.handleHello(s1.session, hello("alice", "01")));
+            assertTrue(vn.edu.ut.udm08.support.TrustedLogin.establish(handler, s1.session, hello("alice", "01")));
             s1.readMessage();
             s1.readMessage();
             assertEquals(s1.session, registry.find("alice"));
 
-            assertTrue(handler.handleHello(s2.session, hello("alice", "02")));
+            assertTrue(vn.edu.ut.udm08.support.TrustedLogin.establish(handler, s2.session, hello("alice", "02")));
             s2.readMessage();
             s2.readMessage();
 

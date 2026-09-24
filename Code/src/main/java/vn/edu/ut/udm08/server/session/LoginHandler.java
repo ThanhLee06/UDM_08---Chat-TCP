@@ -3,6 +3,7 @@ import java.io.IOException;
 import java.util.List;
 import vn.edu.ut.udm08.server.conversation.IConversationRegistry;
 import vn.edu.ut.udm08.shared.model.MessageType;
+import vn.edu.ut.udm08.shared.validation.UsernameValidator;
 import vn.edu.ut.udm08.shared.model.ProtocolMessage;
 import vn.edu.ut.udm08.shared.model.UserProfile;
 import vn.edu.ut.udm08.shared.protocol.ConvId;
@@ -19,7 +20,10 @@ public class LoginHandler {
         this.registry = registry;
         this.conversationRegistry = conversationRegistry;
     }
-    public boolean handleLoginSuccess(ClientSession session, vn.edu.ut.udm08.shared.model.User user) {
+    public synchronized boolean handleLoginSuccess(ClientSession session, vn.edu.ut.udm08.shared.model.User user) {
+        return handleLoginSuccess(session, user, true);
+    }
+    public synchronized boolean handleLoginSuccess(ClientSession session, vn.edu.ut.udm08.shared.model.User user, boolean broadcast) {
         if (session == null || user == null || user.getId() == null) {
             return false;
         }
@@ -48,52 +52,15 @@ public class LoginHandler {
         if (conversationRegistry != null) {
             conversationRegistry.join(ConvId.PUBLIC_ROOM_ID, session);
         }
-        broadcastUserList();
+        if (broadcast) broadcastUserList();
         return true;
     }
 
     public boolean handleHello(ClientSession session, ProtocolMessage message) {
-        if (session == null) {
-            return false;
+        if (session != null) {
+            sendError(session, "AUTH_REQUIRED", "Use AUTH_LOGIN with account and password");
         }
-        if (message == null || message.type != MessageType.HELLO) {
-            sendError(session, "INVALID_HELLO", "Goi tin dang nhap khong hop le");
-            return false;
-        }
-        if (session.isAuthenticated()) {
-            sendError(session, "ALREADY_AUTHENTICATED", "Phien nay da dang nhap");
-            return false;
-        }
-        if (!UsernameValidator.isValid(message.sender)) {
-            sendError(session, "INVALID_USERNAME", "Username khong hop le");
-            return false;
-        }
-        if (message.avatarId == null || message.avatarId.isBlank()) {
-            sendError(session, "INVALID_AVATAR", "Avatar khong hop le");
-            return false;
-        }
-        registry.kickSession(message.sender, "Tài khoản của bạn vừa đăng nhập ở một thiết bị khác", session);
-        boolean authenticated = session.authenticate(message.sender, message.avatarId);
-        if (!authenticated) {
-            sendError(session, "INVALID_IDENTITY", "Thong tin dang nhap khong hop le");
-            return false;
-        }
-        boolean registered = registry.register(session);
-        if (!registered) {
-            sendError(session, "USERNAME_TAKEN", "Username da co nguoi su dung");
-            session.close();
-            return false;
-        }
-        boolean sent = sendHelloOk(session);
-        if (!sent) {
-            registry.remove(session);
-            return false;
-        }
-        if (conversationRegistry != null) {
-            conversationRegistry.join(ConvId.PUBLIC_ROOM_ID, session);
-        }
-        broadcastUserList();
-        return true;
+        return false;
     }
     public void handleDisconnect(ClientSession session) {
         if (session == null) {

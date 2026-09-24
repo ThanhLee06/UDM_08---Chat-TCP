@@ -33,7 +33,7 @@ class ClientServerProtocolIntegrationTest {
     @BeforeEach
     void setUp() throws Exception {
 
-        server = new ChatServer(ServerConfig.load());
+        server = vn.edu.ut.udm08.support.TestServer.create();
 
         serverThread = new Thread(() -> {
             try {
@@ -133,7 +133,7 @@ class ClientServerProtocolIntegrationTest {
         ProtocolMessage message = response.get();
 
         assertNotNull(message);
-        assertEquals(MessageType.HELLO_OK, message.type);
+        assertEquals(MessageType.AUTH_LOGIN_OK, message.type);
         assertEquals("SERVER", message.sender);
         assertEquals("alice", message.target);
     }
@@ -170,7 +170,7 @@ class ClientServerProtocolIntegrationTest {
         ProtocolMessage message = receivedMessage.get();
 
         assertNotNull(message);
-        assertEquals(MessageType.HELLO_OK, message.type);
+        assertEquals(MessageType.AUTH_LOGIN_OK, message.type);
     }
 
     @Test
@@ -449,11 +449,11 @@ class ClientServerProtocolIntegrationTest {
     }
 
     private void connectClient(ChatClient client, String username, String avatarId, ChatListener listener) throws IOException {
-        client.connect(
+        client.connectAndAuthLogin(
                 "localhost",
                 server.getPort(),
-                username,
-                avatarId,
+                username + "@example.test",
+                vn.edu.ut.udm08.support.TestServer.PASSWORD,
                 listener
         );
     }

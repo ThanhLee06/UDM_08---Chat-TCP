@@ -27,12 +27,12 @@ public class SingleSessionKickTest {
     void testWrongPasswordDoesNotKickExistingSession() throws Exception {
         OnlineUserRegistry registry = new OnlineUserRegistry();
         LoginHandler loginHandler = new LoginHandler(registry);
-        IUserRepository userRepository = new UserRepository();
+        IUserRepository userRepository = vn.edu.ut.udm08.support.TestDatabase.repository();
         UserLoginService loginService = new UserLoginService(userRepository);
 
         try (TestConnection m1 = new TestConnection();
              TestConnection m2 = new TestConnection()) {
-            boolean m1Success = loginHandler.handleHello(m1.session, hello("user108", "01"));
+            boolean m1Success = vn.edu.ut.udm08.support.TrustedLogin.establish(loginHandler, m1.session, hello("user108", "01"));
             assertTrue(m1Success);
             assertNotNull(registry.find("user108"));
 
@@ -53,12 +53,12 @@ public class SingleSessionKickTest {
 
         try (TestConnection m1 = new TestConnection();
              TestConnection m2 = new TestConnection()) {
-            assertTrue(loginHandler.handleHello(m1.session, hello("alice108", "01")));
+            assertTrue(vn.edu.ut.udm08.support.TrustedLogin.establish(loginHandler, m1.session, hello("alice108", "01")));
             m1.readMessage();
             m1.readMessage();
             assertNotNull(registry.find("alice108"));
 
-            assertTrue(loginHandler.handleHello(m2.session, hello("alice108", "02")));
+            assertTrue(vn.edu.ut.udm08.support.TrustedLogin.establish(loginHandler, m2.session, hello("alice108", "02")));
             m2.readMessage();
             m2.readMessage();
 

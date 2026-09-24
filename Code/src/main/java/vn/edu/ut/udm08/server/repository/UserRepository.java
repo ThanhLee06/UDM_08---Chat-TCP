@@ -5,54 +5,25 @@ import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.Optional;
 public class UserRepository implements IUserRepository {
-    private final String dbUrl;
+    private final vn.edu.ut.udm08.server.config.DatabaseConnectionFactory connectionFactory;
+
     public UserRepository() {
-        this(System.getProperty("udm08.db.url", "jdbc:sqlite:udm08_chat.db"));
+        this(new vn.edu.ut.udm08.server.config.DatabaseConnectionFactory());
     }
+
     public UserRepository(String dbUrl) {
-        this.dbUrl = dbUrl;
-        initDatabase();
+        this(new vn.edu.ut.udm08.server.config.DatabaseConnectionFactory(dbUrl));
     }
+
+    public UserRepository(vn.edu.ut.udm08.server.config.DatabaseConnectionFactory connectionFactory) {
+        if (connectionFactory == null) {
+            throw new IllegalArgumentException("ConnectionFactory != null");
+        }
+        this.connectionFactory = connectionFactory;
+    }
+
     private Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(dbUrl);
-    }
-    private void initDatabase() {
-        try (InputStream is = getClass().getResourceAsStream("/db/migration/V2__auth.sql")) {
-            if (is == null) {
-                throw new IllegalStateException("Thiếu schema tài khoản");
-            }
-            String sql = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-            try (Connection conn = getConnection();
-                 Statement stmt = conn.createStatement()) {
-                stmt.execute(sql);
-                boolean hasEmail = false;
-                try (ResultSet columns = stmt.executeQuery("PRAGMA table_info(users)")) {
-                    while (columns.next()) {
-                        if ("email".equalsIgnoreCase(columns.getString("name"))) hasEmail = true;
-                    }
-                }
-                if (!hasEmail) stmt.execute("ALTER TABLE users ADD COLUMN email TEXT");
-                stmt.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_users_email ON users(lower(email)) WHERE email IS NOT NULL");
-            }
-        } catch (Exception e) {
-            throw new IllegalStateException("Không thể khởi tạo cơ sở dữ liệu tài khoản", e);
-        }
-        try (InputStream is = getClass().getResourceAsStream("/db/migration/chat_storage.sql")) {
-            if (is != null) {
-                String sql = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-                try (Connection conn = getConnection();
-                     Statement stmt = conn.createStatement()) {
-                    stmt.execute("PRAGMA foreign_keys = ON;");
-                    for (String query : sql.split(";")) {
-                        if (!query.trim().isEmpty()) {
-                            stmt.execute(query.trim());
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            throw new IllegalStateException("Không thể khởi tạo cơ sở dữ liệu hội thoại", e);
-        }
+        return connectionFactory.getConnection();
     }
     @Override
     public boolean existsByEmail(String email) {
@@ -71,6 +42,36 @@ public class UserRepository implements IUserRepository {
             }
         } catch (SQLException e) {
             throw new IllegalStateException("Không thể tra cứu email", e);
+        }
+    }
+    @Override
+    public Optional<User> findByUsername(String username) {
+        if (username == null || username.isBlank()) {
+            return Optional.empty();
+        }
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement("SELECT * FROM users WHERE LOWER(username) = ?")) {
+            stmt.setString(1, username.trim().toLowerCase(java.util.Locale.ROOT));
+            try (ResultSet rows = stmt.executeQuery()) {
+                return rows.next() ? Optional.of(mapResultSetToUser(rows)) : Optional.empty();
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Không thể tra cứu username", e);
+        }
+    }
+    @Override
+    public Optional<User> findById(long id) {
+        if (id <= 0) {
+            return Optional.empty();
+        }
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement("SELECT * FROM users WHERE id = ?")) {
+            stmt.setLong(1, id);
+            try (ResultSet rows = stmt.executeQuery()) {
+                return rows.next() ? Optional.of(mapResultSetToUser(rows)) : Optional.empty();
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Không thể tra cứu user id", e);
         }
     }
     @Override
@@ -161,37 +162,6 @@ public class UserRepository implements IUserRepository {
             e.printStackTrace();
         }
         return Optional.empty();
-    }
-    @Override
-    public Optional<User> findByUsername(String username) {
-        if (username == null || username.isBlank()) {
-            return Optional.empty();
-        }
-        String sql = "SELECT * FROM users WHERE LOWER(username) = ?";
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, username.trim().toLowerCase(java.util.Locale.ROOT));
-            try (ResultSet rows = pstmt.executeQuery()) {
-                return rows.next() ? Optional.of(mapResultSetToUser(rows)) : Optional.empty();
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return Optional.empty();
-        }
-    }
-    @Override
-    public Optional<User> findById(long id) {
-        String sql = "SELECT * FROM users WHERE id = ?";
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setLong(1, id);
-            try (ResultSet rows = pstmt.executeQuery()) {
-                return rows.next() ? Optional.of(mapResultSetToUser(rows)) : Optional.empty();
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return Optional.empty();
-        }
     }
     @Override
     public boolean updatePassword(String phoneNumber, String newPasswordHash) {

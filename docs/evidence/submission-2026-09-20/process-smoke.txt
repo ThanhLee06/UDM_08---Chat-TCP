@@ -1,0 +1,4 @@
+PASS 2026-09-20T14:22:44.120754800Z
+Client JVM PID=16088
+Server JVM PID=12176
+Transport=TCP loopback; AUTH_LOGIN_OK received

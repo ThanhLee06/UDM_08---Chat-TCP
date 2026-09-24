@@ -15,19 +15,21 @@ public class MessageRouter implements IMessageRouter {
     private final vn.edu.ut.udm08.server.service.IChatStorageService chatStorageService;
     private final vn.edu.ut.udm08.server.repository.IConversationDao conversationDao;
     private final vn.edu.ut.udm08.server.repository.IUserRepository userRepository;
+    private vn.edu.ut.udm08.server.repository.IMessageDao messageDao;
 
     public MessageRouter(OnlineUserRegistry registry) {
         this(registry, null);
     }
-
     public MessageRouter(IConversationRegistry conversationRegistry) {
         this(null, conversationRegistry);
     }
-
     public MessageRouter(OnlineUserRegistry registry, IConversationRegistry conversationRegistry) {
-        this(registry, conversationRegistry, new vn.edu.ut.udm08.server.service.ChatStorageService(), new vn.edu.ut.udm08.server.repository.ConversationDao(), new vn.edu.ut.udm08.server.repository.UserRepository());
+        this(registry, conversationRegistry, new vn.edu.ut.udm08.server.config.DatabaseConnectionFactory());
     }
-
+    public MessageRouter(OnlineUserRegistry registry, IConversationRegistry conversationRegistry, vn.edu.ut.udm08.server.config.DatabaseConnectionFactory dbFactory) {
+        this(registry, conversationRegistry, new vn.edu.ut.udm08.server.service.ChatStorageService(dbFactory), new vn.edu.ut.udm08.server.repository.ConversationDao(dbFactory), new vn.edu.ut.udm08.server.repository.UserRepository(dbFactory));
+        this.messageDao = new vn.edu.ut.udm08.server.repository.MessageDao(dbFactory);
+    }
     public MessageRouter(OnlineUserRegistry registry, IConversationRegistry conversationRegistry, vn.edu.ut.udm08.server.service.IChatStorageService chatStorageService, vn.edu.ut.udm08.server.repository.IConversationDao conversationDao, vn.edu.ut.udm08.server.repository.IUserRepository userRepository) {
         this.registry = registry;
         this.conversationRegistry = conversationRegistry;
@@ -60,7 +62,6 @@ public class MessageRouter implements IMessageRouter {
                 return;
             }
 
-
             if (convId == null || convId.isBlank()) {
                 if ("PUBLIC".equalsIgnoreCase(targetUser) || ConvId.isPublicRoom(targetUser)) {
                     convId = ConvId.PUBLIC_ROOM_ID;
@@ -81,11 +82,34 @@ public class MessageRouter implements IMessageRouter {
             }
 
             if (convId != null && !convId.isBlank() && conversationRegistry != null) {
-                if (!ConvId.isDm(convId) && !convId.startsWith("conv-dm-") && !conversationRegistry.isMember(convId, senderSession)) {
+                if (!ConvId.isDm(convId) && !conversationRegistry.isMember(convId, senderSession)) {
                     sendErrorMessage(senderSession, msg.messageId, "NOT_A_MEMBER", "Khong co quyen gui tin vao hoi thoai nay");
                     return;
                 }
             }
+
+            vn.edu.ut.udm08.shared.model.User senderUser = getCurrentUser(senderSession);
+            if (ConvId.isDm(convId)) {
+                String other = ConvId.getOtherUser(convId, senderSession.getUsername());
+                if (other == null || (targetUser != null && !targetUser.equals(other))) {
+                    sendErrorMessage(senderSession, msg.messageId, "NOT_A_MEMBER", "Invalid conversation participants");
+                    return;
+                }
+                if (userRepository != null && userRepository.findByUsername(other).isEmpty()) {
+                    sendErrorMessage(senderSession, msg.messageId, "USER_NOT_FOUND", "Recipient does not exist");
+                    return;
+                }
+                targetUser = other;
+                ensureDmConversation(convId, senderSession.getUsername(), targetUser, senderUser);
+            }
+            if (msg.messageId == null || msg.messageId.isBlank() || msg.messageId.length() > 128) {
+                sendErrorMessage(senderSession, msg.messageId, "INVALID_MESSAGE_ID", "A message ID is required");
+                return;
+            }
+            msg.timestamp = System.currentTimeMillis();
+            msg.avatarId = senderSession.getAvatarId();
+            msg.replyTo = msg.replyToMessageId != null ? msg.replyToMessageId : msg.replyTo;
+            if (messageDao != null && !validateReferences(senderSession, msg)) return;
 
             if (msg.replyTo != null) {
                 if (msg.replyTo.isBlank()) {
@@ -97,8 +121,9 @@ public class MessageRouter implements IMessageRouter {
                 }
             }
 
-            if (msg.fwdFrom != null) {
-                if (msg.fwdFrom.isBlank()) {
+            String fwdSource = msg.fwdFrom != null ? msg.fwdFrom : (msg.forwardFromConvId != null ? msg.forwardFromConvId : msg.forwardFromMessageId);
+            if (fwdSource != null) {
+                if (fwdSource.isBlank()) {
                     sendErrorMessage(senderSession, msg.messageId, "INVALID_FORWARD_SOURCE", "Tin nguon khong ton tai hoac khong co quyen doc");
                     return;
                 }
@@ -106,24 +131,6 @@ public class MessageRouter implements IMessageRouter {
                     msg.kind = "forward";
                 }
             }
-
-            // 5. Tim ClientSession cua nguoi nhan trong OnlineUserRegistry / ConversationRegistry
-            List<ClientSession> targets = findTargetSessions(senderSession, convId, targetUser);
-            List<ClientSession> recipients = new ArrayList<>();
-            for (ClientSession recipient : targets) {
-                if (recipient != null && recipient.isConnected() && !recipient.equals(senderSession)) {
-                    recipients.add(recipient);
-                }
-            }
-
-            boolean isPublicRoom = ConvId.isPublicRoom(convId) || "GENERAL".equalsIgnoreCase(convId);
-            if (recipients.isEmpty() && !isPublicRoom) {
-                sendErrorMessage(senderSession, msg.messageId, "USER_OFFLINE", "Nguoi nhan khong online");
-                return;
-            }
-
-            vn.edu.ut.udm08.shared.model.User senderUser = getCurrentUser(senderSession);
-            ensureConversationExists(convId, senderSession.getUsername(), targetUser, senderUser);
 
             vn.edu.ut.udm08.server.model.ChatMessage chatMsg = new vn.edu.ut.udm08.server.model.ChatMessage(
                     msg.messageId,
@@ -138,20 +145,21 @@ public class MessageRouter implements IMessageRouter {
             chatMsg.setForwardFromConvId(msg.forwardFromConvId);
 
             if (chatStorageService != null) {
-                try {
-                    chatStorageService.saveMessageWithTransaction(chatMsg);
-                } catch (Exception e) {
-                    System.err.println("Loi luu tin nhan vao CSDL: " + e.getMessage());
+                chatStorageService.saveMessageWithTransaction(chatMsg);
+            }
+
+            // 5. Tim ClientSession cua nguoi nhan trong OnlineUserRegistry
+            List<ClientSession> targets = findTargetSessions(senderSession, convId, targetUser);
+
+            for (ClientSession recipient : targets) {
+                if (recipient != null && recipient.isConnected() && !recipient.equals(senderSession)) {
+                    try {
+                        recipient.sendMessage(msg);
+                    } catch (Exception ignored) {
+                    }
                 }
             }
 
-            for (ClientSession recipient : recipients) {
-                try {
-                    recipient.sendMessage(msg);
-                } catch (Exception ignored) {
-                }
-            }
-            
             // 7. Phan hoi goi tin CHAT_OK ve cho nguoi gui xac nhan da toi dich
             ProtocolMessage okMsg = new ProtocolMessage(MessageType.CHAT_OK);
             okMsg.messageId = msg.messageId;
@@ -190,6 +198,9 @@ public class MessageRouter implements IMessageRouter {
                     String other = ConvId.getOtherUser(c.getConvId(), user.getUsername());
                     summary.displayName = (other != null && !other.isBlank()) ? other : (c.getName() != null ? c.getName() : "Người dùng");
                     summary.avatar = "default";
+                    if (other != null && userRepository != null) {
+                        userRepository.findByUsername(other).ifPresent(peer -> summary.avatar = peer.getAvatarPath());
+                    }
                 } else {
                     summary.displayName = c.getName() != null ? c.getName() : c.getConvId();
                     summary.avatar = "default";
@@ -225,12 +236,22 @@ public class MessageRouter implements IMessageRouter {
                 sendErrorMessage(session, msg != null ? msg.requestId : null, "INVALID_TARGET", "Thieu convId");
                 return;
             }
+            if (!canRead(user, convId)) {
+                sendErrorMessage(session, msg.requestId, "NOT_A_MEMBER", "No access to this conversation");
+                return;
+            }
+            if (msg.limit != null && (msg.limit < 1 || msg.limit > 100)) {
+                sendErrorMessage(session, msg.requestId, "INVALID_LIMIT", "History limit must be between 1 and 100");
+                return;
+            }
 
             Long beforeSeq = null;
             if (msg.cursor != null && !msg.cursor.isBlank()) {
                 try {
                     beforeSeq = Long.parseLong(msg.cursor);
-                } catch (Exception ignored) {
+                } catch (NumberFormatException invalidCursor) {
+                    sendErrorMessage(session, msg.requestId, "INVALID_CURSOR", "Invalid history cursor");
+                    return;
                 }
             }
             int limit = (msg.limit != null && msg.limit > 0) ? msg.limit : 30;
@@ -248,6 +269,18 @@ public class MessageRouter implements IMessageRouter {
                 m.replyToMessageId = row.getReplyToMessageId();
                 m.forwardFromMessageId = row.getForwardFromMessageId();
                 m.forwardFromConvId = row.getForwardFromConvId();
+                if (messageDao != null && m.replyToMessageId != null) {
+                    messageDao.findByMessageId(m.replyToMessageId).ifPresent(original -> {
+                        if (convId.equals(original.getConvId())) {
+                            m.replyToSender = original.getSenderUsername();
+                            m.replyToContent = original.getContent();
+                        }
+                    });
+                }
+                if (messageDao != null && m.forwardFromMessageId != null) {
+                    messageDao.findByMessageId(m.forwardFromMessageId).ifPresent(original -> m.forwardedFromSender = original.getSenderUsername());
+                }
+                if (userRepository != null) userRepository.findByUsername(m.sender).ifPresent(sender -> m.avatarId = sender.getAvatarPath());
                 if (row.getForwardFromMessageId() != null || "forward".equalsIgnoreCase(row.getKind())) {
                     m.isForwarded = true;
                 }
@@ -299,13 +332,13 @@ public class MessageRouter implements IMessageRouter {
             }
 
             String convId = ConvId.forDm(user.getUsername(), targetUser.getUsername());
-            ensureConversationExists(convId, user.getUsername(), targetUser.getUsername(), user);
+            ensureDmConversation(convId, user.getUsername(), targetUser.getUsername(), user);
 
             vn.edu.ut.udm08.shared.model.ConversationSummary summary = new vn.edu.ut.udm08.shared.model.ConversationSummary();
             summary.convId = convId;
             summary.chatType = "DM";
             summary.displayName = targetUser.getUsername();
-            summary.avatar = "default";
+            summary.avatar = targetUser.getAvatarPath();
 
             ProtocolMessage response = new ProtocolMessage(MessageType.OPEN_DM_RESPONSE);
             response.requestId = msg != null ? msg.requestId : null;
@@ -320,51 +353,24 @@ public class MessageRouter implements IMessageRouter {
         }
     }
 
-    private void ensureConversationExists(String convId, String senderUsername, String targetUser, vn.edu.ut.udm08.shared.model.User senderUser) {
-        if (conversationDao == null || convId == null || convId.isBlank()) return;
-        try {
-            if (conversationDao.findById(convId).isPresent()) return;
+    private void ensureDmConversation(String convId, String senderUsername, String targetUser, vn.edu.ut.udm08.shared.model.User senderUser) {
+        if (conversationDao == null || convId == null) return;
+        if (conversationDao.findById(convId).isPresent()) return;
 
-            boolean isDm = ConvId.isDm(convId) || convId.startsWith("conv-dm-") || convId.toLowerCase().contains("dm");
-            boolean isPublic = ConvId.isPublicRoom(convId) || "GENERAL".equalsIgnoreCase(convId);
+        vn.edu.ut.udm08.server.model.Conversation conv = new vn.edu.ut.udm08.server.model.Conversation(convId, "DM", null);
+        conversationDao.createConversation(conv);
 
-            String type = isPublic ? "PUBLIC" : (isDm ? "DM" : "GROUP");
-            String name = isPublic ? "Phòng chung" : null;
+        if (senderUser != null && senderUser.getId() != null) {
+            conversationDao.addMember(convId, senderUser.getId(), "member");
+        }
 
-            vn.edu.ut.udm08.server.model.Conversation conv = new vn.edu.ut.udm08.server.model.Conversation(convId, type, name);
-            conversationDao.createConversation(conv);
-
-            if (senderUser != null && senderUser.getId() != null) {
-                conversationDao.addMember(convId, senderUser.getId(), "member");
-            }
-
-            if (isDm) {
-                String otherName = (targetUser != null && !targetUser.isBlank() && !"PUBLIC".equalsIgnoreCase(targetUser)) ? targetUser : ConvId.getOtherUser(convId, senderUsername);
-                if (otherName == null && convId.startsWith("conv-dm-")) {
-                    String[] parts = convId.split("-");
-                    for (String p : parts) {
-                        if (!p.equalsIgnoreCase("conv") && !p.equalsIgnoreCase("dm") && !p.equalsIgnoreCase(senderUsername)) {
-                            otherName = p;
-                            break;
-                        }
-                    }
+        String otherName = (targetUser != null && !targetUser.isBlank() && !"PUBLIC".equalsIgnoreCase(targetUser)) ? targetUser : ConvId.getOtherUser(convId, senderUsername);
+        if (otherName != null && userRepository != null) {
+            userRepository.findByUsername(otherName).ifPresent(otherUser -> {
+                if (otherUser.getId() != null) {
+                    conversationDao.addMember(convId, otherUser.getId(), "member");
                 }
-                if (otherName != null && userRepository != null) {
-                    String finalOtherName = otherName;
-                    vn.edu.ut.udm08.shared.model.User otherUser = userRepository.findByUsername(finalOtherName).orElseGet(() -> {
-                        vn.edu.ut.udm08.shared.model.User newUser = new vn.edu.ut.udm08.shared.model.User();
-                        newUser.setUsername(finalOtherName);
-                        newUser.setPhoneNumber("000" + Math.abs(finalOtherName.hashCode()));
-                        newUser.setPasswordHash("autocreated");
-                        return userRepository.save(newUser);
-                    });
-                    if (otherUser != null && otherUser.getId() != null) {
-                        conversationDao.addMember(convId, otherUser.getId(), "member");
-                    }
-                }
-            }
-        } catch (Exception e) {
-            System.err.println("Loi khoi tao hoi thoai CSDL: " + e.getMessage());
+            });
         }
     }
 
@@ -372,19 +378,56 @@ public class MessageRouter implements IMessageRouter {
         if (session == null) return null;
         if (session.getUser() != null) return session.getUser();
         if (session.getUsername() != null && !session.getUsername().isBlank() && userRepository != null) {
-            vn.edu.ut.udm08.shared.model.User user = userRepository.findByUsername(session.getUsername()).orElseGet(() -> {
-                vn.edu.ut.udm08.shared.model.User newUser = new vn.edu.ut.udm08.shared.model.User();
-                newUser.setUsername(session.getUsername());
-                newUser.setPhoneNumber("000" + Math.abs(session.getUsername().hashCode()));
-                newUser.setPasswordHash("autocreated");
-                return userRepository.save(newUser);
-            });
+            vn.edu.ut.udm08.shared.model.User user = userRepository.findByUsername(session.getUsername()).orElse(null);
             if (user != null) {
                 session.setUser(user);
             }
             return user;
         }
         return null;
+    }
+
+    private boolean canRead(vn.edu.ut.udm08.shared.model.User user, String convId) {
+        if (user == null || user.getId() == null) return false;
+        if (ConvId.isPublicRoom(convId)) return true;
+        return conversationDao != null && conversationDao.isMember(convId, user.getId());
+    }
+
+    private boolean validateReferences(ClientSession session, ProtocolMessage message) {
+        message.replyToSender = null;
+        message.replyToContent = null;
+        message.forwardedFromSender = null;
+        message.isForwarded = false;
+        message.kind = message.replyTo == null ? "text" : "reply";
+        if (message.replyTo != null) {
+            var original = messageDao.findByMessageId(message.replyTo).orElse(null);
+            if (original == null || !message.convId.equals(original.getConvId())) {
+                sendErrorMessage(session, message.messageId, "INVALID_REPLY_TARGET", "Original message is not in this conversation");
+                return false;
+            }
+            message.replyToMessageId = original.getMessageId();
+            message.replyToSender = original.getSenderUsername();
+            message.replyToContent = original.getContent();
+        }
+        String forwardId = message.forwardFromMessageId != null ? message.forwardFromMessageId : message.fwdFrom;
+        if (forwardId == null && message.forwardFromConvId != null) {
+            sendErrorMessage(session, message.messageId, "INVALID_FORWARD_SOURCE", "Source message ID is required");
+            return false;
+        }
+        if (forwardId != null) {
+            var original = messageDao.findByMessageId(forwardId).orElse(null);
+            if (original == null || !canRead(session.getUser(), original.getConvId())) {
+                sendErrorMessage(session, message.messageId, "INVALID_FORWARD_SOURCE", "Original message is not accessible");
+                return false;
+            }
+            message.forwardFromMessageId = original.getMessageId();
+            message.forwardFromConvId = original.getConvId();
+            message.forwardedFromSender = original.getSenderUsername();
+            message.content = original.getContent();
+            message.isForwarded = true;
+            message.kind = "forward";
+        }
+        return true;
     }
 
     private List<ClientSession> findTargetSessions(ClientSession senderSession, String convId, String targetUser) {
@@ -438,6 +481,7 @@ public class MessageRouter implements IMessageRouter {
         try {
             ProtocolMessage err = new ProtocolMessage(MessageType.ERROR);
             err.messageId = messageId;
+            err.requestId = messageId;
             err.sender = "SERVER";
             err.errorCode = errorCode;
             err.errorMessage = errorMessage;

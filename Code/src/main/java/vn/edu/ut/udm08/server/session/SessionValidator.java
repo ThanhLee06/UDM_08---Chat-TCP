@@ -8,7 +8,17 @@ public class SessionValidator {
         if (message == null || message.type == null) {
             return false;
         }
-        if (message.type == MessageType.HELLO || message.type == MessageType.DISCONNECT) {
+        if (message.type == MessageType.HELLO) {
+            if (session != null) session.sendError(message.requestId, "AUTH_REQUIRED", "Use AUTH_LOGIN");
+            return false;
+        }
+        if (message.type == MessageType.DISCONNECT
+                || message.type == MessageType.AUTH_LOGIN
+                || message.type == MessageType.AUTH_REGISTER_INIT
+                || message.type == MessageType.AUTH_REGISTER_VERIFY_OTP
+                || message.type == MessageType.AUTH_REGISTER_RESEND_OTP
+                || message.type == MessageType.AUTH_FORGOT_INIT
+                || message.type == MessageType.AUTH_FORGOT_RESET) {
             return true;
         }
         if (session == null || !session.isAuthenticated() || session.getUsername() == null || session.getUsername().isBlank()) {

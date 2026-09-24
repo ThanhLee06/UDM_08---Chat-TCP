@@ -30,7 +30,7 @@ class ChatStorageServiceTest {
             tempDbFile = File.createTempFile("test_tx_service_", ".db");
             String dbUrl = "jdbc:sqlite:" + tempDbFile.getAbsolutePath();
             connectionFactory = new DatabaseConnectionFactory(dbUrl);
-            userRepository = new UserRepository(dbUrl);
+            userRepository = vn.edu.ut.udm08.support.TestDatabase.repository(dbUrl);
             messageDao = new MessageDao(connectionFactory);
             conversationDao = new ConversationDao(connectionFactory, messageDao);
             chatStorageService = new ChatStorageService(connectionFactory, messageDao, conversationDao);

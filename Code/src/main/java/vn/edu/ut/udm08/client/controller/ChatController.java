@@ -1,5 +1,6 @@
 package vn.edu.ut.udm08.client.controller;
 import vn.edu.ut.udm08.client.ui.sidebar.SidebarController;
+import vn.edu.ut.udm08.client.ui.EmojiText;
 import vn.edu.ut.udm08.client.ui.sidebar.SidebarConversation;
 import vn.edu.ut.udm08.client.ui.sidebar.IConversationSource;
 import vn.edu.ut.udm08.shared.protocol.ConvId;
@@ -44,7 +45,7 @@ public class ChatController {
     @FXML private StackPane chatPartnerAvatar;
     @FXML private ScrollPane messageScrollPane;
     @FXML private VBox messageContainer;   
-    @FXML private TextField messageInput;
+    @FXML private vn.edu.ut.udm08.client.ui.EmojiInput messageInput;
     @FXML private Button sendButton;
     @FXML private VBox emptyStatePane;    
     @FXML private Label emojiIcon;
@@ -77,6 +78,16 @@ public class ChatController {
 
     @FXML
     public void initialize() {
+        javafx.scene.shape.SVGPath smile = new javafx.scene.shape.SVGPath();
+        smile.setContent("M 9 1 A 8 8 0 1 1 9 17 A 8 8 0 1 1 9 1 M 6 6.5 L 6 7 M 12 6.5 L 12 7 M 5.5 10.5 Q 9 14.5 12.5 10.5");
+        smile.setFill(null);
+        smile.setStroke(javafx.scene.paint.Color.web("#52606d"));
+        smile.setStrokeWidth(1.4);
+        smile.setStrokeLineCap(javafx.scene.shape.StrokeLineCap.ROUND);
+        emojiIcon.setText("");
+        emojiIcon.setGraphic(smile);
+        emojiIcon.setAccessibleText("Chọn emoji");
+        emojiIcon.setTooltip(new Tooltip("Chọn emoji"));
         sidebarController.setLogoutListener(this::handleLogout);
         sidebarController.setSelectionListener(conversation -> {
             if (conversation.getType() == ConvType.PUBLIC) {
@@ -124,6 +135,7 @@ public class ChatController {
                 Stage stage = (Stage) messageInput.getScene().getWindow();
                 FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/LoginView.fxml"));
                 Scene loginScene = new Scene(loader.load());
+                ((LoginController)loader.getController()).attachToStage(stage);
                 stage.setTitle("UDM08 Chat - Đăng nhập");
                 stage.setScene(loginScene);
                 stage.setResizable(false);
@@ -192,7 +204,6 @@ public class ChatController {
     public void setSendListener(MessageSendListener listener) {
         this.sendListener = listener;
     }
-
 
     private void loadInitialHistory() {
         String convId = selectedConvId;
@@ -377,10 +388,10 @@ public class ChatController {
                 if (!ConvId.isPublicRoom(convId)) {
                     String other = isMine ? message.target : message.sender;
                     if (other != null && !other.isBlank()) {
-                        sidebarController.ensureConversation(convId, other, "avatar1");
+                        sidebarController.ensureConversation(convId, other, message.avatarId != null ? message.avatarId : "avatar1");
                     }
                 }
-                long ts = message.timestamp != 0 ? message.timestamp : System.currentTimeMillis();
+                long ts = message.timestamp != null && message.timestamp != 0 ? message.timestamp : System.currentTimeMillis();
                 String snippet = formatMessagePreview(message, isMine);
                 boolean incrementUnread = !isMine && !belongsToCurrentChat;
                 sidebarController.updateLastMessage(convId, snippet, ts, incrementUnread);
@@ -448,6 +459,7 @@ public class ChatController {
             message.replyToSender = replyingToMessage.sender;
             message.replyToContent = replyingToMessage.content;
         }       
+        message.sendStatus = vn.edu.ut.udm08.shared.model.MessageSendStatus.PENDING;
         addMessageBubble(message, true);
         if (sidebarController != null && message.convId != null) {
             sidebarController.updateLastMessage(message.convId, formatMessagePreview(message, true), message.timestamp, false);
@@ -494,6 +506,8 @@ static {
 
         for (String emoji : group.getValue()) {
             Button emojiButton = new Button(emoji);
+            EmojiText.install(emojiButton, 20, 28);
+            emojiButton.setTooltip(new Tooltip(emoji));
             emojiButton.getStyleClass().add("emoji-item-button");
             emojiButton.setOnAction(e -> insertEmojiAtCaret(emoji));
             flowPane.getChildren().add(emojiButton);
@@ -515,10 +529,8 @@ static {
 }
 
 private void insertEmojiAtCaret(String emoji) {
-    int caretPos = messageInput.getCaretPosition();
-    messageInput.insertText(caretPos, emoji);
-    messageInput.positionCaret(caretPos + emoji.length());
-    messageInput.requestFocus();
+    messageInput.replaceSelection(emoji);
+    messageInput.focusEditor();
 }
 
 
@@ -528,44 +540,37 @@ private void insertEmojiAtCaret(String emoji) {
         if (message.messageId != null) {
             messageHistory.put(message.messageId, message);
         }
-        
         Label contentLabel = new Label(message.content != null ? message.content : "");
         contentLabel.getStyleClass().add("message-bubble-text");
         contentLabel.setWrapText(true);
-        
+        EmojiText.install(contentLabel, 16, 300);
         VBox bubble = new VBox(4);
         bubble.getStyleClass().add(isMine ? "message-bubble-sent" : "message-bubble-received");
         bubble.setMaxWidth(400);
         bubble.setUserData(message);
-
         if ((message.isForwarded || "forward".equalsIgnoreCase(message.kind)) && message.forwardedFromSender != null) {
             Label forwardedLabel = new Label("↪ Đã chuyển tiếp từ " + message.forwardedFromSender);
             forwardedLabel.getStyleClass().add("forwarded-label");
             bubble.getChildren().add(forwardedLabel);
         }
-
         if (message.replyToMessageId != null) {
             ProtocolMessage original = messageHistory.get(message.replyToMessageId);
             String quoteText;
-            if (original != null){
+            if (original != null) {
                 quoteText = original.sender + ": " + original.content;
-            } 
-            else if (message.replyToSender != null && message.replyToContent != null) {
+            } else if (message.replyToSender != null && message.replyToContent != null) {
                 quoteText = message.replyToSender + ": " + message.replyToContent;
-            } 
-            else {
+            } else {
                 quoteText = "Tin nhắn gốc không khả dụng";
             }
-
             Label quoteBlock = new Label(quoteText);
             quoteBlock.getStyleClass().add("reply-quote-block");
             quoteBlock.setWrapText(true);
+            EmojiText.install(quoteBlock, 14, 280);
             quoteBlock.setStyle("-fx-cursor: hand;");
-
             final String targetId = message.replyToMessageId;
-
             quoteBlock.setOnMouseClicked(e -> {
-            boolean found = scrollToMessage(targetId);
+                boolean found = scrollToMessage(targetId);
                 if (!found) {
                     showMessageNotFoundHint(quoteBlock);
                 }
@@ -574,14 +579,20 @@ private void insertEmojiAtCaret(String emoji) {
         }
 
         bubble.getChildren().add(contentLabel);
-        
+        Label delivery = new Label();
+        delivery.setId("delivery-status");
+        delivery.getStyleClass().add("message-delivery-status");
+        setDeliveryText(delivery, message);
+
         ContextMenu contextMenu = new ContextMenu();
         MenuItem replyItem = new MenuItem("Trả lời");
         replyItem.setOnAction(e -> startReply(message));
         MenuItem forwardItem = new MenuItem("Chuyển tiếp");
         forwardItem.setOnAction(e -> openForwardDialog(message));
         contextMenu.getItems().addAll(replyItem, forwardItem);
-        bubble.setOnContextMenuRequested(e ->contextMenu.show(bubble, e.getScreenX(), e.getScreenY()));
+        bubble.setOnContextMenuRequested(e ->
+                contextMenu.show(bubble, e.getScreenX(), e.getScreenY())
+        );
 
         String timeText = Instant.ofEpochMilli(message.timestamp != null ? message.timestamp : System.currentTimeMillis())
                 .atZone(ZoneId.systemDefault())
@@ -596,16 +607,18 @@ private void insertEmojiAtCaret(String emoji) {
         row.setAlignment(isMine ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
 
         if (isMine) {
-            column.getChildren().addAll(bubble, timeLabel);
+            HBox footer = new HBox(6, timeLabel, delivery);
+            footer.setAlignment(Pos.CENTER_RIGHT);
+            column.getChildren().addAll(bubble, footer);
             row.getChildren().add(column);
         } else {
             String senderName = message.sender != null ? message.sender : "Unknown";
             Label initial = new Label(senderName.substring(0, 1).toUpperCase());
             initial.getStyleClass().add("avatar-text-small");
 
-            StackPane avatar = new StackPane(initial);
+            StackPane avatar = new StackPane(vn.edu.ut.udm08.client.ui.AvatarImages.view(message.avatarId, 32));
             avatar.getStyleClass().add("avatar-circle-small");
-            avatar.setStyle("-fx-background-color: " + avatarColorFor(message.sender) + ";");
+            avatar.setStyle("-fx-background-color: " + avatarColorFor(senderName) + ";");
 
             Label nameLabel = new Label(senderName);
             nameLabel.getStyleClass().add("message-sender-name");
@@ -615,7 +628,25 @@ private void insertEmojiAtCaret(String emoji) {
         }
         return row;
     }
-        
+
+    public void updateDeliveryStatus(ProtocolMessage message) {
+        Node row = messageNodeIndex.get(message.messageId);
+        if (row != null && row.lookup("#delivery-status") instanceof Label label) {
+            setDeliveryText(label, message);
+        }
+    }
+
+    private static void setDeliveryText(Label label, ProtocolMessage message) {
+        String text = message.sendStatus == null ? "" : switch (message.sendStatus) {
+            case SENT -> "Đã gửi";
+            case PENDING -> "Đang gửi…";
+            case FAILED -> "Gửi thất bại";
+            case UNKNOWN -> "Chưa xác nhận";
+        };
+        label.setText(text);
+        label.setVisible(!text.isEmpty());
+        label.setManaged(!text.isEmpty());
+    }
 
     private void addMessageBubble(ProtocolMessage message, boolean isMine) {
         if (message == null) return;
@@ -632,7 +663,6 @@ private void insertEmojiAtCaret(String emoji) {
         messageScrollPane.setVvalue(1.0);
     }
 
-
     private void prependMessageBubble(ProtocolMessage message, boolean isMine) {
         if (message == null) return;
         if (message.messageId != null && messageNodeIndex.containsKey(message.messageId)) {
@@ -644,81 +674,79 @@ private void insertEmojiAtCaret(String emoji) {
             messageNodeIndex.put(message.messageId, row);
         }
     }
-
-    private void startReply(ProtocolMessage message) {
+     private void startReply(ProtocolMessage message) {
         this.replyingToMessage = message;
-        showReplyBar(message);
+         showReplyBar(message);
     }
+private void openForwardDialog(ProtocolMessage message) {
+    Dialog<UserProfile> dialog = new Dialog<>();
+    dialog.setTitle("Chuyển tiếp tin nhắn");
+    dialog.setHeaderText("Chọn người nhận để chuyển tiếp:");
 
-    private void openForwardDialog(ProtocolMessage message) {
-        Dialog<UserProfile> dialog = new Dialog<>();
-        dialog.setTitle("Chuyển tiếp tin nhắn");
-        dialog.setHeaderText("Chọn người nhận để chuyển tiếp:");
+    ButtonType forwardButtonType = new ButtonType("Chuyển tiếp", ButtonBar.ButtonData.OK_DONE);
+    dialog.getDialogPane().getButtonTypes().addAll(forwardButtonType, ButtonType.CANCEL);
 
-        ButtonType forwardButtonType = new ButtonType("Chuyển tiếp", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(forwardButtonType, ButtonType.CANCEL);
+    TextField searchField = new TextField();
+    searchField.setPromptText("Tìm người nhận...");
+    searchField.getStyleClass().add("forward-search-field");
+    
 
-        TextField searchField = new TextField();
-        searchField.setPromptText("Tìm người nhận...");
-        searchField.getStyleClass().add("forward-search-field");
-        
+    ObservableList<UserProfile> forwardTargets = FXCollections.observableArrayList(onlineUsers);
+    ListView<UserProfile> targetListView = new ListView<>(forwardTargets);
+    targetListView.setCellFactory(list -> new UserListCell());
+    targetListView.setPrefHeight(220);
+    targetListView.setPlaceholder(new Label("Không tìm thấy người dùng"));
 
-        ObservableList<UserProfile> forwardTargets = FXCollections.observableArrayList(onlineUsers);
-        ListView<UserProfile> targetListView = new ListView<>(forwardTargets);
-        targetListView.setCellFactory(list -> new UserListCell());
-        targetListView.setPrefHeight(220);
-        targetListView.setPlaceholder(new Label("Không tìm thấy người dùng"));
+    searchField.textProperty().addListener((obs, oldVal, newVal) -> {
+        String keyword = newVal == null ? "" : newVal.trim().toLowerCase();
+        forwardTargets.setAll(onlineUsers.stream()
+                .filter(u -> u.username.toLowerCase().contains(keyword))
+                .toList());
+    });
 
-        searchField.textProperty().addListener((obs, oldVal, newVal) -> {
-            String keyword = newVal == null ? "" : newVal.trim().toLowerCase();
-            forwardTargets.setAll(onlineUsers.stream()
-                    .filter(u -> u.username.toLowerCase().contains(keyword))
-                    .toList());
-        });
+    VBox content = new VBox(8, searchField, targetListView);
+    dialog.getDialogPane().setContent(content);
+    content.getStyleClass().add("forward-dialog-content");
 
-        VBox content = new VBox(8, searchField, targetListView);
-        dialog.getDialogPane().setContent(content);
-        content.getStyleClass().add("forward-dialog-content");
+    Node forwardButtonNode = dialog.getDialogPane().lookupButton(forwardButtonType);
+    forwardButtonNode.setDisable(true);
+    targetListView.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) ->
+            forwardButtonNode.setDisable(newVal == null));
 
-        Node forwardButtonNode = dialog.getDialogPane().lookupButton(forwardButtonType);
-        forwardButtonNode.setDisable(true);
-        targetListView.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) ->
-                forwardButtonNode.setDisable(newVal == null));
-
-        dialog.setResultConverter(buttonType -> {
-            if (buttonType == forwardButtonType) {
-                return targetListView.getSelectionModel().getSelectedItem();
-            }
-            return null;
-        });
-        dialog.setOnShown(e -> searchField.requestFocus());
-        dialog.showAndWait().ifPresent(target -> forwardMessage(message, target));
-        
-    }
-
-    private void forwardMessage(ProtocolMessage original, UserProfile target) {
-        ProtocolMessage forwarded = new ProtocolMessage(MessageType.CHAT);
-        forwarded.messageId = UUID.randomUUID().toString();
-        forwarded.sender = currentUsername;
-        forwarded.target = target.username;
-        forwarded.convId = ConvId.forDm(currentUsername, target.username);
-        forwarded.content = original.content;
-        forwarded.timestamp = System.currentTimeMillis();
-        forwarded.kind = "forward";
-        forwarded.forwardFromMessageId = original.messageId;
-        forwarded.forwardFromConvId = original.convId;
-        forwarded.fwdFrom = original.messageId;
-        forwarded.forwardedFromSender = original.sender;
-        forwarded.isForwarded = true;
-
-        if (sendListener != null) {
-            sendListener.onSendMessage(forwarded);
+    dialog.setResultConverter(buttonType -> {
+        if (buttonType == forwardButtonType) {
+            return targetListView.getSelectionModel().getSelectedItem();
         }
+        return null;
+    });
+    dialog.setOnShown(e -> searchField.requestFocus());
+    dialog.showAndWait().ifPresent(target -> forwardMessage(message, target));
+    
+}
 
-        if (selectedUser != null && selectedUser.username.equals(target.username)) {
-            addMessageBubble(forwarded, true);
-        }
+private void forwardMessage(ProtocolMessage original, UserProfile target) {
+    ProtocolMessage forwarded = new ProtocolMessage(MessageType.CHAT);
+    forwarded.messageId = UUID.randomUUID().toString();
+    forwarded.sender = currentUsername;
+    forwarded.target = target.username;
+    forwarded.convId = ConvId.forDm(currentUsername, target.username);
+    forwarded.content = original.content;
+    forwarded.timestamp = System.currentTimeMillis();
+    forwarded.kind = "forward";
+    forwarded.forwardFromMessageId = original.messageId;
+    forwarded.forwardFromConvId = original.convId;
+    forwarded.fwdFrom = original.messageId;
+    forwarded.forwardedFromSender = original.sender;
+    forwarded.isForwarded = true;
+
+    if (sendListener != null) {
+        sendListener.onSendMessage(forwarded);
     }
+
+    if (selectedUser != null && selectedUser.username.equals(target.username)) {
+        addMessageBubble(forwarded, true);
+    }
+}
 
     private void showReplyBar(ProtocolMessage message) {
         removeReplyBar();
@@ -728,6 +756,7 @@ private void insertEmojiAtCaret(String emoji) {
 
         Label quoteText = new Label(message.content);
         quoteText.getStyleClass().add("reply-bar-text");
+        EmojiText.install(quoteText, 14, 380);
 
         VBox quoteInfo = new VBox(2, replyingToLabel, quoteText);
 
@@ -748,28 +777,28 @@ private void insertEmojiAtCaret(String emoji) {
         }
     }
 
-        // ST-082: cuon toi tin nhan goc va highlight tam thoi de nguoi dung de nhan biet
-    private boolean scrollToMessage(String messageId) {
-        if (messageId == null) return false;
+    // ST-082: cuon toi tin nhan goc va highlight tam thoi de nguoi dung de nhan biet
+private boolean scrollToMessage(String messageId) {
+    if (messageId == null) return false;
 
-        javafx.scene.Node target = messageNodeIndex.get(messageId);
-        if (target == null) {
-            return false;
-        }
-
-        messageScrollPane.layout();
-        messageContainer.layout();
-
-        double contentHeight = messageContainer.getHeight() - messageScrollPane.getViewportBounds().getHeight();
-        if (contentHeight > 0) {
-            double targetY = target.getBoundsInParent().getMinY();
-            double vValue = targetY / contentHeight;
-            messageScrollPane.setVvalue(Math.max(0, Math.min(1, vValue)));
-        }
-
-        highlightNode(target);
-        return true;
+    javafx.scene.Node target = messageNodeIndex.get(messageId);
+    if (target == null) {
+        return false;
     }
+
+    messageScrollPane.layout();
+    messageContainer.layout();
+
+    double contentHeight = messageContainer.getHeight() - messageScrollPane.getViewportBounds().getHeight();
+    if (contentHeight > 0) {
+        double targetY = target.getBoundsInParent().getMinY();
+        double vValue = targetY / contentHeight;
+        messageScrollPane.setVvalue(Math.max(0, Math.min(1, vValue)));
+    }
+
+    highlightNode(target);
+    return true;
+}
 
 
 private void highlightNode(javafx.scene.Node target) {
@@ -808,7 +837,7 @@ private void highlightNode(javafx.scene.Node target) {
                 Label initial = new Label(user.username.substring(0, 1).toUpperCase());
                 initial.getStyleClass().add("avatar-text-small");
 
-                StackPane avatar = new StackPane(initial);
+                StackPane avatar = new StackPane(vn.edu.ut.udm08.client.ui.AvatarImages.view(user.avatarId, 32));
                 avatar.getStyleClass().add("avatar-circle-small");
                 avatar.setStyle("-fx-background-color: " + avatarColorFor(user.username) + ";");
 

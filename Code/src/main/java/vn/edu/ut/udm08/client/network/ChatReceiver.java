@@ -14,9 +14,11 @@ public class ChatReceiver implements Runnable {
     private final BufferedReader reader;
     private final ChatListener listener;
     private volatile boolean running = true;
+    private final long epoch;
 
     public ChatReceiver(ChatClient client, BufferedReader reader, ChatListener listener) {
         this.client = client;
+        this.epoch = client != null ? client.getSessionEpoch() : 0;
         this.reader = reader;
         this.listener = listener;
     }
@@ -25,13 +27,13 @@ public class ChatReceiver implements Runnable {
     public void run() {
         try {
             String line;
-            while (running && (line = reader.readLine()) != null) {
+            while (running && (line = vn.edu.ut.udm08.shared.protocol.JsonLineReader.read(reader)) != null) {
                 if (line.isBlank()) {
                     continue;
                 }
                 try {
                     ProtocolMessage message = JsonUtil.fromJson(line);
-                    if (message != null && message.type != null) {
+                    if (message != null && message.type != null && (client == null || client.isCurrentEpoch(epoch))) {
                         dispatchMessage(message);
                     }
                 } catch (Exception e) {
@@ -70,6 +72,20 @@ public class ChatReceiver implements Runnable {
             case HELLO_OK:
                 listener.onLoginSuccess(message);
                 break;
+            case AUTH_LOGIN_OK:
+                if (client != null) {
+                    if (!client.completeAuthRequest(message)) break;
+                    client.acceptAuthenticatedUser(message);
+                }
+                listener.onLoginSuccess(message);
+                break;
+            case AUTH_REGISTER_OTP_REQUIRED:
+            case AUTH_REGISTER_OK:
+            case AUTH_FORGOT_OTP_REQUIRED:
+            case AUTH_FORGOT_OK:
+                if (client != null && !client.completeAuthRequest(message)) break;
+                listener.onMessageReceived(message);
+                break;
             case USER_LIST:
                 listener.onUserListUpdated(message.users != null ? message.users : Collections.emptyList());
                 break;
@@ -103,6 +119,7 @@ public class ChatReceiver implements Runnable {
                 }
                 break;
             case ERROR:
+                if (client != null) client.completeAuthRequest(message);
                 if (client != null && client.isSessionInvalidError(message.errorCode)) {
                     client.handleSessionExpired(message.errorCode, message.errorMessage, listener);
                 } else if (client != null && client.handleUserSearchError(message)) {
@@ -127,8 +144,9 @@ public class ChatReceiver implements Runnable {
                 }
                 break;
             case SESSION_EXPIRED:
+            case SESSION_KICKED:
                 if (client != null) {
-                    client.handleSessionExpired(message.errorCode, message.errorMessage, listener);
+                    client.handleSessionExpired(message.errorCode != null ? message.errorCode : "KICKED", message.errorMessage != null ? message.errorMessage : "Tài khoản được đăng nhập từ thiết bị khác", listener);
                 } else {
                     listener.onSessionExpired(message.errorCode, message.errorMessage);
                 }
@@ -139,6 +157,8 @@ public class ChatReceiver implements Runnable {
     }
 
     private void notifyConnectionLost(Throwable cause) {
+        if (client != null && !client.isCurrentEpoch(epoch)) return;
+        if (client != null && client.isLoggingOut()) { client.handleLogoutOk(listener); return; }
         try {
             client.disconnect();
         } finally {

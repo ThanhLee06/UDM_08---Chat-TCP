@@ -27,7 +27,7 @@ public class UserSearchHandlerTest {
     @BeforeEach
     public void setUp() {
         String testDb = "jdbc:sqlite:target/test_user_search_" + System.currentTimeMillis() + ".db";
-        repository = new UserRepository(testDb);
+        repository = vn.edu.ut.udm08.support.TestDatabase.repository(testDb);
         handler = new UserSearchHandler(repository);
 
         User u1 = new User();

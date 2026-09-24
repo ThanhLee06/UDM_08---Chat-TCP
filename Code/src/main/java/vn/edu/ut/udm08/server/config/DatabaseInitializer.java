@@ -13,8 +13,30 @@ public class DatabaseInitializer {
         this.connectionFactory = connectionFactory;
     }
     public void initialize() {
+        ensureDataDirectoryExists();
+        enableWalMode();
         initAuthSchema();
         initChatSchema();
+    }
+
+    private void ensureDataDirectoryExists() {
+        String dbUrl = connectionFactory.getDbUrl();
+        if (dbUrl != null && dbUrl.startsWith("jdbc:sqlite:")) {
+            String pathStr = dbUrl.substring("jdbc:sqlite:".length()).trim();
+            java.io.File file = new java.io.File(pathStr);
+            java.io.File parent = file.getParentFile();
+            if (parent != null && !parent.exists()) {
+                if (!parent.mkdirs()) throw new IllegalStateException("Cannot create database directory");
+            }
+        }
+    }
+
+    private void enableWalMode() {
+        try (Connection conn = connectionFactory.getConnection();
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("PRAGMA journal_mode=WAL;");
+        } catch (Exception failure) { throw new IllegalStateException("Database initialization failed", failure);
+        }
     }
     private void initAuthSchema() {
         try (InputStream is = getClass().getResourceAsStream("/db/migration/V2__auth.sql")) {
@@ -79,7 +101,7 @@ public class DatabaseInitializer {
             if (!exists) {
                 stmt.execute(alterSql);
             }
-        } catch (Exception ignored) {
+        } catch (Exception failure) { throw new IllegalStateException("Database initialization failed", failure);
         }
     }
 }

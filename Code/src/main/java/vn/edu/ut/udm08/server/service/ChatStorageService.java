@@ -7,6 +7,7 @@ import vn.edu.ut.udm08.server.repository.IConversationDao;
 import vn.edu.ut.udm08.server.repository.IMessageDao;
 import vn.edu.ut.udm08.server.repository.MessageDao;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Objects;
 import java.util.Optional;
@@ -29,13 +30,20 @@ public class ChatStorageService implements IChatStorageService {
         this.conversationDao = conversationDao;
     }
     @Override
-    public ChatMessage saveMessageWithTransaction(ChatMessage message) {
+    // SQLite permits one writer. Serialize writes in this server's shared storage service
+    // instead of letting a burst of sessions starve each other at the database lock.
+    public synchronized ChatMessage saveMessageWithTransaction(ChatMessage message) {
         if (message == null || message.getMessageId() == null || message.getMessageId().isBlank()) {
             throw new IllegalArgumentException("Tin nhắn hoặc messageId không được null");
         }
         try (Connection conn = connectionFactory.getConnection()) {
             conn.setAutoCommit(false);
             try {
+                boolean updated = conversationDao.updateLastMessage(conn, message.getConvId(), message.getContent(), message.getTimestamp());
+                if (!updated) {
+                    throw new IllegalStateException("Cập nhật cuộc trò chuyện thất bại: " + message.getConvId());
+                }
+
                 Optional<ChatMessage> existing = messageDao.findByMessageId(conn, message.getMessageId());
                 if (existing.isPresent()) {
                     if (!isSameMessage(existing.get(), message)) {
@@ -44,23 +52,8 @@ public class ChatStorageService implements IChatStorageService {
                     conn.rollback();
                     return existing.get();
                 }
+                ensureSenderUserExists(conn, message.getSenderUsername());
                 ChatMessage saved = messageDao.insertMessage(conn, message);
-                boolean updated = conversationDao.updateLastMessage(conn, message.getConvId(), message.getContent(), message.getTimestamp());
-                if (!updated) {
-                    if (vn.edu.ut.udm08.shared.protocol.ConvId.isPublicRoom(message.getConvId()) || "GENERAL".equalsIgnoreCase(message.getConvId())) {
-                        vn.edu.ut.udm08.server.model.Conversation conv = new vn.edu.ut.udm08.server.model.Conversation(message.getConvId(), "PUBLIC", "Phòng chung");
-                        conv.setLastMessagePreview(message.getContent());
-                        conv.setLastActivity(message.getTimestamp());
-                        conversationDao.createConversation(conn, conv);
-                    } else if (vn.edu.ut.udm08.shared.protocol.ConvId.isDm(message.getConvId()) || message.getConvId().startsWith("conv-dm-")) {
-                        vn.edu.ut.udm08.server.model.Conversation conv = new vn.edu.ut.udm08.server.model.Conversation(message.getConvId(), "DM", null);
-                        conv.setLastMessagePreview(message.getContent());
-                        conv.setLastActivity(message.getTimestamp());
-                        conversationDao.createConversation(conn, conv);
-                    } else {
-                        throw new IllegalStateException("Hội thoại không tồn tại: " + message.getConvId());
-                    }
-                }
                 conn.commit();
                 return saved;
             } catch (Exception e) {
@@ -75,6 +68,16 @@ public class ChatStorageService implements IChatStorageService {
             }
         } catch (SQLException e) {
             throw new IllegalStateException("Lỗi kết nối CSDL khi lưu tin nhắn", e);
+        }
+    }
+
+    private void ensureSenderUserExists(Connection conn, String username) throws SQLException {
+        if (username == null || username.isBlank()) throw new IllegalArgumentException("Sender is required");
+        try (PreparedStatement check = conn.prepareStatement("SELECT 1 FROM users WHERE LOWER(username) = ?")) {
+            check.setString(1, username.trim().toLowerCase(java.util.Locale.ROOT));
+            try (var rows = check.executeQuery()) {
+                if (!rows.next()) throw new IllegalArgumentException("Sender account does not exist");
+            }
         }
     }
     private ChatMessage resolveDuplicate(ChatMessage message) {
@@ -100,7 +103,7 @@ public class ChatStorageService implements IChatStorageService {
         while (current != null) {
             if (current instanceof SQLException sqlEx) {
                 String msg = sqlEx.getMessage();
-                if (msg != null && (msg.contains("messages.message_id") || (msg.contains("UNIQUE") && msg.contains("message_id")))) {
+                if (msg != null && (msg.contains("UNIQUE constraint failed: messages.message_id") || msg.contains("PRIMARY KEY"))) {
                     return true;
                 }
             }

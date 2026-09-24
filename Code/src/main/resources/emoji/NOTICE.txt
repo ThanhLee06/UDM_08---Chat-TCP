@@ -1,0 +1,8 @@
+Twemoji graphics v14.0.2 by Twitter, Inc. and other contributors.
+Source: https://github.com/twitter/twemoji/tree/v14.0.2/assets/72x72
+License: Creative Commons Attribution 4.0 International (CC BY 4.0).
+https://creativecommons.org/licenses/by/4.0/
+See LICENSE-GRAPHICS in this directory for the full license.
+The bundled PNG files are unmodified. The application scales them for display.
+Only the 64 emoji in the application's picker are bundled. Other Unicode
+grapheme clusters remain text, without splitting joined emoji or skin tones.

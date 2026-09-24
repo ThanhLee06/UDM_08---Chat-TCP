@@ -4,7 +4,6 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 public class DatabaseConnectionFactory {
-    
     private final String dbUrl;
     private final int busyTimeout;
 
@@ -21,12 +20,14 @@ public class DatabaseConnectionFactory {
         this.busyTimeout = busyTimeout > 0 ? busyTimeout : 5000;
     }
 
-
     public Connection getConnection() throws SQLException {
         Connection conn = DriverManager.getConnection(dbUrl);
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("PRAGMA foreign_keys = ON;");
             stmt.execute("PRAGMA busy_timeout = " + busyTimeout + ";");
+        } catch (SQLException e) {
+            try { conn.close(); } catch (SQLException closeFailure) { e.addSuppressed(closeFailure); }
+            throw e;
         }
         return conn;
     }

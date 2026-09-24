@@ -19,7 +19,7 @@ class UserRegisterServiceTest {
     TestClock clock;
 
     @BeforeEach void setup() {
-        repository = new UserRepository("jdbc:sqlite:" + temp.resolve("accounts.db"));
+        repository = vn.edu.ut.udm08.support.TestDatabase.repository("jdbc:sqlite:" + temp.resolve("accounts.db"));
         mailbox = new HashMap<>();
         clock = new TestClock();
         service = new UserRegisterService(repository, new PasswordEncoder(),
@@ -99,7 +99,7 @@ class UserRegisterServiceTest {
     }
     @Test void bothLoginIdentifiersWorkAfterRestart() {
         assertTrue(confirm(service.register(request())).isSuccess());
-        var reopened = new UserRepository("jdbc:sqlite:" + temp.resolve("accounts.db"));
+        var reopened = vn.edu.ut.udm08.support.TestDatabase.repository("jdbc:sqlite:" + temp.resolve("accounts.db"));
         var login = new UserLoginService(reopened);
         assertTrue(login.login(new LoginRequest("0901234567", "Pass123@")).isSuccess());
         assertTrue(login.login(new LoginRequest("+84901234567", "Pass123@")).isSuccess());

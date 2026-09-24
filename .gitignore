@@ -127,3 +127,6 @@ temp/
 smtp.properties
 Code/udm08_chat.db
 Code/udm08_chat.db-*
+Code/data/
+Code/config/*.properties
+Code/client_config.properties

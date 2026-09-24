@@ -27,7 +27,7 @@ public class LogoutApiTest {
         IConversationRegistry convRegistry = new ConversationRegistry();
         LoginHandler handler = new LoginHandler(registry, convRegistry);
         try (TestConnection connection = new TestConnection()) {
-            boolean loggedIn = handler.handleHello(connection.session, hello("user1", "01"));
+            boolean loggedIn = vn.edu.ut.udm08.support.TrustedLogin.establish(handler, connection.session, hello("user1", "01"));
             assertTrue(loggedIn);
             connection.readMessage();
             connection.readMessage();
@@ -49,10 +49,10 @@ public class LogoutApiTest {
         LoginHandler handler = new LoginHandler(registry);
         try (TestConnection first = new TestConnection();
              TestConnection second = new TestConnection()) {
-            assertTrue(handler.handleHello(first.session, hello("UserA", "01")));
+            assertTrue(vn.edu.ut.udm08.support.TrustedLogin.establish(handler, first.session, hello("UserA", "01")));
             first.readMessage();
             first.readMessage();
-            assertTrue(handler.handleHello(second.session, hello("UserB", "02")));
+            assertTrue(vn.edu.ut.udm08.support.TrustedLogin.establish(handler, second.session, hello("UserB", "02")));
             second.readMessage();
             second.readMessage();
             first.readMessage();
@@ -72,7 +72,7 @@ public class LogoutApiTest {
         OnlineUserRegistry registry = new OnlineUserRegistry();
         LoginHandler handler = new LoginHandler(registry);
         try (TestConnection connection = new TestConnection()) {
-            assertTrue(handler.handleHello(connection.session, hello("user1", "01")));
+            assertTrue(vn.edu.ut.udm08.support.TrustedLogin.establish(handler, connection.session, hello("user1", "01")));
             connection.readMessage();
             connection.readMessage();
             ProtocolMessage logoutMsg = new ProtocolMessage(MessageType.LOGOUT);

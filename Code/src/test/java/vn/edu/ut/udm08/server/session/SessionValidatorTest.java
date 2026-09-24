@@ -27,11 +27,11 @@ public class SessionValidatorTest {
         }
     }
     @Test
-    void testHelloAndDisconnectAllowedWithoutAuth() throws Exception {
+    void testHelloRejectedAndDisconnectAllowedWithoutAuth() throws Exception {
         SessionValidator validator = new SessionValidator();
         try (TestConnection connection = new TestConnection()) {
             ProtocolMessage hello = new ProtocolMessage(MessageType.HELLO);
-            assertTrue(validator.validate(connection.session, hello));
+            assertFalse(validator.validate(connection.session, hello));
 
             ProtocolMessage disconnect = new ProtocolMessage(MessageType.DISCONNECT);
             assertTrue(validator.validate(connection.session, disconnect));

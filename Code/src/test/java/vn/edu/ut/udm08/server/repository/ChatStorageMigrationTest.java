@@ -20,7 +20,7 @@ class ChatStorageMigrationTest {
     void setUp() throws Exception {
         tempDbFile = File.createTempFile("test_chat_storage_", ".db");
         String dbUrl = "jdbc:sqlite:" + tempDbFile.getAbsolutePath();
-        userRepository = new UserRepository(dbUrl);
+        userRepository = vn.edu.ut.udm08.support.TestDatabase.repository(dbUrl);
     }
 
     @AfterEach
