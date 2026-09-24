@@ -53,6 +53,10 @@ public class ChatController {
     @FXML private Label connectionStatus;
     @FXML private Button reconnectButton;
     @FXML private Button newestButton;
+    @FXML private Label chatPartnerStatus;
+    @FXML private Button infoButton;
+    @FXML private Button imageBtn;
+    @FXML private Button fileBtn;
     private Runnable reconnectAction;
     private boolean connectionAvailable = true;
     public void setReconnectAction(Runnable action) {
@@ -112,16 +116,26 @@ public class ChatController {
 
     @FXML
     public void initialize() {
-        javafx.scene.shape.SVGPath smile = new javafx.scene.shape.SVGPath();
-        smile.setContent("M 9 1 A 8 8 0 1 1 9 17 A 8 8 0 1 1 9 1 M 6 6.5 L 6 7 M 12 6.5 L 12 7 M 5.5 10.5 Q 9 14.5 12.5 10.5");
-        smile.setFill(null);
-        smile.setStroke(javafx.scene.paint.Color.web("#52606d"));
-        smile.setStrokeWidth(1.4);
-        smile.setStrokeLineCap(javafx.scene.shape.StrokeLineCap.ROUND);
-        emojiIcon.setText("");
-        emojiIcon.setGraphic(smile);
-        emojiIcon.setAccessibleText("Chọn emoji");
-        emojiIcon.setTooltip(new Tooltip("Chọn emoji"));
+        if (infoButton != null) {
+            infoButton.setGraphic(vn.edu.ut.udm08.client.ui.components.AppIcon.create(vn.edu.ut.udm08.client.ui.components.AppIcon.PATH_INFO, 18, javafx.scene.paint.Color.web("#475569")));
+        }
+        if (emojiIcon != null) {
+            emojiIcon.setText("");
+            emojiIcon.setGraphic(vn.edu.ut.udm08.client.ui.components.AppIcon.create(vn.edu.ut.udm08.client.ui.components.AppIcon.PATH_SMILE, 20, javafx.scene.paint.Color.web("#475569")));
+            emojiIcon.setAccessibleText("Chọn emoji");
+            emojiIcon.setTooltip(new Tooltip("Chọn emoji"));
+        }
+        if (imageBtn != null) {
+            imageBtn.setGraphic(vn.edu.ut.udm08.client.ui.components.AppIcon.create(vn.edu.ut.udm08.client.ui.components.AppIcon.PATH_IMAGE, 18, javafx.scene.paint.Color.web("#475569")));
+        }
+        if (fileBtn != null) {
+            fileBtn.setGraphic(vn.edu.ut.udm08.client.ui.components.AppIcon.create(vn.edu.ut.udm08.client.ui.components.AppIcon.PATH_PAPERCLIP, 18, javafx.scene.paint.Color.web("#475569")));
+        }
+        if (sendButton != null) {
+            sendButton.setGraphic(vn.edu.ut.udm08.client.ui.components.AppIcon.create(vn.edu.ut.udm08.client.ui.components.AppIcon.PATH_SEND, 16, javafx.scene.paint.Color.WHITE));
+            sendButton.setText("");
+        }
+
         sidebarController.setLogoutListener(this::handleLogout);
         sidebarController.setSelectionListener(conversation -> {
             if (selectedConvId != null) drafts.put(selectedConvId, messageInput.getText());
@@ -138,6 +152,7 @@ public class ChatController {
                 this.selectedConvId = conversation.getId();
                 selectUser(new UserProfile(other, conversation.getAvatar()));
                 chatPartnerName.setText(conversation.getName());
+                chatPartnerStatus.setText("Tin nh\u1eafn ri\u00eang");
             }
             messageInput.setText(drafts.getOrDefault(selectedConvId, ""));
             messageInput.requestFocus();
@@ -206,6 +221,7 @@ public class ChatController {
             sidebarController.markAsRead(selectedConvId);
         }
         chatPartnerName.setText("Phòng chung");
+        chatPartnerStatus.setText("3 thành viên");
         chatPartnerAvatar.getChildren().setAll(chatPartnerInitial);
         chatPartnerInitial.setText("#");
         chatPartnerAvatar.setStyle("-fx-background-color: #0068ff;");
@@ -226,6 +242,7 @@ public class ChatController {
             sidebarController.markAsRead(selectedConvId);
         }
         chatPartnerName.setText(group.getName());
+        chatPartnerStatus.setText("Nhóm trò chuyện");
         chatPartnerAvatar.getChildren().setAll(chatPartnerInitial);
         chatPartnerInitial.setText(group.getName() != null && !group.getName().isBlank() ? group.getName().substring(0, 1).toUpperCase() : "#");
         chatPartnerAvatar.setStyle("-fx-background-color: #5e35b1;");
@@ -429,16 +446,20 @@ public class ChatController {
         if (message.isForwarded) {
             return prefix + "[Chuyển tiếp] " + content;
         }
-        if (content.startsWith("[IMAGE]") || lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".gif")) {
-            return prefix + "[Hình ảnh]";
-        }
-        if (content.startsWith("[VIDEO]") || lower.endsWith(".mp4") || lower.endsWith(".mkv")) {
-            return prefix + "[Video]";
+        if (content.startsWith("[IMAGE]") || lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".gif") || lower.endsWith(".webp")) {
+            return prefix + "Hình ảnh";
         }
         if (content.startsWith("[FILE]")) {
-            String name = "Tập tin";
-            try { name = vn.edu.ut.udm08.shared.protocol.JsonUtil.fromJson(content.substring(6), vn.edu.ut.udm08.shared.dto.Attachment.class).name; } catch (Exception ignored) {}
-            return prefix + "[File] " + name;
+            try {
+                String jsonStr = content.substring(6);
+                vn.edu.ut.udm08.shared.dto.Attachment att = vn.edu.ut.udm08.shared.protocol.JsonUtil.fromJson(jsonStr, vn.edu.ut.udm08.shared.dto.Attachment.class);
+                if (att != null && att.name != null && !att.name.isBlank()) {
+                    String attLower = att.name.toLowerCase();
+                    boolean isImg = attLower.endsWith(".png") || attLower.endsWith(".jpg") || attLower.endsWith(".jpeg") || attLower.endsWith(".gif") || attLower.endsWith(".webp") || attLower.endsWith(".mp4") || attLower.endsWith(".mkv");
+                    return prefix + (isImg ? "Hình ảnh" : "Đã gửi một tệp");
+                }
+            } catch (Exception ignored) {}
+            return prefix + "Đã gửi một tệp";
         }
         if (content.startsWith("[STICKER]")) {
             return prefix + "[Sticker]";
@@ -453,10 +474,26 @@ public class ChatController {
     }
 
     @FXML
-    private void chooseAttachment() {
+    private void chooseImageAttachment() {
         if (selectedConvId == null || !connectionAvailable || sidebarController.getClient() == null) return;
-        javafx.stage.FileChooser chooser = new javafx.stage.FileChooser(); chooser.setTitle("Gửi ảnh hoặc tệp (tối đa 5 MB)");
-        java.io.File file = chooser.showOpenDialog(messageInput.getScene().getWindow()); if (file == null) return;
+        javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
+        chooser.setTitle("Gửi ảnh hoặc video (tối đa 5 MB)");
+        chooser.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("Ảnh và Video", "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.mp4", "*.avi", "*.mkv", "*.mov"));
+        java.io.File file = chooser.showOpenDialog(messageInput.getScene().getWindow());
+        if (file != null) uploadAndSendAttachment(file);
+    }
+
+    @FXML
+    private void chooseFileAttachment() {
+        if (selectedConvId == null || !connectionAvailable || sidebarController.getClient() == null) return;
+        javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
+        chooser.setTitle("Gửi tệp tin (tối đa 5 MB)");
+        chooser.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("Tất cả các tệp", "*.*"));
+        java.io.File file = chooser.showOpenDialog(messageInput.getScene().getWindow());
+        if (file != null) uploadAndSendAttachment(file);
+    }
+
+    private void uploadAndSendAttachment(java.io.File file) {
         String convId = selectedConvId;
         historyStatus.setText("Đang gửi tệp…");
         new vn.edu.ut.udm08.client.network.AttachmentTransfer(sidebarController.getClient()).upload(file.toPath(), convId, value -> Platform.runLater(() -> historyStatus.setText("Đang gửi tệp " + Math.round(value * 100) + "%"))).whenComplete((attachment, error) -> Platform.runLater(() -> {
@@ -476,7 +513,7 @@ public class ChatController {
     private void showConversationInfo() {
         if (selectedConvId == null || sidebarController.getClient() == null) return;
         if (selectedConvId.startsWith("room:") && !ConvId.isPublicRoom(selectedConvId)) new vn.edu.ut.udm08.client.ui.GroupDialog(sidebarController.getClient(), sidebarController::reload).show(selectedConvId);
-        else new Alert(Alert.AlertType.INFORMATION, ConvId.isPublicRoom(selectedConvId) ? "Phòng chung dành cho các tài khoản đã đăng nhập." : "Cuộc trò chuyện với " + chatPartnerName.getText() + "\nTài khoản: " + selectedUser.username, ButtonType.OK).show();
+        else vn.edu.ut.udm08.client.ui.components.AppDialog.info("Thông tin cuộc trò chuyện", ConvId.isPublicRoom(selectedConvId) ? "Phòng chung dành cho các tài khoản đã đăng nhập." : "Cuộc trò chuyện với " + chatPartnerName.getText() + "\nTài khoản: " + selectedUser.username);
     }
     public void receiveMessage(ProtocolMessage message) {
         Platform.runLater(() -> {
@@ -537,6 +574,7 @@ public class ChatController {
         }
 
         chatPartnerName.setText(user.username);
+        chatPartnerStatus.setText("● Đang hoạt động");
         chatPartnerAvatar.getChildren().setAll(vn.edu.ut.udm08.client.ui.AvatarImages.view(user.avatarId, 42));
         chatPartnerInitial.setText(user.username.substring(0, 1).toUpperCase());
         chatPartnerAvatar.setStyle("-fx-background-color: " + avatarColorFor(user.username) + ";");
@@ -749,10 +787,12 @@ private void insertEmojiAtCaret(String emoji) {
         row.getProperties().put("timestamp", message.timestamp == null ? 0L : message.timestamp);
         row.setAlignment(isMine ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
 
+        HBox bubbleRow = buildBubbleWithActions(bubble, message, isMine);
+
         if (isMine) {
             HBox footer = new HBox(6, timeLabel, delivery);
             footer.setAlignment(Pos.CENTER_RIGHT);
-            column.getChildren().addAll(bubble, footer);
+            column.getChildren().addAll(bubbleRow, footer);
             row.getChildren().add(column);
         } else {
             String senderName = message.sender != null ? message.sender : "Unknown";
@@ -767,11 +807,130 @@ private void insertEmojiAtCaret(String emoji) {
             Label nameLabel = new Label(displayName);
             nameLabel.getStyleClass().add("message-sender-name");
 
-            column.getChildren().addAll(nameLabel, bubble, timeLabel);
+            column.getChildren().addAll(nameLabel, bubbleRow, timeLabel);
             row.getChildren().addAll(avatar, column);
         }
         return row;
     }
+
+    private Button createActionButton(String text, String tip) {
+        Button b = new Button(text);
+        b.getStyleClass().add("action-button");
+        b.setTooltip(new Tooltip(tip));
+        return b;
+    }
+
+    private javafx.scene.image.ImageView loadEmojiImage(String emoji, double size) {
+        String full = emoji.codePoints()
+                .mapToObj(Integer::toHexString)
+                .collect(java.util.stream.Collectors.joining("-"));
+        String noFe0f = full.replace("-fe0f", "");
+        java.io.InputStream s = getClass().getResourceAsStream("/emoji/" + full + ".png");
+        if (s == null) {
+            s = getClass().getResourceAsStream("/emoji/" + noFe0f + ".png");
+        }
+        if (s == null) return null;
+        return new javafx.scene.image.ImageView(new javafx.scene.image.Image(s, size, size, true, true));
+    }
+
+    private void setEmojiContent(Button b, String emoji, double size) {
+        javafx.scene.image.ImageView iv = loadEmojiImage(emoji, size);
+        if (iv != null) {
+            b.setText(null);
+            b.setGraphic(iv);
+        } else {
+            b.setGraphic(null);
+            b.setText(emoji);
+        }
+    }
+
+    private HBox buildBubbleWithActions(VBox bubble, ProtocolMessage message, boolean isMine) {
+        Button replyBtn = createActionButton("❝", "Trả lời");
+        replyBtn.setOnAction(e -> startReply(message));
+
+        Button forwardBtn = createActionButton("➦", "Chuyển tiếp");
+        forwardBtn.setOnAction(e -> openForwardDialog(message));
+        if (message.content != null && message.content.startsWith("[FILE]")) {
+            forwardBtn.setDisable(true);
+        }
+
+        HBox actions = new HBox(4, replyBtn, forwardBtn);
+        actions.setAlignment(Pos.CENTER);
+        actions.setVisible(false);
+
+        Button reactBtn = createActionButton("", "Thích");
+        reactBtn.getStyleClass().add("react-button");
+        setEmojiContent(reactBtn, "👍", 12);
+        reactBtn.setOpacity(0.6);
+        reactBtn.setVisible(false);
+        reactBtn.setTranslateY(12);
+        reactBtn.setTranslateX(-6);
+
+        StackPane bubbleStack = new StackPane(bubble, reactBtn);
+        StackPane.setAlignment(reactBtn, Pos.BOTTOM_RIGHT);
+
+        HBox bubbleRow = new HBox(4);
+        bubbleRow.setAlignment(isMine ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
+        if (isMine) {
+            bubbleRow.getChildren().addAll(actions, bubbleStack);
+        } else {
+            bubbleRow.getChildren().addAll(bubbleStack, actions);
+        }
+
+        String[] chosen = {null};
+        Runnable refresh = () -> {
+            boolean hover = bubbleRow.isHover();
+            actions.setVisible(hover);
+            reactBtn.setVisible(hover || chosen[0] != null);
+        };
+        bubbleRow.hoverProperty().addListener((o, a, b) -> refresh.run());
+
+        java.util.function.Consumer<String> applyReaction = picked -> {
+            chosen[0] = picked.equals(chosen[0]) ? null : picked;
+            setEmojiContent(reactBtn, chosen[0] != null ? chosen[0] : "👍", 12);
+            reactBtn.setOpacity(chosen[0] != null ? 1.0 : 0.6);
+            refresh.run();
+        };
+
+        reactBtn.setOnAction(e -> applyReaction.accept("👍"));
+        javafx.animation.PauseTransition delay = new javafx.animation.PauseTransition(javafx.util.Duration.millis(350));
+        delay.setOnFinished(e -> showReactionPicker(reactBtn, applyReaction));
+        reactBtn.setOnMouseEntered(e -> delay.playFromStart());
+        reactBtn.setOnMouseExited(e -> delay.stop());
+
+        return bubbleRow;
+    }
+
+    private void showReactionPicker(Node anchor, java.util.function.Consumer<String> onPick) {
+        if (anchor.getScene() == null) return;
+        javafx.stage.Popup popup = new javafx.stage.Popup();
+        popup.setAutoHide(true);
+
+        HBox box = new HBox(4);
+        box.getStyleClass().add("reaction-picker");
+        box.getStylesheets().addAll(anchor.getScene().getStylesheets());
+        if (anchor.getScene().getRoot() != null) {
+            box.getStylesheets().addAll(anchor.getScene().getRoot().getStylesheets());
+        }
+
+        for (String emoji : new String[]{"👍", "❤️", "😂", "😮", "😢", "😡"}) {
+            Button b = new Button();
+            b.getStyleClass().add("emoji-item-button");
+            setEmojiContent(b, emoji, 26);
+            b.setOnAction(e -> {
+                onPick.accept(emoji);
+                popup.hide();
+            });
+            box.getChildren().add(b);
+        }
+
+        popup.getContent().add(box);
+        javafx.geometry.Bounds bd = anchor.localToScreen(anchor.getBoundsInLocal());
+        if (bd != null) {
+            popup.show(anchor, bd.getMinX() - 100, bd.getMinY() - 52);
+        }
+    }
+
 
     public void updateDeliveryStatus(ProtocolMessage message) {
         Node row = messageNodeIndex.get(message.messageId);
