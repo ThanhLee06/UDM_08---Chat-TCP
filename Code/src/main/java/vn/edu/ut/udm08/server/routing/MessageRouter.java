@@ -84,7 +84,7 @@ public class MessageRouter implements IMessageRouter {
             }
 
             if (convId != null && !convId.isBlank() && conversationRegistry != null) {
-                if (!ConvId.isDm(convId) && !conversationRegistry.isMember(convId, senderSession)) {
+                if (!ConvId.isDm(convId) && !(ConvId.isPublicRoom(convId) ? conversationRegistry.isMember(convId, senderSession) : canRead(getCurrentUser(senderSession), convId))) {
                     sendErrorMessage(senderSession, msg.messageId, "NOT_A_MEMBER", "Khong co quyen gui tin vao hoi thoai nay");
                     return;
                 }
@@ -436,6 +436,10 @@ public class MessageRouter implements IMessageRouter {
 
     private List<ClientSession> findTargetSessions(ClientSession senderSession, String convId, String targetUser) {
         List<ClientSession> result = new ArrayList<>();
+        if (convId != null && convId.startsWith("room:") && !ConvId.isPublicRoom(convId) && registry != null) {
+            for (ClientSession peer : registry.getSessions()) if (canRead(getCurrentUser(peer), convId)) result.add(peer);
+            return result;
+        }
         if (ConvId.isPublicRoom(convId) || "PUBLIC".equalsIgnoreCase(targetUser)) {
             if (conversationRegistry != null) {
                 List<ClientSession> convSessions = conversationRegistry.getSessions(ConvId.PUBLIC_ROOM_ID);

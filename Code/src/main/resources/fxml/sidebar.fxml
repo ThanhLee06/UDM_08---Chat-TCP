@@ -9,6 +9,7 @@
         <HBox alignment="CENTER_LEFT">
             <Label text="Tin nhắn" styleClass="sidebar-title"/>
             <Pane HBox.hgrow="ALWAYS"/>
+            <Button text="+ Nhóm" onAction="#createGroup" accessibleText="Tạo nhóm mới"/>
             <Button fx:id="refreshButton" text="↻" onAction="#reload" styleClass="sidebar-refresh" accessibleText="Tải lại danh sách hội thoại">
                 <tooltip><Tooltip text="Tải lại hội thoại"/></tooltip>
             </Button>

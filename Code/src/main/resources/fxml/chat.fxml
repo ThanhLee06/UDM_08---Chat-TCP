@@ -23,9 +23,7 @@
                     </StackPane>
                     <Label fx:id="chatPartnerName" text="Chọn một người để chat" styleClass="chat-header-label"/>
                     <Pane HBox.hgrow="ALWAYS"/>
-                    <Label text="📞" styleClass="header-icon"/>
-                    <Label text="🎥" styleClass="header-icon"/>
-                    <Label text="🔍" styleClass="header-icon"/>
+                    <Button text="Thông tin" onAction="#showConversationInfo" accessibleText="Thông tin hội thoại"/>
                 </HBox>
 
                 <HBox fx:id="connectionBar" visible="false" managed="false" spacing="12" alignment="CENTER_LEFT" style="-fx-padding: 10; -fx-background-color: #fff4d6;">

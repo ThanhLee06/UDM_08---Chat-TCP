@@ -163,6 +163,10 @@ public final class SidebarController {
     }
 
     @FXML
+    private void createGroup() {
+        if (getClient() != null) new vn.edu.ut.udm08.client.ui.GroupDialog(getClient(), this::reload).create();
+    }
+    @FXML
     public void reload() {
         if (source == null || loading) {
             return;

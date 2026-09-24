@@ -430,9 +430,20 @@ public class ChatController {
         return prefix + content;
     }
 
+    @FXML
+    private void showConversationInfo() {
+        if (selectedConvId == null || sidebarController.getClient() == null) return;
+        if (selectedConvId.startsWith("room:") && !ConvId.isPublicRoom(selectedConvId)) new vn.edu.ut.udm08.client.ui.GroupDialog(sidebarController.getClient(), sidebarController::reload).show(selectedConvId);
+        else new Alert(Alert.AlertType.INFORMATION, ConvId.isPublicRoom(selectedConvId) ? "Phòng chung dành cho các tài khoản đã đăng nhập." : "Cuộc trò chuyện với " + chatPartnerName.getText() + "\nTài khoản: " + selectedUser.username, ButtonType.OK).show();
+    }
     public void receiveMessage(ProtocolMessage message) {
         Platform.runLater(() -> {
             if (message == null) {
+                return;
+            }
+            if (message.type == MessageType.CONVERSATION_CHANGED) {
+                sidebarController.reload();
+                if (message.convId != null && message.convId.equals(selectedConvId)) loadInitialHistory();
                 return;
             }
 
