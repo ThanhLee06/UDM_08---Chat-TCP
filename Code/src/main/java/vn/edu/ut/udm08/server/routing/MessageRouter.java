@@ -16,6 +16,7 @@ public class MessageRouter implements IMessageRouter {
     private final vn.edu.ut.udm08.server.repository.IConversationDao conversationDao;
     private final vn.edu.ut.udm08.server.repository.IUserRepository userRepository;
     private vn.edu.ut.udm08.server.repository.IMessageDao messageDao;
+    private vn.edu.ut.udm08.server.repository.ReadStateRepository readStates;
 
     public MessageRouter(OnlineUserRegistry registry) {
         this(registry, null);
@@ -29,6 +30,7 @@ public class MessageRouter implements IMessageRouter {
     public MessageRouter(OnlineUserRegistry registry, IConversationRegistry conversationRegistry, vn.edu.ut.udm08.server.config.DatabaseConnectionFactory dbFactory) {
         this(registry, conversationRegistry, new vn.edu.ut.udm08.server.service.ChatStorageService(dbFactory), new vn.edu.ut.udm08.server.repository.ConversationDao(dbFactory), new vn.edu.ut.udm08.server.repository.UserRepository(dbFactory));
         this.messageDao = new vn.edu.ut.udm08.server.repository.MessageDao(dbFactory);
+        this.readStates = new vn.edu.ut.udm08.server.repository.ReadStateRepository(dbFactory);
     }
     public MessageRouter(OnlineUserRegistry registry, IConversationRegistry conversationRegistry, vn.edu.ut.udm08.server.service.IChatStorageService chatStorageService, vn.edu.ut.udm08.server.repository.IConversationDao conversationDao, vn.edu.ut.udm08.server.repository.IUserRepository userRepository) {
         this.registry = registry;
@@ -206,6 +208,7 @@ public class MessageRouter implements IMessageRouter {
                     summary.displayName = c.getName() != null ? c.getName() : c.getConvId();
                     summary.avatar = "default";
                 }
+                summary.unreadCount = readStates == null ? 0 : readStates.unread(user.getId(), user.getUsername(), c.getConvId());
                 summary.lastMessage = c.getLastMessagePreview();
                 summary.lastActivity = c.getLastActivity();
                 summaries.add(summary);

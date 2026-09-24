@@ -68,6 +68,7 @@ public class ChatController {
     }
     public void connectionRestored() {
         setConnectionState(true, "", false);
+        sidebarController.reload();
         loadInitialHistory();
     }
     private void retryMessage(ProtocolMessage message) {
@@ -87,6 +88,10 @@ public class ChatController {
     private final java.util.Map<String, ProtocolMessage> messageHistory = new java.util.HashMap<>();
     private final java.util.Map<String, javafx.scene.Node> messageNodeIndex = new java.util.HashMap<>();
 
+    private final Map<String, String> drafts = new java.util.HashMap<>();
+    private long historyGeneration;
+    @FXML private Label historyStatus;
+    @FXML private Button historyRetry;
     private Long nextCursor;
     private boolean hasMoreHistory;
     private boolean isLoadingHistory;
@@ -118,6 +123,8 @@ public class ChatController {
         emojiIcon.setTooltip(new Tooltip("Chọn emoji"));
         sidebarController.setLogoutListener(this::handleLogout);
         sidebarController.setSelectionListener(conversation -> {
+            if (selectedConvId != null) drafts.put(selectedConvId, messageInput.getText());
+            cancelReply();
             if (conversation.getType() == ConvType.PUBLIC) {
                 selectPublicRoom();
             } else if (conversation.getType() == ConvType.GROUP) {
@@ -131,6 +138,8 @@ public class ChatController {
                 selectUser(new UserProfile(other, conversation.getAvatar()));
                 chatPartnerName.setText(conversation.getName());
             }
+            messageInput.setText(drafts.getOrDefault(selectedConvId, ""));
+            messageInput.requestFocus();
         });
 
         messageInput.setOnAction(e -> handleSend());
@@ -235,7 +244,24 @@ public class ChatController {
         this.sendListener = listener;
     }
 
+    private void markDisplayedRead(ProtocolMessage message) {
+        if (message == null || message.messageId == null || sidebarController.getClient() == null) return;
+        ProtocolMessage request = new ProtocolMessage();
+        request.convId = selectedConvId; request.messageId = message.messageId;
+        sidebarController.getClient().requestFeature(MessageType.CONVERSATION_READ, vn.edu.ut.udm08.shared.protocol.JsonUtil.toJson(request)).thenRun(() -> Platform.runLater(() -> sidebarController.markAsRead(request.convId)));
+    }
+    private void historyError(long generation, String text) {
+        if (generation != historyGeneration) return;
+        isLoadingHistory = false;
+        historyStatus.setText(text);
+        historyRetry.setVisible(true); historyRetry.setManaged(true);
+    }
     private void loadInitialHistory() {
+        final long generation = ++historyGeneration;
+        nextCursor = null; hasMoreHistory = false; isLoadingHistory = false;
+        historyStatus.setText("Đang tải tin nhắn…");
+        historyRetry.setVisible(false); historyRetry.setManaged(false);
+        historyRetry.setOnAction(event -> loadInitialHistory());
         String convId = selectedConvId;
         if (convId == null || sidebarController == null) {
             return;
@@ -252,7 +278,9 @@ public class ChatController {
                 @Override
                 public void onSuccess(vn.edu.ut.udm08.client.network.MessageHistoryPage page) {
                     Platform.runLater(() -> {
+                        if (generation != historyGeneration) return;
                         isLoadingHistory = false;
+                        historyStatus.setText("");
                         if (!convId.equals(selectedConvId)) {
                             return;
                         }
@@ -271,13 +299,14 @@ public class ChatController {
                                 nextCursor = null;
                             }
                             hasMoreHistory = page.hasMore();
+                            if (!page.getMessages().isEmpty()) markDisplayedRead(page.getMessages().get(page.getMessages().size() - 1));
                         }
                     });
                 }
 
                 @Override
                 public void onFailure(String requestId, String errorCode, String errorMessage) {
-                    Platform.runLater(() -> isLoadingHistory = false);
+                    Platform.runLater(() -> historyError(generation, "Không tải được lịch sử. Nhấn thử lại."));
                 }
             });
         } catch (Exception ignored) {
@@ -286,6 +315,7 @@ public class ChatController {
     }
 
     private void loadMoreHistory() {
+        final long generation = historyGeneration;
         String convId = selectedConvId;
         if (convId == null || !hasMoreHistory || isLoadingHistory || nextCursor == null || sidebarController == null) {
             return;
@@ -300,7 +330,9 @@ public class ChatController {
                 @Override
                 public void onSuccess(vn.edu.ut.udm08.client.network.MessageHistoryPage page) {
                     Platform.runLater(() -> {
+                        if (generation != historyGeneration) return;
                         isLoadingHistory = false;
+                        historyStatus.setText("");
                         if (!convId.equals(selectedConvId)) {
                             return;
                         }
@@ -322,11 +354,12 @@ public class ChatController {
                                 nextCursor = null;
                             }
                             hasMoreHistory = page.hasMore();
+                            if (!page.getMessages().isEmpty()) markDisplayedRead(page.getMessages().get(page.getMessages().size() - 1));
                             messageScrollPane.layout();
                             messageContainer.layout();
                             double newHeight = messageContainer.getHeight();
                             if (newHeight > oldHeight && newHeight > 0) {
-                                messageScrollPane.setVvalue((newHeight - oldHeight) / newHeight);
+                                messageScrollPane.setVvalue((newHeight - oldHeight) / Math.max(1, newHeight - messageScrollPane.getViewportBounds().getHeight()));
                             }
                         }
                     });
@@ -334,7 +367,7 @@ public class ChatController {
 
                 @Override
                 public void onFailure(String requestId, String errorCode, String errorMessage) {
-                    Platform.runLater(() -> isLoadingHistory = false);
+                    Platform.runLater(() -> historyError(generation, "Không tải được lịch sử. Nhấn thử lại."));
                 }
             });
         } catch (Exception ignored) {
@@ -435,6 +468,7 @@ public class ChatController {
 
             if (belongsToCurrentChat) {
                 addMessageBubble(message, isMine);
+                markDisplayedRead(message);
             }
         });
     }
@@ -501,7 +535,8 @@ public class ChatController {
         if (sidebarController != null && message.convId != null) {
             sidebarController.updateLastMessage(message.convId, formatMessagePreview(message, true), message.timestamp, false);
         }
-        messageInput.clear(); 
+        messageInput.clear();
+        drafts.remove(selectedConvId);
         cancelReply();
 
         if (sendListener != null) {

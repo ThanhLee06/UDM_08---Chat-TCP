@@ -49,7 +49,7 @@ public final class SidebarConversation {
             name = "Cuộc trò chuyện";
         }
         boolean defaultPinned = id.equals(ConvId.PUBLIC_ROOM_ID);
-        return new SidebarConversation(id, name.trim(), summary.avatar, info.getType(), summary.lastMessage, summary.lastActivity, 0, defaultPinned, false, false);
+        return new SidebarConversation(id, name.trim(), summary.avatar, info.getType(), summary.lastMessage, summary.lastActivity, summary.unreadCount, defaultPinned, false, false);
     }
     public SidebarConversation withProfile(String displayName, String avatar) {
         return new SidebarConversation(id, displayName, avatar, type, lastMessage, lastActivity, unreadCount, pinned, muted, online);

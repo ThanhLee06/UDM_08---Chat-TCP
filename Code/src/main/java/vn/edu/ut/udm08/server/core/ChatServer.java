@@ -32,6 +32,7 @@ public class ChatServer {
     private final MessageRouter messageRouter;
     private final SessionValidator sessionValidator;
     private final UserSearchHandler userSearchHandler;
+    private final vn.edu.ut.udm08.server.handler.ReadStateHandler readStateHandler;
     private final AuthHandler authHandler;
     private final vn.edu.ut.udm08.server.handler.ProfileHandler profileHandler;
     private final RegisterHandler registerHandler;
@@ -64,6 +65,7 @@ public class ChatServer {
         this.sessionValidator = new SessionValidator();
         UserRepository userRepository = new UserRepository(dbFactory);
         this.userSearchHandler = new UserSearchHandler(userRepository);
+        this.readStateHandler = new vn.edu.ut.udm08.server.handler.ReadStateHandler(new vn.edu.ut.udm08.server.repository.ReadStateRepository(dbFactory));
         java.nio.file.Path avatarDirectory = java.nio.file.Path.of(config.getDbUrl().replace("jdbc:sqlite:", "")).toAbsolutePath().getParent().resolve("avatars");
         this.profileHandler = new vn.edu.ut.udm08.server.handler.ProfileHandler(userRepository, new vn.edu.ut.udm08.server.service.AvatarStore(avatarDirectory), loginHandler);
 
@@ -174,6 +176,7 @@ public class ChatServer {
         }
 
         switch (message.type) {
+            case CONVERSATION_READ -> readStateHandler.handle(session, message);
             case PROFILE_GET, PROFILE_UPDATE, AVATAR_GET -> profileHandler.handle(session, message);
             case HELLO -> loginHandler.handleHello(session, message);
             case CHAT -> messageRouter.handleChatMessage(session, message);
