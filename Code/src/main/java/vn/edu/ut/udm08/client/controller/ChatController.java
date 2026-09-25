@@ -468,7 +468,6 @@ public class ChatController {
         if (message.isForwarded) {
             return prefix + "[Chuyển tiếp] " + content;
         }
-
         if (content.startsWith("[IMAGE]") || lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".gif") || lower.endsWith(".webp")) {
             return prefix + "Hình ảnh";
         }
