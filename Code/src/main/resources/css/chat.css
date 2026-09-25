@@ -372,3 +372,48 @@
 .group-danger-btn:hover {
   -fx-background-color: #ffe4e6;
 }
+
+/* ===== Message Hover Actions & Reaction Picker ===== */
+.action-button {
+  -fx-background-color: white;
+  -fx-background-radius: 50%;
+  -fx-min-width: 26;
+  -fx-min-height: 26;
+  -fx-max-width: 26;
+  -fx-max-height: 26;
+  -fx-padding: 0;
+  -fx-font-size: 12px;
+  -fx-text-fill: #555555;
+  -fx-cursor: hand;
+  -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.15), 3, 0, 0, 1);
+}
+
+.action-button:hover {
+  -fx-background-color: #e4e6eb;
+}
+
+.react-button {
+  -fx-min-width: 22;
+  -fx-min-height: 22;
+  -fx-max-width: 22;
+  -fx-max-height: 22;
+}
+
+.reaction-picker {
+  -fx-background-color: white;
+  -fx-background-radius: 22;
+  -fx-padding: 6 10 6 10;
+  -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 6, 0, 0, 2);
+}
+
+.reply-cancel-button {
+  -fx-background-color: transparent;
+  -fx-text-fill: #65676b;
+  -fx-cursor: hand;
+}
+
+.reply-cancel-button:hover {
+  -fx-background-color: #e4e6eb;
+  -fx-background-radius: 50%;
+}
+

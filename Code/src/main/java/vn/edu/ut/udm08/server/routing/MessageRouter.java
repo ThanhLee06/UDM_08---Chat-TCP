@@ -134,7 +134,7 @@ public class MessageRouter implements IMessageRouter {
                 }
             }
 
-            String fwdSource = msg.fwdFrom != null ? msg.fwdFrom : (msg.forwardFromConvId != null ? msg.forwardFromConvId : msg.forwardFromMessageId);
+            String fwdSource = msg.forwardFromMessageId != null ? msg.forwardFromMessageId : msg.fwdFrom;
             if (fwdSource != null) {
                 if (fwdSource.isBlank()) {
                     sendErrorMessage(senderSession, msg.messageId, "INVALID_FORWARD_SOURCE", "Tin nguon khong ton tai hoac khong co quyen doc");
@@ -438,7 +438,18 @@ public class MessageRouter implements IMessageRouter {
             message.forwardFromMessageId = original.getMessageId();
             message.forwardFromConvId = original.getConvId();
             message.forwardedFromSender = original.getSenderUsername();
-            message.content = original.getContent();
+
+            String originalContent = original.getContent();
+            boolean originalIsFile = originalContent != null && originalContent.startsWith("[FILE]");
+
+            if (!originalIsFile) {
+                message.content = originalContent;
+            } else {
+                if (message.content == null || !message.content.startsWith("[FILE]")) {
+                    sendErrorMessage(session, message.messageId, "INVALID_FORWARD_FILE", "Forwarded attachment is invalid");
+                    return false;
+                }
+            }
             message.isForwarded = true;
             message.kind = "forward";
         }

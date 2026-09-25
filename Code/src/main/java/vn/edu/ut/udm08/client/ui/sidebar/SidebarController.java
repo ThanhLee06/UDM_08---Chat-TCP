@@ -177,6 +177,9 @@ public final class SidebarController {
     public ChatClient getClient() {
         return (source instanceof ClientConversationSource) ? ((ClientConversationSource) source).getClient() : null;
     }
+    public ObservableList<SidebarConversation> getConversations() { return conversations; }
+    public List<UserProfile> getOnlineUsersList() { return onlineUsersList; }
+
     private void showUserMenu(javafx.scene.input.MouseEvent e) {
         if (currentUser == null || currentUser.isBlank()) return;
         ContextMenu menu = new ContextMenu();

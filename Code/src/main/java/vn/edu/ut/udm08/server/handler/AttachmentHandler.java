@@ -40,6 +40,27 @@ public final class AttachmentHandler {
                 try(RandomAccessFile file=new RandomAccessFile(directory.resolve(result.id).toFile(),"r")){
                     file.seek(command.offset);byte[] bytes=new byte[(int)Math.min(65536,result.size-command.offset)];file.readFully(bytes);result.data=Base64.getEncoder().encodeToString(bytes);result.offset=command.offset;
                 }
+            }else if("COPY".equals(command.action)){
+                if(command.id==null||command.id.isBlank())throw new IllegalArgumentException("Thiếu tệp nguồn");
+                if(command.convId==null||command.convId.isBlank())throw new IllegalArgumentException("Thiếu hội thoại đích");
+                Attachment source=files.find(command.id);
+                requireAccess(owner,source.convId);
+                requireAccess(owner,command.convId);
+                Attachment copied=new Attachment();
+                copied.id=UUID.randomUUID().toString();
+                copied.convId=command.convId;
+                copied.name=source.name;
+                copied.size=source.size;
+                Path sourcePath=directory.resolve(source.id);
+                Path copiedPath=directory.resolve(copied.id);
+                Files.copy(sourcePath,copiedPath);
+                try{
+                    files.save(copied,owner);
+                }catch(RuntimeException e){
+                    Files.deleteIfExists(copiedPath);
+                    throw e;
+                }
+                result=copied;
             }else{
                 Upload upload=uploads.get(command.id);
                 if(upload==null||upload.owner!=owner)throw new IllegalArgumentException("Phiên tải tệp không hợp lệ hoặc đã hết hạn");
