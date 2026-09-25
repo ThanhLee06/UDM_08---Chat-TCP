@@ -37,4 +37,31 @@ public final class AttachmentTransfer {
         while(output.size()<file.size){Attachment command=new Attachment();command.id=file.id;command.action="GET";command.offset=output.size();Attachment response=request(command);byte[] chunk=Base64.getDecoder().decode(response.data);if(chunk.length==0||output.size()+chunk.length>file.size)throw new IllegalStateException("Dữ liệu tải về không hợp lệ");output.writeBytes(chunk);progress.accept((double)output.size()/file.size);}
         return output.toByteArray();
     });}
+    public CompletableFuture<Attachment> copy(Attachment source, String targetConvId) {
+        return CompletableFuture.supplyAsync(() -> {
+            if (source == null || source.id == null || source.id.isBlank()) {
+                throw new IllegalArgumentException("Tệp nguồn không hợp lệ");
+            }
+            if (targetConvId == null || targetConvId.isBlank()) {
+                throw new IllegalArgumentException("Hội thoại đích không hợp lệ");
+            }
+            try {
+                if (vn.edu.ut.udm08.shared.protocol.ConvId.isDm(targetConvId)) {
+                    CompletableFuture<Void> opened = new CompletableFuture<>();
+                    client.openDirectMessage(vn.edu.ut.udm08.shared.protocol.ConvId.getOtherUser(targetConvId, client.getUsername()), new OpenDmCallback() {
+                        public void onSuccess(OpenDmResult result) { opened.complete(null); }
+                        public void onFailure(String id, String code, String message) { opened.completeExceptionally(new IllegalStateException(message)); }
+                    });
+                    opened.join();
+                }
+                Attachment command = new Attachment();
+                command.action = "COPY";
+                command.id = source.id;
+                command.convId = targetConvId;
+                return request(command);
+            } catch (Exception e) {
+                throw new java.util.concurrent.CompletionException(e);
+            }
+        });
+    }
 }

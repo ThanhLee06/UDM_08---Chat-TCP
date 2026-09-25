@@ -443,23 +443,34 @@ public class ChatController {
         String prefix = isMine ? "Bạn: " : "";
         String lower = content.toLowerCase();
 
-        if (message.isForwarded) {
-            return prefix + "[Chuyển tiếp] " + content;
-        }
-        if (content.startsWith("[IMAGE]") || lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".gif") || lower.endsWith(".webp")) {
-            return prefix + "Hình ảnh";
-        }
+        // ==============================
+        // FILE / ATTACHMENT
+        // ==============================
         if (content.startsWith("[FILE]")) {
             try {
                 String jsonStr = content.substring(6);
                 vn.edu.ut.udm08.shared.dto.Attachment att = vn.edu.ut.udm08.shared.protocol.JsonUtil.fromJson(jsonStr, vn.edu.ut.udm08.shared.dto.Attachment.class);
                 if (att != null && att.name != null && !att.name.isBlank()) {
                     String attLower = att.name.toLowerCase();
-                    boolean isImg = attLower.endsWith(".png") || attLower.endsWith(".jpg") || attLower.endsWith(".jpeg") || attLower.endsWith(".gif") || attLower.endsWith(".webp") || attLower.endsWith(".mp4") || attLower.endsWith(".mkv");
-                    return prefix + (isImg ? "Hình ảnh" : "Đã gửi một tệp");
+                    boolean image = attLower.endsWith(".png") || attLower.endsWith(".jpg") || attLower.endsWith(".jpeg") || attLower.endsWith(".gif") || attLower.endsWith(".webp");
+                    if (message.isForwarded) {
+                        return prefix + (image ? "Đã chuyển tiếp một hình ảnh" : "Đã chuyển tiếp một tệp");
+                    }
+                    return prefix + (image ? "Hình ảnh" : "Đã gửi một tệp");
                 }
             } catch (Exception ignored) {}
-            return prefix + "Đã gửi một tệp";
+            return prefix + (message.isForwarded ? "Đã chuyển tiếp một tệp" : "Đã gửi một tệp");
+        }
+
+        // ==============================
+        // FORWARDED TEXT
+        // ==============================
+        if (message.isForwarded) {
+            return prefix + "[Chuyển tiếp] " + content;
+        }
+
+        if (content.startsWith("[IMAGE]") || lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".gif") || lower.endsWith(".webp")) {
+            return prefix + "Hình ảnh";
         }
         if (content.startsWith("[STICKER]")) {
             return prefix + "[Sticker]";
@@ -722,14 +733,21 @@ private void insertEmojiAtCaret(String emoji) {
         }
         if (message.replyToMessageId != null) {
             ProtocolMessage original = messageHistory.get(message.replyToMessageId);
-            String quoteText;
+            String quoteSender;
+            String quoteRawContent;
             if (original != null) {
-                quoteText = original.sender + ": " + original.content;
+                quoteSender = original.sender;
+                quoteRawContent = original.content;
             } else if (message.replyToSender != null && message.replyToContent != null) {
-                quoteText = message.replyToSender + ": " + message.replyToContent;
+                quoteSender = message.replyToSender;
+                quoteRawContent = message.replyToContent;
             } else {
-                quoteText = "Tin nhắn gốc không khả dụng";
+                quoteSender = null;
+                quoteRawContent = null;
             }
+            String quoteText = (quoteSender != null && quoteRawContent != null)
+                    ? quoteSender + ": " + formatQuoteContent(quoteRawContent)
+                    : "Tin nhắn gốc không khả dụng";
             Label quoteBlock = new Label(quoteText);
             quoteBlock.getStyleClass().add("reply-quote-block");
             quoteBlock.setWrapText(true);
@@ -761,7 +779,6 @@ private void insertEmojiAtCaret(String emoji) {
         replyItem.setOnAction(e -> startReply(message));
         MenuItem forwardItem = new MenuItem("Chuyển tiếp");
         forwardItem.setOnAction(e -> openForwardDialog(message));
-        forwardItem.setDisable(message.content != null && message.content.startsWith("[FILE]"));
         contextMenu.getItems().addAll(replyItem, forwardItem);
         if (isMine) {
             MenuItem retry = new MenuItem("Gửi lại");
@@ -820,6 +837,27 @@ private void insertEmojiAtCaret(String emoji) {
         return b;
     }
 
+    private String formatQuoteContent(String rawContent) {
+        if (rawContent == null) return "";
+        if (rawContent.startsWith("[FILE]")) {
+            try {
+                var file = vn.edu.ut.udm08.shared.protocol.JsonUtil.fromJson(
+                        rawContent.substring(6),
+                        vn.edu.ut.udm08.shared.dto.Attachment.class
+                );
+                if (file != null && file.name != null) {
+                    String lower = file.name.toLowerCase();
+                    if (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".gif") || lower.endsWith(".webp") || lower.endsWith(".bmp")) {
+                        return "[Hình ảnh] " + file.name;
+                    }
+                    return "[Tệp đính kèm] " + file.name;
+                }
+            } catch (Exception ignored) {}
+            return "[Tệp đính kèm]";
+        }
+        return rawContent;
+    }
+
     private javafx.scene.image.ImageView loadEmojiImage(String emoji, double size) {
         String full = emoji.codePoints()
                 .mapToObj(Integer::toHexString)
@@ -828,6 +866,9 @@ private void insertEmojiAtCaret(String emoji) {
         java.io.InputStream s = getClass().getResourceAsStream("/emoji/" + full + ".png");
         if (s == null) {
             s = getClass().getResourceAsStream("/emoji/" + noFe0f + ".png");
+        }
+        if (s == null && ("😮".equals(emoji) || "😲".equals(emoji) || "😱".equals(emoji))) {
+            s = getClass().getResourceAsStream("/emoji/1f631.png");
         }
         if (s == null) return null;
         return new javafx.scene.image.ImageView(new javafx.scene.image.Image(s, size, size, true, true));
@@ -850,9 +891,6 @@ private void insertEmojiAtCaret(String emoji) {
 
         Button forwardBtn = createActionButton("➦", "Chuyển tiếp");
         forwardBtn.setOnAction(e -> openForwardDialog(message));
-        if (message.content != null && message.content.startsWith("[FILE]")) {
-            forwardBtn.setDisable(true);
-        }
 
         HBox actions = new HBox(4, replyBtn, forwardBtn);
         actions.setAlignment(Pos.CENTER);
@@ -913,7 +951,7 @@ private void insertEmojiAtCaret(String emoji) {
             box.getStylesheets().addAll(anchor.getScene().getRoot().getStylesheets());
         }
 
-        for (String emoji : new String[]{"👍", "❤️", "😂", "😮", "😢", "😡"}) {
+        for (String emoji : new String[]{"👍", "❤️", "😂", "😱", "😢", "😡"}) {
             Button b = new Button();
             b.getStyleClass().add("emoji-item-button");
             setEmojiContent(b, emoji, 26);
@@ -933,9 +971,33 @@ private void insertEmojiAtCaret(String emoji) {
 
 
     public void updateDeliveryStatus(ProtocolMessage message) {
+        if (message == null) return;
         Node row = messageNodeIndex.get(message.messageId);
         if (row != null && row.lookup("#delivery-status") instanceof Label label) {
             setDeliveryText(label, message);
+        }
+        if ("forward".equalsIgnoreCase(message.kind)) {
+            javafx.stage.Window owner = (messageScrollPane != null && messageScrollPane.getScene() != null) ? messageScrollPane.getScene().getWindow() : null;
+            if (owner != null) {
+                if (message.sendStatus == vn.edu.ut.udm08.shared.model.MessageSendStatus.SENT) {
+                    String targetName = message.target != null ? message.target : "";
+                    vn.edu.ut.udm08.client.ui.components.Toast.show(owner, "Đã chuyển tiếp tin nhắn cho " + targetName);
+                } else if (message.sendStatus == vn.edu.ut.udm08.shared.model.MessageSendStatus.FAILED) {
+                    String err = message.errorMessage != null ? message.errorMessage : "Không thể chuyển tiếp tin nhắn";
+                    vn.edu.ut.udm08.client.ui.components.Toast.show(owner, err);
+                }
+            }
+
+            if (message.sendStatus == vn.edu.ut.udm08.shared.model.MessageSendStatus.SENT
+                    && sidebarController != null
+                    && message.convId != null) {
+                sidebarController.updateLastMessage(
+                        message.convId,
+                        formatMessagePreview(message, true),
+                        message.timestamp != null ? message.timestamp : System.currentTimeMillis(),
+                        false
+                );
+            }
         }
     }
 
@@ -995,6 +1057,48 @@ private void insertEmojiAtCaret(String emoji) {
         this.replyingToMessage = message;
          showReplyBar(message);
     }
+    private List<UserProfile> getAvailableForwardTargets() {
+        List<UserProfile> targets = new java.util.ArrayList<>();
+        java.util.Set<String> addedUsernames = new java.util.HashSet<>();
+
+        for (UserProfile u : onlineUsers) {
+            if (u != null && u.username != null && !u.username.equalsIgnoreCase(currentUsername)) {
+                if (addedUsernames.add(u.username.toLowerCase(java.util.Locale.ROOT))) {
+                    targets.add(u);
+                }
+            }
+        }
+
+        if (sidebarController != null) {
+            if (sidebarController.getOnlineUsersList() != null) {
+                for (UserProfile u : sidebarController.getOnlineUsersList()) {
+                    if (u != null && u.username != null && !u.username.equalsIgnoreCase(currentUsername)) {
+                        if (addedUsernames.add(u.username.toLowerCase(java.util.Locale.ROOT))) {
+                            targets.add(u);
+                        }
+                    }
+                }
+            }
+            if (sidebarController.getConversations() != null) {
+                for (vn.edu.ut.udm08.client.ui.sidebar.SidebarConversation conv : sidebarController.getConversations()) {
+                    if (conv != null && conv.getType() == vn.edu.ut.udm08.shared.protocol.ConvType.DM) {
+                        String other = ConvId.getOtherUser(conv.getId(), currentUsername);
+                        if (other != null && !other.equalsIgnoreCase(currentUsername)) {
+                            if (addedUsernames.add(other.toLowerCase(java.util.Locale.ROOT))) {
+                                UserProfile profile = new UserProfile();
+                                profile.username = other;
+                                profile.displayName = conv.getName();
+                                profile.avatarId = conv.getAvatar();
+                                targets.add(profile);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return targets;
+    }
+
 private void openForwardDialog(ProtocolMessage message) {
     Dialog<UserProfile> dialog = new Dialog<>();
     dialog.setTitle("Chuyển tiếp tin nhắn");
@@ -1006,19 +1110,46 @@ private void openForwardDialog(ProtocolMessage message) {
     TextField searchField = new TextField();
     searchField.setPromptText("Tìm người nhận...");
     searchField.getStyleClass().add("forward-search-field");
-    
 
-    ObservableList<UserProfile> forwardTargets = FXCollections.observableArrayList(onlineUsers);
+    List<UserProfile> initialTargets = getAvailableForwardTargets();
+    ObservableList<UserProfile> forwardTargets = FXCollections.observableArrayList(initialTargets);
     ListView<UserProfile> targetListView = new ListView<>(forwardTargets);
     targetListView.setCellFactory(list -> new UserListCell());
     targetListView.setPrefHeight(220);
     targetListView.setPlaceholder(new Label("Không tìm thấy người dùng"));
 
     searchField.textProperty().addListener((obs, oldVal, newVal) -> {
-        String keyword = newVal == null ? "" : newVal.trim().toLowerCase();
-        forwardTargets.setAll(onlineUsers.stream()
-                .filter(u -> u.username.toLowerCase().contains(keyword))
-                .toList());
+        String keyword = newVal == null ? "" : newVal.trim().toLowerCase(java.util.Locale.ROOT);
+        List<UserProfile> filtered = initialTargets.stream()
+                .filter(u -> (u.username != null && u.username.toLowerCase(java.util.Locale.ROOT).contains(keyword))
+                        || (u.displayName != null && u.displayName.toLowerCase(java.util.Locale.ROOT).contains(keyword)))
+                .collect(java.util.stream.Collectors.toList());
+        forwardTargets.setAll(filtered);
+
+        if (!keyword.isBlank() && sidebarController != null && sidebarController.getClient() != null && sidebarController.getClient().isConnected()) {
+            try {
+                sidebarController.getClient().searchUsers(keyword, new vn.edu.ut.udm08.client.network.UserSearchCallback() {
+                    @Override
+                    public void onSuccess(vn.edu.ut.udm08.client.network.UserSearchResult result) {
+                        if (result != null && result.getUsers() != null) {
+                            Platform.runLater(() -> {
+                                for (UserProfile serverUser : result.getUsers()) {
+                                    if (serverUser != null && serverUser.username != null && !serverUser.username.equalsIgnoreCase(currentUsername)) {
+                                        boolean exists = forwardTargets.stream().anyMatch(t -> t.username != null && t.username.equalsIgnoreCase(serverUser.username));
+                                        if (!exists) {
+                                            forwardTargets.add(serverUser);
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    }
+
+                    @Override
+                    public void onFailure(String requestId, String errorCode, String errorMessage) {}
+                });
+            } catch (Exception ignored) {}
+        }
     });
 
     VBox content = new VBox(8, searchField, targetListView);
@@ -1038,30 +1169,98 @@ private void openForwardDialog(ProtocolMessage message) {
     });
     dialog.setOnShown(e -> searchField.requestFocus());
     dialog.showAndWait().ifPresent(target -> forwardMessage(message, target));
-    
 }
 
 private void forwardMessage(ProtocolMessage original, UserProfile target) {
+    if (original == null || target == null || target.username == null) {
+        return;
+    }
+
+    String targetConvId = ConvId.forDm(currentUsername, target.username);
+
+    // ==============================
+    // FILE / IMAGE ATTACHMENT
+    // ==============================
+    if (original.content != null && original.content.startsWith("[FILE]")) {
+        try {
+            vn.edu.ut.udm08.shared.dto.Attachment source =
+                    vn.edu.ut.udm08.shared.protocol.JsonUtil.fromJson(
+                            original.content.substring(6),
+                            vn.edu.ut.udm08.shared.dto.Attachment.class
+                    );
+
+            historyStatus.setText("Đang chuyển tiếp tệp…");
+
+            new vn.edu.ut.udm08.client.network.AttachmentTransfer(sidebarController.getClient())
+                    .copy(source, targetConvId)
+                    .whenComplete((copied, error) -> Platform.runLater(() -> {
+                        historyStatus.setText("");
+                        if (error != null || copied == null) {
+                            javafx.stage.Window owner = (messageScrollPane != null && messageScrollPane.getScene() != null) ? messageScrollPane.getScene().getWindow() : null;
+                            if (owner != null) {
+                                vn.edu.ut.udm08.client.ui.components.Toast.show(owner, "Không thể chuyển tiếp tệp");
+                            }
+                            return;
+                        }
+
+                        copied.action = null;
+                        copied.data = null;
+                        String newContent = "[FILE]" + vn.edu.ut.udm08.shared.protocol.JsonUtil.toJson(copied);
+                        sendForwardedMessage(original, target, newContent);
+                    }));
+            return;
+        } catch (Exception e) {
+            javafx.stage.Window owner = (messageScrollPane != null && messageScrollPane.getScene() != null) ? messageScrollPane.getScene().getWindow() : null;
+            if (owner != null) {
+                vn.edu.ut.udm08.client.ui.components.Toast.show(owner, "Tệp đính kèm không hợp lệ");
+            }
+            return;
+        }
+    }
+
+    // ==============================
+    // TEXT
+    // ==============================
+    sendForwardedMessage(original, target, original.content);
+}
+
+private void sendForwardedMessage(ProtocolMessage original, UserProfile target, String content) {
     ProtocolMessage forwarded = new ProtocolMessage(MessageType.CHAT);
     forwarded.messageId = UUID.randomUUID().toString();
     forwarded.sender = currentUsername;
     forwarded.target = target.username;
     forwarded.convId = ConvId.forDm(currentUsername, target.username);
-    forwarded.content = original.content;
+    forwarded.content = content;
     forwarded.timestamp = System.currentTimeMillis();
     forwarded.kind = "forward";
+
     forwarded.forwardFromMessageId = original.messageId;
     forwarded.forwardFromConvId = original.convId;
     forwarded.fwdFrom = original.messageId;
     forwarded.forwardedFromSender = original.sender;
     forwarded.isForwarded = true;
 
-    if (sendListener != null) {
-        sendListener.onSendMessage(forwarded);
+    // QUAN TRỌNG: Không được SENT trước khi server ACK
+    forwarded.sendStatus = vn.edu.ut.udm08.shared.model.MessageSendStatus.PENDING;
+
+    if (sidebarController != null) {
+        String displayName = target.displayName != null && !target.displayName.isBlank()
+                ? target.displayName
+                : target.username;
+
+        sidebarController.ensureConversation(
+                forwarded.convId,
+                displayName,
+                target.avatarId != null ? target.avatarId : "avatar1"
+        );
     }
 
-    if (selectedUser != null && selectedUser.username.equals(target.username)) {
+    if (selectedConvId != null && selectedConvId.equalsIgnoreCase(forwarded.convId)) {
         addMessageBubble(forwarded, true);
+    }
+
+    if (sendListener != null) {
+        sendListener.onSendMessage(forwarded);
     }
 }
 
@@ -1071,7 +1270,7 @@ private void forwardMessage(ProtocolMessage original, UserProfile target) {
         Label replyingToLabel = new Label("Đang trả lời " + message.sender);
         replyingToLabel.getStyleClass().add("reply-bar-sender");
 
-        Label quoteText = new Label(message.content);
+        Label quoteText = new Label(formatQuoteContent(message.content));
         quoteText.getStyleClass().add("reply-bar-text");
         EmojiText.install(quoteText, 14, 380);
 
@@ -1147,18 +1346,19 @@ private void highlightNode(javafx.scene.Node target) {
         protected void updateItem(UserProfile user, boolean empty) {
             super.updateItem(user, empty);
 
-            if (empty || user == null) {
+            if (empty || user == null || user.username == null) {
                 setText(null);
                 setGraphic(null);
             } else {
-                Label initial = new Label(user.username.substring(0, 1).toUpperCase());
+                String nameStr = user.displayName != null && !user.displayName.isBlank() ? user.displayName : user.username;
+                Label initial = new Label(nameStr.substring(0, 1).toUpperCase());
                 initial.getStyleClass().add("avatar-text-small");
 
                 StackPane avatar = new StackPane(vn.edu.ut.udm08.client.ui.AvatarImages.view(user.avatarId, 32));
                 avatar.getStyleClass().add("avatar-circle-small");
                 avatar.setStyle("-fx-background-color: " + avatarColorFor(user.username) + ";");
 
-                Label name = new Label(user.username);
+                Label name = new Label(nameStr);
                 name.getStyleClass().add("cell-name");
 
                 HBox box = new HBox(10, avatar, name);
