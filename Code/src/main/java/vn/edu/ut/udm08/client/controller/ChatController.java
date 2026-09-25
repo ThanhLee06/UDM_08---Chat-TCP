@@ -49,6 +49,40 @@ public class ChatController {
     @FXML private Button sendButton;
     @FXML private VBox emptyStatePane;    
     @FXML private Label emojiIcon;
+    @FXML private HBox connectionBar;
+    @FXML private Label connectionStatus;
+    @FXML private Button reconnectButton;
+    @FXML private Button newestButton;
+    @FXML private Label chatPartnerStatus;
+    @FXML private Button infoButton;
+    @FXML private Button imageBtn;
+    @FXML private Button fileBtn;
+    private Runnable reconnectAction;
+    private boolean connectionAvailable = true;
+    public void setReconnectAction(Runnable action) {
+        reconnectAction = action;
+        reconnectButton.setOnAction(event -> { if (reconnectAction != null) reconnectAction.run(); });
+    }
+    public void setConnectionState(boolean connected, String text, boolean busy) {
+        connectionAvailable = connected;
+        connectionBar.setVisible(!connected);
+        connectionBar.setManaged(!connected);
+        connectionStatus.setText(text);
+        reconnectButton.setDisable(busy);
+        sendButton.setDisable(!connected || selectedConvId == null);
+    }
+    public void connectionRestored() {
+        setConnectionState(true, "", false);
+        sidebarController.reload();
+        loadInitialHistory();
+    }
+    private void retryMessage(ProtocolMessage message) {
+        if (!connectionAvailable || sendListener == null || message.sendStatus == vn.edu.ut.udm08.shared.model.MessageSendStatus.PENDING || message.sendStatus == vn.edu.ut.udm08.shared.model.MessageSendStatus.SENT) return;
+        message.sendStatus = vn.edu.ut.udm08.shared.model.MessageSendStatus.PENDING;
+        message.errorMessage = null;
+        updateDeliveryStatus(message);
+        sendListener.onSendMessage(message);
+    }
 
     private final ObservableList<UserProfile> onlineUsers = FXCollections.observableArrayList();
 
@@ -59,6 +93,10 @@ public class ChatController {
     private final java.util.Map<String, ProtocolMessage> messageHistory = new java.util.HashMap<>();
     private final java.util.Map<String, javafx.scene.Node> messageNodeIndex = new java.util.HashMap<>();
 
+    private final Map<String, String> drafts = new java.util.HashMap<>();
+    private long historyGeneration;
+    @FXML private Label historyStatus;
+    @FXML private Button historyRetry;
     private Long nextCursor;
     private boolean hasMoreHistory;
     private boolean isLoadingHistory;
@@ -78,18 +116,30 @@ public class ChatController {
 
     @FXML
     public void initialize() {
-        javafx.scene.shape.SVGPath smile = new javafx.scene.shape.SVGPath();
-        smile.setContent("M 9 1 A 8 8 0 1 1 9 17 A 8 8 0 1 1 9 1 M 6 6.5 L 6 7 M 12 6.5 L 12 7 M 5.5 10.5 Q 9 14.5 12.5 10.5");
-        smile.setFill(null);
-        smile.setStroke(javafx.scene.paint.Color.web("#52606d"));
-        smile.setStrokeWidth(1.4);
-        smile.setStrokeLineCap(javafx.scene.shape.StrokeLineCap.ROUND);
-        emojiIcon.setText("");
-        emojiIcon.setGraphic(smile);
-        emojiIcon.setAccessibleText("Chọn emoji");
-        emojiIcon.setTooltip(new Tooltip("Chọn emoji"));
+        if (infoButton != null) {
+            infoButton.setGraphic(vn.edu.ut.udm08.client.ui.components.AppIcon.create(vn.edu.ut.udm08.client.ui.components.AppIcon.PATH_INFO, 18, javafx.scene.paint.Color.web("#475569")));
+        }
+        if (emojiIcon != null) {
+            emojiIcon.setText("");
+            emojiIcon.setGraphic(vn.edu.ut.udm08.client.ui.components.AppIcon.create(vn.edu.ut.udm08.client.ui.components.AppIcon.PATH_SMILE, 20, javafx.scene.paint.Color.web("#475569")));
+            emojiIcon.setAccessibleText("Chọn emoji");
+            emojiIcon.setTooltip(new Tooltip("Chọn emoji"));
+        }
+        if (imageBtn != null) {
+            imageBtn.setGraphic(vn.edu.ut.udm08.client.ui.components.AppIcon.create(vn.edu.ut.udm08.client.ui.components.AppIcon.PATH_IMAGE, 18, javafx.scene.paint.Color.web("#475569")));
+        }
+        if (fileBtn != null) {
+            fileBtn.setGraphic(vn.edu.ut.udm08.client.ui.components.AppIcon.create(vn.edu.ut.udm08.client.ui.components.AppIcon.PATH_PAPERCLIP, 18, javafx.scene.paint.Color.web("#475569")));
+        }
+        if (sendButton != null) {
+            sendButton.setGraphic(vn.edu.ut.udm08.client.ui.components.AppIcon.create(vn.edu.ut.udm08.client.ui.components.AppIcon.PATH_SEND, 16, javafx.scene.paint.Color.WHITE));
+            sendButton.setText("");
+        }
+
         sidebarController.setLogoutListener(this::handleLogout);
         sidebarController.setSelectionListener(conversation -> {
+            if (selectedConvId != null) drafts.put(selectedConvId, messageInput.getText());
+            cancelReply();
             if (conversation.getType() == ConvType.PUBLIC) {
                 selectPublicRoom();
             } else if (conversation.getType() == ConvType.GROUP) {
@@ -102,10 +152,19 @@ public class ChatController {
                 this.selectedConvId = conversation.getId();
                 selectUser(new UserProfile(other, conversation.getAvatar()));
                 chatPartnerName.setText(conversation.getName());
+                chatPartnerStatus.setText("Tin nh\u1eafn ri\u00eang");
             }
+            messageInput.setText(drafts.getOrDefault(selectedConvId, ""));
+            messageInput.requestFocus();
         });
 
         messageInput.setOnAction(e -> handleSend());
+        newestButton.setOnAction(event -> { messageScrollPane.setVvalue(1); newestButton.setVisible(false); newestButton.setManaged(false); });
+        emojiIcon.setFocusTraversable(true);
+        emojiIcon.setOnKeyPressed(event -> { if (event.getCode() == KeyCode.ENTER || event.getCode() == KeyCode.SPACE) { handleEmojiButtonClick(); event.consume(); } });
+        messageInput.sceneProperty().addListener((observable, oldScene, scene) -> {
+            if (scene != null) scene.getAccelerators().put(new javafx.scene.input.KeyCodeCombination(KeyCode.F, javafx.scene.input.KeyCombination.CONTROL_DOWN), sidebarController::focusSearch);
+        });
         messageInput.setOnKeyPressed(e -> {
             if (e.getCode() == KeyCode.ESCAPE && replyingToMessage != null) {
                 cancelReply();
@@ -113,6 +172,7 @@ public class ChatController {
         });
 
         messageScrollPane.vvalueProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null && newVal.doubleValue() >= 0.95) { newestButton.setVisible(false); newestButton.setManaged(false); }
             if (newVal != null && newVal.doubleValue() <= 0.05 && hasMoreHistory && !isLoadingHistory) {
                 loadMoreHistory();
             }
@@ -161,13 +221,15 @@ public class ChatController {
             sidebarController.markAsRead(selectedConvId);
         }
         chatPartnerName.setText("Phòng chung");
+        chatPartnerStatus.setText("3 thành viên");
+        chatPartnerAvatar.getChildren().setAll(chatPartnerInitial);
         chatPartnerInitial.setText("#");
         chatPartnerAvatar.setStyle("-fx-background-color: #0068ff;");
         messageContainer.getChildren().clear();
         messageNodeIndex.clear();
         messageInput.clear();
         messageInput.setDisable(false);
-        sendButton.setDisable(false);
+        sendButton.setDisable(!connectionAvailable);
         emptyStatePane.setVisible(false);
         loadInitialHistory();
     }
@@ -180,12 +242,14 @@ public class ChatController {
             sidebarController.markAsRead(selectedConvId);
         }
         chatPartnerName.setText(group.getName());
+        chatPartnerStatus.setText("Nhóm trò chuyện");
+        chatPartnerAvatar.getChildren().setAll(chatPartnerInitial);
         chatPartnerInitial.setText(group.getName() != null && !group.getName().isBlank() ? group.getName().substring(0, 1).toUpperCase() : "#");
         chatPartnerAvatar.setStyle("-fx-background-color: #5e35b1;");
         messageContainer.getChildren().clear();
         messageNodeIndex.clear();
         messageInput.setDisable(false);
-        sendButton.setDisable(false);
+        sendButton.setDisable(!connectionAvailable);
         emptyStatePane.setVisible(false);
         loadInitialHistory();
     }
@@ -205,7 +269,24 @@ public class ChatController {
         this.sendListener = listener;
     }
 
+    private void markDisplayedRead(ProtocolMessage message) {
+        if (message == null || message.messageId == null || sidebarController.getClient() == null) return;
+        ProtocolMessage request = new ProtocolMessage();
+        request.convId = selectedConvId; request.messageId = message.messageId;
+        sidebarController.getClient().requestFeature(MessageType.CONVERSATION_READ, vn.edu.ut.udm08.shared.protocol.JsonUtil.toJson(request)).thenRun(() -> Platform.runLater(() -> sidebarController.markAsRead(request.convId)));
+    }
+    private void historyError(long generation, String text) {
+        if (generation != historyGeneration) return;
+        isLoadingHistory = false;
+        historyStatus.setText(text);
+        historyRetry.setVisible(true); historyRetry.setManaged(true);
+    }
     private void loadInitialHistory() {
+        final long generation = ++historyGeneration;
+        nextCursor = null; hasMoreHistory = false; isLoadingHistory = false;
+        historyStatus.setText("Đang tải tin nhắn…");
+        historyRetry.setVisible(false); historyRetry.setManaged(false);
+        historyRetry.setOnAction(event -> loadInitialHistory());
         String convId = selectedConvId;
         if (convId == null || sidebarController == null) {
             return;
@@ -222,7 +303,9 @@ public class ChatController {
                 @Override
                 public void onSuccess(vn.edu.ut.udm08.client.network.MessageHistoryPage page) {
                     Platform.runLater(() -> {
+                        if (generation != historyGeneration) return;
                         isLoadingHistory = false;
+                        historyStatus.setText("");
                         if (!convId.equals(selectedConvId)) {
                             return;
                         }
@@ -241,13 +324,14 @@ public class ChatController {
                                 nextCursor = null;
                             }
                             hasMoreHistory = page.hasMore();
+                            if (!page.getMessages().isEmpty()) markDisplayedRead(page.getMessages().get(page.getMessages().size() - 1));
                         }
                     });
                 }
 
                 @Override
                 public void onFailure(String requestId, String errorCode, String errorMessage) {
-                    Platform.runLater(() -> isLoadingHistory = false);
+                    Platform.runLater(() -> historyError(generation, "Không tải được lịch sử. Nhấn thử lại."));
                 }
             });
         } catch (Exception ignored) {
@@ -256,6 +340,7 @@ public class ChatController {
     }
 
     private void loadMoreHistory() {
+        final long generation = historyGeneration;
         String convId = selectedConvId;
         if (convId == null || !hasMoreHistory || isLoadingHistory || nextCursor == null || sidebarController == null) {
             return;
@@ -270,7 +355,9 @@ public class ChatController {
                 @Override
                 public void onSuccess(vn.edu.ut.udm08.client.network.MessageHistoryPage page) {
                     Platform.runLater(() -> {
+                        if (generation != historyGeneration) return;
                         isLoadingHistory = false;
+                        historyStatus.setText("");
                         if (!convId.equals(selectedConvId)) {
                             return;
                         }
@@ -292,11 +379,12 @@ public class ChatController {
                                 nextCursor = null;
                             }
                             hasMoreHistory = page.hasMore();
+                            if (!page.getMessages().isEmpty()) markDisplayedRead(page.getMessages().get(page.getMessages().size() - 1));
                             messageScrollPane.layout();
                             messageContainer.layout();
                             double newHeight = messageContainer.getHeight();
                             if (newHeight > oldHeight && newHeight > 0) {
-                                messageScrollPane.setVvalue((newHeight - oldHeight) / newHeight);
+                                messageScrollPane.setVvalue((newHeight - oldHeight) / Math.max(1, newHeight - messageScrollPane.getViewportBounds().getHeight()));
                             }
                         }
                     });
@@ -304,7 +392,7 @@ public class ChatController {
 
                 @Override
                 public void onFailure(String requestId, String errorCode, String errorMessage) {
-                    Platform.runLater(() -> isLoadingHistory = false);
+                    Platform.runLater(() -> historyError(generation, "Không tải được lịch sử. Nhấn thử lại."));
                 }
             });
         } catch (Exception ignored) {
@@ -322,6 +410,25 @@ public class ChatController {
                     .filter(u -> u != null && u.username != null && !u.username.equalsIgnoreCase(currentUsername))
                     .toList();
             onlineUsers.setAll(otherUsers);
+            for (ProtocolMessage message : new java.util.ArrayList<>(messageHistory.values())) {
+                if (!messageNodeIndex.containsKey(message.messageId) || java.util.Objects.equals(currentUsername, message.sender)) continue;
+                otherUsers.stream().filter(user -> user.username.equals(message.sender)).findFirst().ifPresent(user -> {
+                    message.avatarId = user.avatarId;
+                    Node previous = messageNodeIndex.get(message.messageId);
+                    int index = messageContainer.getChildren().indexOf(previous);
+                    if (index >= 0) {
+                        HBox row = createMessageRow(message, false);
+                        messageContainer.getChildren().set(index, row);
+                        messageNodeIndex.put(message.messageId, row);
+                    }
+                });
+            }
+            if (selectedUser != null) {
+                otherUsers.stream().filter(user -> user.username.equals(selectedUser.username)).findFirst().ifPresent(user -> {
+                    chatPartnerAvatar.getChildren().setAll(vn.edu.ut.udm08.client.ui.AvatarImages.view(user.avatarId, 42));
+                    chatPartnerName.setText(user.displayName == null ? user.username : user.displayName);
+                });
+            }
             if (sidebarController != null) {
                 sidebarController.updateOnlineUsers(users);
             }
@@ -339,15 +446,20 @@ public class ChatController {
         if (message.isForwarded) {
             return prefix + "[Chuyển tiếp] " + content;
         }
-        if (content.startsWith("[IMAGE]") || lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".gif")) {
-            return prefix + "[Hình ảnh]";
-        }
-        if (content.startsWith("[VIDEO]") || lower.endsWith(".mp4") || lower.endsWith(".mkv")) {
-            return prefix + "[Video]";
+        if (content.startsWith("[IMAGE]") || lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".gif") || lower.endsWith(".webp")) {
+            return prefix + "Hình ảnh";
         }
         if (content.startsWith("[FILE]")) {
-            String name = content.length() > 6 ? content.substring(6).trim() : "Tập tin";
-            return prefix + "[File] " + name;
+            try {
+                String jsonStr = content.substring(6);
+                vn.edu.ut.udm08.shared.dto.Attachment att = vn.edu.ut.udm08.shared.protocol.JsonUtil.fromJson(jsonStr, vn.edu.ut.udm08.shared.dto.Attachment.class);
+                if (att != null && att.name != null && !att.name.isBlank()) {
+                    String attLower = att.name.toLowerCase();
+                    boolean isImg = attLower.endsWith(".png") || attLower.endsWith(".jpg") || attLower.endsWith(".jpeg") || attLower.endsWith(".gif") || attLower.endsWith(".webp") || attLower.endsWith(".mp4") || attLower.endsWith(".mkv");
+                    return prefix + (isImg ? "Hình ảnh" : "Đã gửi một tệp");
+                }
+            } catch (Exception ignored) {}
+            return prefix + "Đã gửi một tệp";
         }
         if (content.startsWith("[STICKER]")) {
             return prefix + "[Sticker]";
@@ -361,9 +473,56 @@ public class ChatController {
         return prefix + content;
     }
 
+    @FXML
+    private void chooseImageAttachment() {
+        if (selectedConvId == null || !connectionAvailable || sidebarController.getClient() == null) return;
+        javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
+        chooser.setTitle("Gửi ảnh hoặc video (tối đa 5 MB)");
+        chooser.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("Ảnh và Video", "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.mp4", "*.avi", "*.mkv", "*.mov"));
+        java.io.File file = chooser.showOpenDialog(messageInput.getScene().getWindow());
+        if (file != null) uploadAndSendAttachment(file);
+    }
+
+    @FXML
+    private void chooseFileAttachment() {
+        if (selectedConvId == null || !connectionAvailable || sidebarController.getClient() == null) return;
+        javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
+        chooser.setTitle("Gửi tệp tin (tối đa 5 MB)");
+        chooser.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("Tất cả các tệp", "*.*"));
+        java.io.File file = chooser.showOpenDialog(messageInput.getScene().getWindow());
+        if (file != null) uploadAndSendAttachment(file);
+    }
+
+    private void uploadAndSendAttachment(java.io.File file) {
+        String convId = selectedConvId;
+        historyStatus.setText("Đang gửi tệp…");
+        new vn.edu.ut.udm08.client.network.AttachmentTransfer(sidebarController.getClient()).upload(file.toPath(), convId, value -> Platform.runLater(() -> historyStatus.setText("Đang gửi tệp " + Math.round(value * 100) + "%"))).whenComplete((attachment, error) -> Platform.runLater(() -> {
+            if (error != null) { historyStatus.setText("Gửi tệp thất bại. Tệp tối đa 5 MB; kiểm tra kết nối và thử lại."); return; }
+            historyStatus.setText("");
+            attachment.action = null; attachment.data = null;
+            ProtocolMessage message = new ProtocolMessage(MessageType.CHAT);
+            message.messageId = UUID.randomUUID().toString(); message.sender = currentUsername; message.convId = convId;
+            message.target = ConvId.isDm(convId) ? ConvId.getOtherUser(convId, currentUsername) : convId;
+            message.content = "[FILE]" + vn.edu.ut.udm08.shared.protocol.JsonUtil.toJson(attachment);
+            message.timestamp = System.currentTimeMillis(); message.sendStatus = vn.edu.ut.udm08.shared.model.MessageSendStatus.PENDING;
+            if (convId.equals(selectedConvId)) addMessageBubble(message, true);
+            if (sendListener != null) sendListener.onSendMessage(message);
+        }));
+    }
+    @FXML
+    private void showConversationInfo() {
+        if (selectedConvId == null || sidebarController.getClient() == null) return;
+        if (selectedConvId.startsWith("room:") && !ConvId.isPublicRoom(selectedConvId)) new vn.edu.ut.udm08.client.ui.GroupDialog(sidebarController.getClient(), sidebarController::reload).show(selectedConvId);
+        else vn.edu.ut.udm08.client.ui.components.AppDialog.info("Thông tin cuộc trò chuyện", ConvId.isPublicRoom(selectedConvId) ? "Phòng chung dành cho các tài khoản đã đăng nhập." : "Cuộc trò chuyện với " + chatPartnerName.getText() + "\nTài khoản: " + selectedUser.username);
+    }
     public void receiveMessage(ProtocolMessage message) {
         Platform.runLater(() -> {
             if (message == null) {
+                return;
+            }
+            if (message.type == MessageType.CONVERSATION_CHANGED) {
+                sidebarController.reload();
+                if (message.convId != null && message.convId.equals(selectedConvId)) loadInitialHistory();
                 return;
             }
 
@@ -399,6 +558,7 @@ public class ChatController {
 
             if (belongsToCurrentChat) {
                 addMessageBubble(message, isMine);
+                markDisplayedRead(message);
             }
         });
     }
@@ -414,13 +574,15 @@ public class ChatController {
         }
 
         chatPartnerName.setText(user.username);
+        chatPartnerStatus.setText("● Đang hoạt động");
+        chatPartnerAvatar.getChildren().setAll(vn.edu.ut.udm08.client.ui.AvatarImages.view(user.avatarId, 42));
         chatPartnerInitial.setText(user.username.substring(0, 1).toUpperCase());
         chatPartnerAvatar.setStyle("-fx-background-color: " + avatarColorFor(user.username) + ";");
 
         messageContainer.getChildren().clear();
         messageNodeIndex.clear();
 
-        sendButton.setDisable(false);
+        sendButton.setDisable(!connectionAvailable);
         messageInput.setDisable(false);
         emptyStatePane.setVisible(false);
         loadInitialHistory();
@@ -428,6 +590,8 @@ public class ChatController {
 
     @FXML
     private void handleSend() {
+        if (!connectionAvailable || selectedConvId == null) return;
+        if (messageInput.getText().length() > 5000) { historyStatus.setText("Tin nhắn tối đa 5.000 ký tự."); return; }
         String content = messageInput.getText().trim();
         if (content.isEmpty() || (selectedUser == null && (selectedConvId == null || selectedConvId.isBlank()))) return; 
 
@@ -464,7 +628,8 @@ public class ChatController {
         if (sidebarController != null && message.convId != null) {
             sidebarController.updateLastMessage(message.convId, formatMessagePreview(message, true), message.timestamp, false);
         }
-        messageInput.clear(); 
+        messageInput.clear();
+        drafts.remove(selectedConvId);
         cancelReply();
 
         if (sendListener != null) {
@@ -546,7 +711,9 @@ private void insertEmojiAtCaret(String emoji) {
         EmojiText.install(contentLabel, 16, 300);
         VBox bubble = new VBox(4);
         bubble.getStyleClass().add(isMine ? "message-bubble-sent" : "message-bubble-received");
-        bubble.setMaxWidth(400);
+        bubble.maxWidthProperty().bind(javafx.beans.binding.Bindings.createDoubleBinding(() -> Math.max(160, Math.min(520, messageScrollPane.getViewportBounds().getWidth() - 100)), messageScrollPane.viewportBoundsProperty()));
+        contentLabel.setMinWidth(0);
+        contentLabel.maxWidthProperty().bind(bubble.maxWidthProperty().subtract(28));
         bubble.setUserData(message);
         if ((message.isForwarded || "forward".equalsIgnoreCase(message.kind)) && message.forwardedFromSender != null) {
             Label forwardedLabel = new Label("↪ Đã chuyển tiếp từ " + message.forwardedFromSender);
@@ -578,7 +745,12 @@ private void insertEmojiAtCaret(String emoji) {
             bubble.getChildren().add(quoteBlock);
         }
 
-        bubble.getChildren().add(contentLabel);
+        if (message.content != null && message.content.startsWith("[FILE]")) {
+            try {
+                var file = vn.edu.ut.udm08.shared.protocol.JsonUtil.fromJson(message.content.substring(6), vn.edu.ut.udm08.shared.dto.Attachment.class);
+                bubble.getChildren().add(vn.edu.ut.udm08.client.ui.AttachmentView.create(sidebarController.getClient(), file));
+            } catch (Exception e) { bubble.getChildren().add(new Label("Tệp đính kèm không hợp lệ")); }
+        } else bubble.getChildren().add(contentLabel);
         Label delivery = new Label();
         delivery.setId("delivery-status");
         delivery.getStyleClass().add("message-delivery-status");
@@ -589,7 +761,15 @@ private void insertEmojiAtCaret(String emoji) {
         replyItem.setOnAction(e -> startReply(message));
         MenuItem forwardItem = new MenuItem("Chuyển tiếp");
         forwardItem.setOnAction(e -> openForwardDialog(message));
+        forwardItem.setDisable(message.content != null && message.content.startsWith("[FILE]"));
         contextMenu.getItems().addAll(replyItem, forwardItem);
+        if (isMine) {
+            MenuItem retry = new MenuItem("Gửi lại");
+            retry.setOnAction(event -> retryMessage(message));
+            contextMenu.getItems().add(retry);
+            contextMenu.setOnShowing(event -> retry.setDisable(!connectionAvailable || message.sendStatus != vn.edu.ut.udm08.shared.model.MessageSendStatus.FAILED && message.sendStatus != vn.edu.ut.udm08.shared.model.MessageSendStatus.UNKNOWN));
+            delivery.setOnMouseClicked(event -> retryMessage(message));
+        }
         bubble.setOnContextMenuRequested(e ->
                 contextMenu.show(bubble, e.getScreenX(), e.getScreenY())
         );
@@ -604,6 +784,7 @@ private void insertEmojiAtCaret(String emoji) {
         column.setAlignment(isMine ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
 
         HBox row = new HBox(8);
+        row.getProperties().put("timestamp", message.timestamp == null ? 0L : message.timestamp);
         row.setAlignment(isMine ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
 
         if (isMine) {
@@ -620,7 +801,8 @@ private void insertEmojiAtCaret(String emoji) {
             avatar.getStyleClass().add("avatar-circle-small");
             avatar.setStyle("-fx-background-color: " + avatarColorFor(senderName) + ";");
 
-            Label nameLabel = new Label(senderName);
+            String displayName = onlineUsers.stream().filter(user -> senderName.equals(user.username)).map(user -> user.displayName == null ? user.username : user.displayName).findFirst().orElse(senderName);
+            Label nameLabel = new Label(displayName);
             nameLabel.getStyleClass().add("message-sender-name");
 
             column.getChildren().addAll(nameLabel, bubble, timeLabel);
@@ -640,10 +822,11 @@ private void insertEmojiAtCaret(String emoji) {
         String text = message.sendStatus == null ? "" : switch (message.sendStatus) {
             case SENT -> "Đã gửi";
             case PENDING -> "Đang gửi…";
-            case FAILED -> "Gửi thất bại";
-            case UNKNOWN -> "Chưa xác nhận";
+            case FAILED -> "Gửi thất bại · Nhấn để gửi lại";
+            case UNKNOWN -> "Chưa xác nhận · Nhấn để gửi lại";
         };
         label.setText(text);
+        label.setTooltip(message.errorMessage == null ? null : new Tooltip(message.errorMessage));
         label.setVisible(!text.isEmpty());
         label.setManaged(!text.isEmpty());
     }
@@ -651,21 +834,34 @@ private void insertEmojiAtCaret(String emoji) {
     private void addMessageBubble(ProtocolMessage message, boolean isMine) {
         if (message == null) return;
         if (message.messageId != null && messageNodeIndex.containsKey(message.messageId)) {
+            ProtocolMessage existing = messageHistory.get(message.messageId);
+            if (isMine && message.sendStatus == null && existing != null) {
+                existing.sendStatus = vn.edu.ut.udm08.shared.model.MessageSendStatus.SENT;
+                updateDeliveryStatus(existing);
+            }
             return;
         }
+        boolean follow = isMine || messageScrollPane.getVvalue() >= 0.94 || messageContainer.getChildren().isEmpty();
         HBox row = createMessageRow(message, isMine);
         messageContainer.getChildren().add(row);
+        javafx.collections.FXCollections.sort(messageContainer.getChildren(), java.util.Comparator.comparingLong(node -> (Long) node.getProperties().getOrDefault("timestamp", 0L)));
         if (message.messageId != null) {
             messageNodeIndex.put(message.messageId, row);
         }
 
         messageScrollPane.layout();
-        messageScrollPane.setVvalue(1.0);
+        if (follow) Platform.runLater(() -> messageScrollPane.setVvalue(1));
+        else { newestButton.setVisible(true); newestButton.setManaged(true); }
     }
 
     private void prependMessageBubble(ProtocolMessage message, boolean isMine) {
         if (message == null) return;
         if (message.messageId != null && messageNodeIndex.containsKey(message.messageId)) {
+            ProtocolMessage existing = messageHistory.get(message.messageId);
+            if (isMine && message.sendStatus == null && existing != null) {
+                existing.sendStatus = vn.edu.ut.udm08.shared.model.MessageSendStatus.SENT;
+                updateDeliveryStatus(existing);
+            }
             return;
         }
         HBox row = createMessageRow(message, isMine);

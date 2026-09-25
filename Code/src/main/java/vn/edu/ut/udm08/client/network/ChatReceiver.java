@@ -68,6 +68,7 @@ public class ChatReceiver implements Runnable {
             return;
         }
 
+        if (client != null && client.completeFeatureRequest(message)) return;
         switch (message.type) {
             case HELLO_OK:
                 listener.onLoginSuccess(message);

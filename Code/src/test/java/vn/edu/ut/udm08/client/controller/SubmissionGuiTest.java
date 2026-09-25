@@ -180,7 +180,34 @@ class SubmissionGuiTest {
             assertFalse(sent.lookup("#delivery-status").getParent().getStyleClass().contains("message-bubble-sent"));
             message.sendStatus = vn.edu.ut.udm08.shared.model.MessageSendStatus.FAILED;
             Parent failed = (Parent) render.invoke(chat, message, true);
-            assertEquals("Gửi thất bại", ((Label) failed.lookup("#delivery-status")).getText());
+            assertEquals("Gửi thất bại · Nhấn để gửi lại", ((Label) failed.lookup("#delivery-status")).getText());
+            var sentMessages = new java.util.ArrayList<vn.edu.ut.udm08.shared.model.ProtocolMessage>();
+            chat.setSendListener(sentMessages::add);
+            ((Label) failed.lookup("#delivery-status")).getOnMouseClicked().handle(null);
+            assertEquals(1, sentMessages.size());
+            assertEquals("status-test", sentMessages.get(0).messageId);
+            ((Label) failed.lookup("#delivery-status")).getOnMouseClicked().handle(null);
+            assertEquals(1, sentMessages.size());
+            chat.disposeSidebar();
+        });
+    }
+    @Test void multilineComposerAndSmallChatWindowRemainUsable() throws Exception {
+        fx(() -> {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/chat.fxml"));
+            Parent root = loader.load(); new Scene(root, 820, 600);
+            ChatController chat = loader.getController(); chat.setCurrentUsername("alice"); chat.selectPublicRoom();
+            var input = (vn.edu.ut.udm08.client.ui.EmojiInput) root.lookup("#messageInput");
+            input.setText("Dòng một 😀\nDòng hai ❤️");
+            assertEquals("Dòng một 😀\nDòng hai ❤️", input.getText());
+            input.replaceSelection("\nDòng ba");
+            assertTrue(input.getText().endsWith("\nDòng ba"));
+            var sent = new java.util.ArrayList<vn.edu.ut.udm08.shared.model.ProtocolMessage>();
+            chat.setSendListener(sent::add);
+            ((Button) root.lookup("#sendButton")).fire();
+            assertEquals(1, sent.size()); assertTrue(sent.get(0).content.contains("\n"));
+            root.applyCss(); root.layout();
+            assertTrue(root.lookup("#sendButton").localToScene(root.lookup("#sendButton").getBoundsInLocal()).getMaxX() <= 820);
+            snapshot(root, "chat-small-ui.png");
             chat.disposeSidebar();
         });
     }

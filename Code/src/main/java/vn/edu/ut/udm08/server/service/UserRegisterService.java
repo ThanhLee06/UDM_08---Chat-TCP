@@ -24,6 +24,11 @@ import vn.edu.ut.udm08.shared.validation.IPasswordValidator;
 import vn.edu.ut.udm08.shared.validation.PasswordValidator;
 
 public class UserRegisterService {
+    private AvatarStore avatarStore;
+    public UserRegisterService(IUserRepository repository, IPasswordEncoder encoder, IOtpService otpService, AvatarStore avatarStore) {
+        this(repository, encoder, otpService);
+        this.avatarStore = avatarStore;
+    }
     private static final int MAX_PENDING_REGISTRATIONS = 1000;
     private static final Duration REGISTRATION_TTL = Duration.ofMinutes(5);
     private final IEmailValidator emailValidator;
@@ -80,6 +85,7 @@ public class UserRegisterService {
             return RegisterResponse.fail(passwordError);
         }
 
+        if (request.getAvatarPath() != null && request.getAvatarPath().length() > 90000) return RegisterResponse.fail("Ảnh đại diện quá lớn");
         User user = UserMapper.toEntity(request);
         String duplicate = duplicateError(user);
         if (duplicate != null) {
@@ -136,6 +142,14 @@ public class UserRegisterService {
         String duplicate = duplicateError(user);
         if (duplicate != null) {
             return restartRegistration(duplicate);
+        }
+        if (avatarStore != null) {
+            try {
+                String value = user.getAvatarPath();
+                if (value == null || "01.png".equals(value)) value = "avatar1";
+                user.setAvatarPath(avatarStore.save(value));
+                user.setAvatarType(user.getAvatarPath().startsWith("avatar:") ? "UPLOAD" : "PRESET");
+            } catch (Exception e) { return restartRegistration("Ảnh đại diện không hợp lệ"); }
         }
         User saved = userRepository.save(user);
         if (saved == null || saved.getId() == null) {

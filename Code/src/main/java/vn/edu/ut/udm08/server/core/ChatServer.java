@@ -32,7 +32,12 @@ public class ChatServer {
     private final MessageRouter messageRouter;
     private final SessionValidator sessionValidator;
     private final UserSearchHandler userSearchHandler;
+    private final vn.edu.ut.udm08.server.handler.AttachmentHandler attachmentHandler;
+    private final vn.edu.ut.udm08.server.handler.PhoneLookupHandler phoneLookupHandler;
+    private final vn.edu.ut.udm08.server.handler.GroupHandler groupHandler;
+    private final vn.edu.ut.udm08.server.handler.ReadStateHandler readStateHandler;
     private final AuthHandler authHandler;
+    private final vn.edu.ut.udm08.server.handler.ProfileHandler profileHandler;
     private final RegisterHandler registerHandler;
     private final ExecutorService clientExecutor;
 
@@ -63,9 +68,15 @@ public class ChatServer {
         this.sessionValidator = new SessionValidator();
         UserRepository userRepository = new UserRepository(dbFactory);
         this.userSearchHandler = new UserSearchHandler(userRepository);
+        this.phoneLookupHandler = new vn.edu.ut.udm08.server.handler.PhoneLookupHandler(userRepository);
+        this.groupHandler = new vn.edu.ut.udm08.server.handler.GroupHandler(new vn.edu.ut.udm08.server.repository.GroupRepository(dbFactory), registry);
+        this.readStateHandler = new vn.edu.ut.udm08.server.handler.ReadStateHandler(new vn.edu.ut.udm08.server.repository.ReadStateRepository(dbFactory));
+        java.nio.file.Path avatarDirectory = java.nio.file.Path.of(config.getDbUrl().replace("jdbc:sqlite:", "")).toAbsolutePath().getParent().resolve("avatars");
+        this.attachmentHandler = new vn.edu.ut.udm08.server.handler.AttachmentHandler(new vn.edu.ut.udm08.server.repository.AttachmentRepository(dbFactory), new vn.edu.ut.udm08.server.repository.ConversationDao(dbFactory), avatarDirectory.resolveSibling("attachments"));
+        this.profileHandler = new vn.edu.ut.udm08.server.handler.ProfileHandler(userRepository, new vn.edu.ut.udm08.server.service.AvatarStore(avatarDirectory), loginHandler);
 
         vn.edu.ut.udm08.server.service.UserLoginService loginService = new vn.edu.ut.udm08.server.service.UserLoginService(userRepository);
-        vn.edu.ut.udm08.server.service.UserRegisterService registerService = new vn.edu.ut.udm08.server.service.UserRegisterService(userRepository, new vn.edu.ut.udm08.shared.security.PasswordEncoder(), otpService);
+        vn.edu.ut.udm08.server.service.UserRegisterService registerService = new vn.edu.ut.udm08.server.service.UserRegisterService(userRepository, new vn.edu.ut.udm08.shared.security.PasswordEncoder(), otpService, new vn.edu.ut.udm08.server.service.AvatarStore(avatarDirectory));
 
         this.authHandler = new AuthHandler(loginService, registry, conversationRegistry, loginHandler);
         this.registerHandler = new RegisterHandler(registerService, loginService, otpService);
@@ -171,6 +182,11 @@ public class ChatServer {
         }
 
         switch (message.type) {
+            case CONVERSATION_READ -> readStateHandler.handle(session, message);
+            case GROUP_REQUEST -> groupHandler.handle(session, message);
+            case FILE_REQUEST -> attachmentHandler.handle(session, message);
+            case PHONE_LOOKUP -> phoneLookupHandler.handle(session, message);
+            case PROFILE_GET, PROFILE_UPDATE, AVATAR_GET -> profileHandler.handle(session, message);
             case HELLO -> loginHandler.handleHello(session, message);
             case CHAT -> messageRouter.handleChatMessage(session, message);
             case LOGOUT -> loginHandler.handleLogout(session, message);

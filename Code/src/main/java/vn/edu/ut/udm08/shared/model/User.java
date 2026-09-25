@@ -4,6 +4,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 public class User {
+    private String displayName;
+    public String getDisplayName() { return displayName == null || displayName.isBlank() ? username : displayName; }
+    public void setDisplayName(String displayName) { this.displayName = displayName; }
     private Long id;
     private String username;
     private String phoneNumber;

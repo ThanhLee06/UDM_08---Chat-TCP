@@ -10,6 +10,7 @@ public interface IUserRepository {
     Optional<User> findByEmail(String email);
     default Optional<User> findByUsername(String username) { return Optional.empty(); }
     default Optional<User> findById(long id) { return Optional.empty(); }
+    default boolean updateProfile(long id, String displayName, String avatar) { return false; }
     User save(User user);
     Optional<User> findByPhoneNumber(String phoneNumber);
     boolean updatePassword(String phoneNumber, String newPasswordHash);

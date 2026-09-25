@@ -323,7 +323,7 @@ public class LoginController {
             if (selectedFile != null) {
                 Image img = new Image(selectedFile.toURI().toString());
                 setCroppedAvatarImage(regAvatarImage, img);
-                customAvatarPath = selectedFile.getAbsolutePath();
+                customAvatarPath = vn.edu.ut.udm08.client.ui.AvatarPayload.encode(selectedFile.toPath());
                 if (!regAvatarChoiceBox.getItems().contains("Tự chọn từ máy")) {
                     regAvatarChoiceBox.getItems().add("Tự chọn từ máy");
                 }
@@ -351,7 +351,10 @@ public class LoginController {
                 }
                 final String finalUsername = authenticatedUsername;
                 conversationCache.setCurrentUser(finalUsername);
-                Platform.runLater(() -> openChatWindow(clientLoginService.getChatClient(), finalUsername));
+                Platform.runLater(() -> {
+                    if (activeChatController != null) activeChatController.connectionRestored();
+                    else openChatWindow(clientLoginService.getChatClient(), finalUsername);
+                });
             }
 
             @Override
@@ -426,6 +429,10 @@ public class LoginController {
                     forgotBusy = false;
                     refreshForgotControls();
                     setRegistrationBusy(false);
+                    if (activeChatController != null && !"FORCE_LOGOUT".equalsIgnoreCase(errorCode)) {
+                        activeChatController.setConnectionState(false, errorMessage, false);
+                        return;
+                    }
                     if ("FORCE_LOGOUT".equalsIgnoreCase(errorCode)) {
                         handleKickedSession(errorMessage);
                     } else {
@@ -449,7 +456,7 @@ public class LoginController {
                 Platform.runLater(() -> {
                     setRegistrationBusy(false);
                     if (activeChatController != null) {
-                        handleKickedSession("Mất kết nối tới Server. Vui lòng kết nối lại.");
+                        activeChatController.setConnectionState(false, "Mất kết nối. Tin nhắn và bản nháp vẫn được giữ tại đây.", false);
                     } else {
                         if (loginBtn != null) loginBtn.setDisable(false);
                         if (statusLabel != null) showError(statusLabel, "Không thể kết nối đến Server vui lòng bật ServerApp");
@@ -602,7 +609,7 @@ public class LoginController {
                     clientLoginService.getChatClient().connectWithoutHello(host, port, new vn.edu.ut.udm08.client.network.JavaFXChatListenerWrapper(createAuthListener()));
                 }
                 vn.edu.ut.udm08.shared.dto.RegisterInitRequest req = new vn.edu.ut.udm08.shared.dto.RegisterInitRequest(
-                    username, phone, email, password, "PRESET", regAvatarChoiceBox.getValue()
+                    username, phone, email, password, customAvatarPath == null ? "PRESET" : "UPLOAD", customAvatarPath == null ? regAvatarChoiceBox.getValue() : customAvatarPath
                 );
                 clientLoginService.getChatClient().sendRegisterInit(req);
             } catch (Exception e) {
@@ -626,6 +633,7 @@ public class LoginController {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/chat.fxml"));
             Scene chatScene = new Scene(loader.load());
             ChatController chatController = loader.getController();
+            vn.edu.ut.udm08.client.ui.AvatarImages.configure(client);
             chatController.setCurrentUsername(username);
             chatController.loadSidebar(new ClientConversationSource(client));
             chatController.setSendListener(message -> java.util.concurrent.CompletableFuture.runAsync(() -> {
@@ -643,6 +651,7 @@ public class LoginController {
                 }
             }));
             this.activeChatController = chatController;
+            chatController.setReconnectAction(this::reconnectChat);
             if (pendingUserList != null) {
                 chatController.updateOnlineUsers(pendingUserList);
             }
@@ -651,6 +660,8 @@ public class LoginController {
             stage.setTitle("UDM08 Chat - " + username);
             stage.addEventHandler(WindowEvent.WINDOW_HIDDEN, event -> chatController.disposeSidebar());
             stage.setScene(chatScene);
+            stage.setMinWidth(820);
+            stage.setMinHeight(600);
             stage.setResizable(true);
         } catch (Exception e) {
             if (loginBtn != null) loginBtn.setDisable(false);
@@ -658,6 +669,29 @@ public class LoginController {
         }
     }
 
+    private void reconnectChat() {
+        javafx.scene.control.Dialog<String> dialog = new javafx.scene.control.Dialog<>();
+        dialog.setTitle("Kết nối lại");
+        dialog.initOwner(activeStage);
+        PasswordField password = new PasswordField();
+        password.setPromptText("Nhập mật khẩu để xác thực lại");
+        dialog.getDialogPane().setContent(password);
+        dialog.getDialogPane().getButtonTypes().addAll(javafx.scene.control.ButtonType.OK, javafx.scene.control.ButtonType.CANCEL);
+        dialog.setResultConverter(button -> button == javafx.scene.control.ButtonType.OK ? password.getText() : null);
+        dialog.showAndWait().filter(value -> !value.isBlank()).ifPresent(value -> {
+            activeChatController.setConnectionState(false, "Đang kết nối lại…", true);
+            java.util.concurrent.CompletableFuture.runAsync(() -> {
+                try {
+                    clientLoginService.connectAndAuthLogin(networkConfig.getHost(), networkConfig.getPort(), phoneField.getText().trim(), value, new vn.edu.ut.udm08.client.network.JavaFXChatListenerWrapper(createAuthListener()));
+                } catch (Exception error) {
+                    Platform.runLater(() -> {
+                        if (activeChatController != null) activeChatController.setConnectionState(false, "Chưa kết nối được. Kiểm tra mạng và thử lại.", false);
+                    });
+                }
+            });
+        });
+        password.clear();
+    }
     private void handleKickedSession(String reason) {
         if (clientLoginService != null) {
             clientLoginService.disconnect();
@@ -693,11 +727,7 @@ public class LoginController {
             showError(statusLabel, msg);
         }
         try {
-            Alert alert = new Alert(Alert.AlertType.WARNING);
-            alert.setTitle("Đăng xuất thiết bị");
-            alert.setHeaderText("Tài khoản đã đăng nhập ở nơi khác");
-            alert.setContentText(msg);
-            alert.show();
+            vn.edu.ut.udm08.client.ui.components.AppDialog.info("Đăng xuất thiết bị", msg);
         } catch (Exception ignored) {
         }
     }
@@ -743,11 +773,7 @@ public class LoginController {
 
     private void showInfoAlert(String title, String message) {
         try {
-            Alert alert = new Alert(Alert.AlertType.INFORMATION);
-            alert.setTitle(title);
-            alert.setHeaderText(null);
-            alert.setContentText(message);
-            alert.showAndWait();
+            vn.edu.ut.udm08.client.ui.components.AppDialog.info(title, message);
         } catch (Exception ignored) {
         }
     }

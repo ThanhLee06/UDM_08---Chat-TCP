@@ -31,3 +31,20 @@ CREATE TABLE IF NOT EXISTS messages (
     FOREIGN KEY (sender_username) REFERENCES users(username)
 );
 CREATE INDEX IF NOT EXISTS idx_messages_conv_sequence ON messages (conv_id, sequence_id DESC);
+CREATE TABLE IF NOT EXISTS conversation_reads (
+    conv_id TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    last_sequence INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (conv_id, user_id),
+    FOREIGN KEY (conv_id) REFERENCES conversations(conv_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS attachments (
+    id TEXT PRIMARY KEY,
+    conv_id TEXT NOT NULL,
+    owner_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    FOREIGN KEY (conv_id) REFERENCES conversations(conv_id) ON DELETE CASCADE,
+    FOREIGN KEY (owner_id) REFERENCES users(id)
+);

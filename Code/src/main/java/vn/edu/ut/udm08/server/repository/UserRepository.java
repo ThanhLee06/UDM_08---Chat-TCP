@@ -309,10 +309,24 @@ public class UserRepository implements IUserRepository {
             return false;
         }
     }
+    @Override
+    public boolean updateProfile(long id, String displayName, String avatar) {
+        try (Connection connection = getConnection();
+             PreparedStatement statement = connection.prepareStatement("UPDATE users SET display_name=?, avatar_path=?, avatar_type=? WHERE id=?")) {
+            statement.setString(1, displayName);
+            statement.setString(2, avatar);
+            statement.setString(3, avatar.startsWith("avatar:") ? "UPLOAD" : "PRESET");
+            statement.setLong(4, id);
+            return statement.executeUpdate() == 1;
+        } catch (SQLException error) {
+            throw new IllegalStateException("Không thể lưu hồ sơ", error);
+        }
+    }
     private User mapResultSetToUser(ResultSet rs) throws SQLException {
         User user = new User();
         user.setId(rs.getLong("id"));
         user.setUsername(rs.getString("username"));
+        user.setDisplayName(hasColumn(rs, "display_name") ? rs.getString("display_name") : null);
         user.setPhoneNumber(rs.getString("phone_number"));
         user.setEmail(hasColumn(rs, "email") ? rs.getString("email") : null);
         user.setPasswordHash(rs.getString("password_hash"));

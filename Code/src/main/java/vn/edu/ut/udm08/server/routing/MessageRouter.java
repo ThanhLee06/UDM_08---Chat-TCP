@@ -16,6 +16,8 @@ public class MessageRouter implements IMessageRouter {
     private final vn.edu.ut.udm08.server.repository.IConversationDao conversationDao;
     private final vn.edu.ut.udm08.server.repository.IUserRepository userRepository;
     private vn.edu.ut.udm08.server.repository.IMessageDao messageDao;
+    private vn.edu.ut.udm08.server.repository.AttachmentRepository attachments;
+    private vn.edu.ut.udm08.server.repository.ReadStateRepository readStates;
 
     public MessageRouter(OnlineUserRegistry registry) {
         this(registry, null);
@@ -29,6 +31,8 @@ public class MessageRouter implements IMessageRouter {
     public MessageRouter(OnlineUserRegistry registry, IConversationRegistry conversationRegistry, vn.edu.ut.udm08.server.config.DatabaseConnectionFactory dbFactory) {
         this(registry, conversationRegistry, new vn.edu.ut.udm08.server.service.ChatStorageService(dbFactory), new vn.edu.ut.udm08.server.repository.ConversationDao(dbFactory), new vn.edu.ut.udm08.server.repository.UserRepository(dbFactory));
         this.messageDao = new vn.edu.ut.udm08.server.repository.MessageDao(dbFactory);
+        this.attachments = new vn.edu.ut.udm08.server.repository.AttachmentRepository(dbFactory);
+        this.readStates = new vn.edu.ut.udm08.server.repository.ReadStateRepository(dbFactory);
     }
     public MessageRouter(OnlineUserRegistry registry, IConversationRegistry conversationRegistry, vn.edu.ut.udm08.server.service.IChatStorageService chatStorageService, vn.edu.ut.udm08.server.repository.IConversationDao conversationDao, vn.edu.ut.udm08.server.repository.IUserRepository userRepository) {
         this.registry = registry;
@@ -40,7 +44,7 @@ public class MessageRouter implements IMessageRouter {
 
     // Xu ly dinh tuyen tin nhan CHAT rieng tu nguoi gui den nguoi nhan
     @Override
-    public void handleChatMessage(ClientSession senderSession, ProtocolMessage msg) {
+    public synchronized void handleChatMessage(ClientSession senderSession, ProtocolMessage msg) {
         try {
             // 1. Kiem tra phien lam viec nguoi gui
             if (senderSession == null || senderSession.getUsername() == null) {
@@ -82,7 +86,7 @@ public class MessageRouter implements IMessageRouter {
             }
 
             if (convId != null && !convId.isBlank() && conversationRegistry != null) {
-                if (!ConvId.isDm(convId) && !conversationRegistry.isMember(convId, senderSession)) {
+                if (!ConvId.isDm(convId) && !((ConvId.isPublicRoom(convId) || conversationDao == null) ? conversationRegistry.isMember(convId, senderSession) : canRead(getCurrentUser(senderSession), convId))) {
                     sendErrorMessage(senderSession, msg.messageId, "NOT_A_MEMBER", "Khong co quyen gui tin vao hoi thoai nay");
                     return;
                 }
@@ -110,6 +114,15 @@ public class MessageRouter implements IMessageRouter {
             msg.avatarId = senderSession.getAvatarId();
             msg.replyTo = msg.replyToMessageId != null ? msg.replyToMessageId : msg.replyTo;
             if (messageDao != null && !validateReferences(senderSession, msg)) return;
+            if (msg.content.startsWith("[FILE]")) {
+                var requested = vn.edu.ut.udm08.shared.protocol.JsonUtil.fromJson(msg.content.substring(6), vn.edu.ut.udm08.shared.dto.Attachment.class);
+                var stored = attachments.find(requested.id);
+                if (!stored.convId.equals(msg.convId)) {
+                    sendErrorMessage(senderSession, msg.messageId, "INVALID_FILE", "Tệp không thuộc hội thoại này");
+                    return;
+                }
+                msg.content = "[FILE]" + vn.edu.ut.udm08.shared.protocol.JsonUtil.toJson(stored);
+            }
 
             if (msg.replyTo != null) {
                 if (msg.replyTo.isBlank()) {
@@ -144,12 +157,13 @@ public class MessageRouter implements IMessageRouter {
             chatMsg.setForwardFromMessageId(msg.forwardFromMessageId != null ? msg.forwardFromMessageId : msg.fwdFrom);
             chatMsg.setForwardFromConvId(msg.forwardFromConvId);
 
+            boolean alreadyStored = messageDao != null && messageDao.findByMessageId(msg.messageId).isPresent();
             if (chatStorageService != null) {
                 chatStorageService.saveMessageWithTransaction(chatMsg);
             }
 
             // 5. Tim ClientSession cua nguoi nhan trong OnlineUserRegistry
-            List<ClientSession> targets = findTargetSessions(senderSession, convId, targetUser);
+            List<ClientSession> targets = alreadyStored ? List.of() : findTargetSessions(senderSession, convId, targetUser);
 
             for (ClientSession recipient : targets) {
                 if (recipient != null && recipient.isConnected() && !recipient.equals(senderSession)) {
@@ -199,12 +213,13 @@ public class MessageRouter implements IMessageRouter {
                     summary.displayName = (other != null && !other.isBlank()) ? other : (c.getName() != null ? c.getName() : "Người dùng");
                     summary.avatar = "default";
                     if (other != null && userRepository != null) {
-                        userRepository.findByUsername(other).ifPresent(peer -> summary.avatar = peer.getAvatarPath());
+                        userRepository.findByUsername(other).ifPresent(peer -> { summary.avatar = peer.getAvatarPath(); summary.displayName = peer.getDisplayName(); });
                     }
                 } else {
                     summary.displayName = c.getName() != null ? c.getName() : c.getConvId();
                     summary.avatar = "default";
                 }
+                summary.unreadCount = readStates == null ? 0 : readStates.unread(user.getId(), user.getUsername(), c.getConvId());
                 summary.lastMessage = c.getLastMessagePreview();
                 summary.lastActivity = c.getLastActivity();
                 summaries.add(summary);
@@ -337,7 +352,7 @@ public class MessageRouter implements IMessageRouter {
             vn.edu.ut.udm08.shared.model.ConversationSummary summary = new vn.edu.ut.udm08.shared.model.ConversationSummary();
             summary.convId = convId;
             summary.chatType = "DM";
-            summary.displayName = targetUser.getUsername();
+            summary.displayName = targetUser.getDisplayName();
             summary.avatar = targetUser.getAvatarPath();
 
             ProtocolMessage response = new ProtocolMessage(MessageType.OPEN_DM_RESPONSE);
@@ -432,6 +447,10 @@ public class MessageRouter implements IMessageRouter {
 
     private List<ClientSession> findTargetSessions(ClientSession senderSession, String convId, String targetUser) {
         List<ClientSession> result = new ArrayList<>();
+        if (convId != null && convId.startsWith("room:") && !ConvId.isPublicRoom(convId) && registry != null) {
+            for (ClientSession peer : registry.getSessions()) if (canRead(getCurrentUser(peer), convId)) result.add(peer);
+            return result;
+        }
         if (ConvId.isPublicRoom(convId) || "PUBLIC".equalsIgnoreCase(targetUser)) {
             if (conversationRegistry != null) {
                 List<ClientSession> convSessions = conversationRegistry.getSessions(ConvId.PUBLIC_ROOM_ID);

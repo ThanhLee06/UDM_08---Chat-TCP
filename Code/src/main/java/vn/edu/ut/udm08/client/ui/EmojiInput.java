@@ -33,21 +33,24 @@ public final class EmojiInput extends StackPane {
     public EmojiInput() {
         getStyleClass().add("emoji-input");
         editor.getStyleClass().add("emoji-editor");
-        editor.setWrapText(false);
+        editor.setStyle("-fx-background-color: transparent;");
+        editor.setWrapText(true);
         editor.setMinSize(0, 22);
         editor.setPrefHeight(22);
-        editor.setMaxHeight(22);
+        editor.setMaxHeight(80);
         prompt.setMouseTransparent(true);
         prompt.getStyleClass().add("emoji-input-prompt");
         prompt.visibleProperty().bind(editor.lengthProperty().map(length -> length == 0));
         StackPane.setAlignment(prompt, Pos.CENTER_LEFT);
         getChildren().addAll(editor, prompt);
         setMinWidth(0);
-        setPrefHeight(42);
-        setMaxHeight(42);
+        setMinHeight(38);
+        setPrefHeight(38);
+        setMaxHeight(100);
         addEventFilter(KeyEvent.KEY_PRESSED, event -> {
             if (event.getCode() == KeyCode.ENTER) {
-                if (onAction != null) onAction.handle(new ActionEvent(this, this));
+                if (event.isShiftDown()) editor.replaceSelection("\n");
+                else if (onAction != null) onAction.handle(new ActionEvent(this, this));
                 event.consume();
             }
         });
@@ -74,8 +77,10 @@ public final class EmojiInput extends StackPane {
 
     private static String unicode(StyledDocument<String, Either<String, Emoji>, String> document) {
         StringBuilder value = new StringBuilder();
+        boolean first = true;
         for (var paragraph : document.getParagraphs()) {
-            if (!value.isEmpty()) value.append('\n');
+            if (!first) value.append('\n');
+            first = false;
             for (var segment : paragraph.getSegments()) value.append(segment.unify(text -> text, Emoji::unicode));
         }
         return value.toString();
@@ -119,11 +124,12 @@ public final class EmojiInput extends StackPane {
         @Override public void replaceText(int start, int end, String text) {
             String before = unicode(getDocument().subSequence(0, start));
             String after = unicode(getDocument().subSequence(end, getLength()));
-            String inserted = text.replace('\r', ' ').replace('\n', ' ').replace('\t', ' ');
+            String inserted = text.replace("\r\n", "\n").replace('\r', '\n').replace('\t', ' ');
             String value = before + inserted + after;
             var parsed = segments(value);
             var builder = new ReadOnlyStyledDocumentBuilder<String, Either<String, Emoji>, String>(OPS, "");
-            var document = builder.addParagraph(parsed).build();
+            for (String line : value.split("\n", -1)) builder.addParagraph(segments(line));
+            var document = builder.build();
             int unicodeCursor = before.length() + inserted.length();
             int consumed = 0;
             int caret = 0;

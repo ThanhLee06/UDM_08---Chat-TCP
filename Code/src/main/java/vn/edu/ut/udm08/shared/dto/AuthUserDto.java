@@ -19,7 +19,7 @@ public class AuthUserDto {
             this.username = user.getUsername();
             this.phoneNumber = user.getPhoneNumber();
             this.email = user.getEmail();
-            this.displayName = user.getUsername();
+            this.displayName = user.getDisplayName();
             this.avatarType = user.getAvatarType();
             this.avatarPath = user.getAvatarPath();
         }

@@ -21,39 +21,55 @@
                     <StackPane fx:id="chatPartnerAvatar" styleClass="avatar-circle" prefWidth="42" prefHeight="42">
                         <Label fx:id="chatPartnerInitial" text="?" styleClass="avatar-text"/>
                     </StackPane>
-                    <Label fx:id="chatPartnerName" text="Chọn một người để chat" styleClass="chat-header-label"/>
+                    <VBox alignment="CENTER_LEFT" spacing="2" HBox.hgrow="ALWAYS">
+                        <Label minWidth="0" maxWidth="Infinity" fx:id="chatPartnerName" text="Chon mot nguoi de chat" styleClass="chat-header-label"/>
+                        <Label fx:id="chatPartnerStatus" text="" styleClass="chat-header-status"/>
+                    </VBox>
                     <Pane HBox.hgrow="ALWAYS"/>
-                    <Label text="📞" styleClass="header-icon"/>
-                    <Label text="🎥" styleClass="header-icon"/>
-                    <Label text="🔍" styleClass="header-icon"/>
+                    <Button fx:id="infoButton" styleClass="header-info-btn" onAction="#showConversationInfo" accessibleText="Thông tin hội thoại"/>
                 </HBox>
 
+                <HBox fx:id="connectionBar" visible="false" managed="false" spacing="12" alignment="CENTER_LEFT" style="-fx-padding: 10; -fx-background-color: #fff4d6;">
+                    <Label fx:id="connectionStatus" text="Mất kết nối" wrapText="true" HBox.hgrow="ALWAYS"/>
+                    <Button fx:id="reconnectButton" text="Kết nối lại"/>
+                </HBox>
+                <HBox spacing="8" alignment="CENTER" style="-fx-padding: 3;">
+                    <Label fx:id="historyStatus" text=""/>
+                    <Button fx:id="historyRetry" text="Thử lại" visible="false" managed="false"/>
+                </HBox>
                 <ScrollPane fx:id="messageScrollPane" fitToWidth="true" styleClass="message-scroll" VBox.vgrow="ALWAYS">
                     <VBox fx:id="messageContainer" spacing="10">
                         <padding><Insets top="18" right="18" bottom="18" left="18"/></padding>
                     </VBox>
                 </ScrollPane>
 
+                <Button fx:id="newestButton" text="↓ Tin nhắn mới" visible="false" managed="false" styleClass="newest-button"/>
                 <VBox styleClass="input-bar">
-                    <HBox styleClass="toolbar-row" spacing="16" alignment="CENTER_LEFT">
-                        <padding><Insets top="8" right="16" bottom="4" left="16"/></padding>
-                       <Label fx:id="emojiIcon" text="😊" styleClass="toolbar-icon" onMouseClicked="#handleEmojiButtonClick"/>
-                        <Label text="🖼" styleClass="toolbar-icon"/>
-                        <Label text="📎" styleClass="toolbar-icon"/>
-                        <Label text="✂" styleClass="toolbar-icon"/>
-                    </HBox>
-                    <HBox spacing="10" alignment="CENTER">
-                        <padding><Insets top="0" right="16" bottom="12" left="16"/></padding>
-                        <EmojiInput fx:id="messageInput" promptText="Nhập tin nhắn..." styleClass="message-input" HBox.hgrow="ALWAYS"/>
-                        <Button fx:id="sendButton" text="Gửi" styleClass="send-button" onAction="#handleSend"/>
+                    <HBox spacing="10" alignment="CENTER_LEFT">
+                        <padding><Insets top="8" right="14" bottom="10" left="14"/></padding>
+                        <HBox spacing="4" alignment="CENTER_LEFT">
+                            <Label fx:id="emojiIcon" styleClass="toolbar-icon" onMouseClicked="#handleEmojiButtonClick">
+                                <tooltip><Tooltip text="Chèn biểu cảm"/></tooltip>
+                            </Label>
+                            <Button fx:id="imageBtn" onAction="#chooseImageAttachment" styleClass="toolbar-btn" accessibleText="Gửi ảnh hoặc video">
+                                <tooltip><Tooltip text="Gửi ảnh hoặc video"/></tooltip>
+                            </Button>
+                            <Button fx:id="fileBtn" onAction="#chooseFileAttachment" styleClass="toolbar-btn" accessibleText="Đính kèm tệp">
+                                <tooltip><Tooltip text="Đính kèm tệp"/></tooltip>
+                            </Button>
+                        </HBox>
+                        <EmojiInput fx:id="messageInput" promptText="Nhập tin nhắn…" styleClass="message-input" HBox.hgrow="ALWAYS"/>
+                        <Button fx:id="sendButton" styleClass="send-button" onAction="#handleSend" accessibleText="Gửi tin nhắn">
+                            <tooltip><Tooltip text="Gửi tin nhắn"/></tooltip>
+                        </Button>
                     </HBox>
                 </VBox>
             </VBox>
 
-            <VBox fx:id="emptyStatePane" styleClass="empty-state" alignment="CENTER" spacing="10">
+            <VBox fx:id="emptyStatePane" styleClass="empty-state" alignment="CENTER" spacing="12">
                 <Label text="💬" styleClass="empty-state-icon"/>
-                <Label text="Chọn một cuộc trò chuyện" styleClass="empty-state-title"/>
-                <Label text="Chọn một người ở danh sách bên trái để bắt đầu chat" styleClass="empty-state-sub"/>
+                <Label text="Bắt đầu trò chuyện" styleClass="empty-state-title"/>
+                <Label text="Chọn một cuộc trò chuyện từ danh sách hoặc tìm bạn để nhắn tin" styleClass="empty-state-sub"/>
             </VBox>
         </StackPane>
     </center>

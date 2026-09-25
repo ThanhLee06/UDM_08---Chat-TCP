@@ -53,6 +53,7 @@ public class DatabaseInitializer {
                         if ("email".equalsIgnoreCase(columns.getString("name"))) hasEmail = true;
                     }
                 }
+                ensureColumnExists(stmt, "users", "display_name", "ALTER TABLE users ADD COLUMN display_name TEXT");
                 if (!hasEmail) stmt.execute("ALTER TABLE users ADD COLUMN email TEXT");
                 stmt.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_users_email ON users(lower(email)) WHERE email IS NOT NULL");
             }

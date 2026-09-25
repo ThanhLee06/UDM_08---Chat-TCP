@@ -25,6 +25,18 @@ class UserRegisterServiceTest {
         service = new UserRegisterService(repository, new PasswordEncoder(),
                 new EmailOtpService(mailbox::put, clock), clock);
     }
+    @Test void uploadedRegistrationAvatarIsStoredOnlyAfterOtp() throws Exception {
+        AvatarStore avatars = new AvatarStore(temp.resolve("avatars"));
+        service = new UserRegisterService(repository, new PasswordEncoder(), new EmailOtpService(mailbox::put), avatars);
+        var image = new java.awt.image.BufferedImage(2, 2, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        var bytes = new java.io.ByteArrayOutputStream(); javax.imageio.ImageIO.write(image, "png", bytes);
+        var req = request(); req.setAvatarPath("data:image/png;base64," + Base64.getEncoder().encodeToString(bytes.toByteArray()));
+        var started = service.register(req); assertTrue(started.isSuccess());
+        assertFalse(java.nio.file.Files.exists(temp.resolve("avatars")));
+        var verified = confirm(started); assertTrue(verified.isSuccess(), verified.getMessage());
+        assertTrue(verified.getUser().getAvatarPath().startsWith("avatar:"));
+        assertArrayEquals(bytes.toByteArray(), Base64.getDecoder().decode(avatars.read(verified.getUser().getAvatarPath())));
+    }
     RegisterRequest request() {
         return new RegisterRequest("ThanhUser", "0901234567", "thanh@gmail.com", "Pass123@", "PRESET", "01.png");
     }

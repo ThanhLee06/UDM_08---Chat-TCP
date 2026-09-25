@@ -23,6 +23,14 @@ import vn.edu.ut.udm08.shared.model.ProtocolMessage;
 import vn.edu.ut.udm08.shared.protocol.JsonUtil;
 
 public class ChatClient implements AutoCloseable {
+    private final ClientRequests featureRequests = new ClientRequests();
+    public java.util.concurrent.CompletableFuture<ProtocolMessage> requestFeature(MessageType type, String content) {
+        return featureRequests.send(type, content, request -> {
+            if (!isConnected()) throw new IllegalStateException("Mất kết nối với Server");
+            sendRawMessage(JsonUtil.toJson(request));
+        });
+    }
+    boolean completeFeatureRequest(ProtocolMessage message) { return featureRequests.complete(message); }
     private static final String ERROR_SESSION_INVALID = "SESSION_INVALID";
     private static final String ERROR_SESSION_EXPIRED = "SESSION_EXPIRED";
     private static final String ERROR_UNAUTHORIZED = "UNAUTHORIZED";
@@ -46,6 +54,7 @@ public class ChatClient implements AutoCloseable {
     private final Map<String, PendingConversationListRequest> pendingConversationListRequests = new ConcurrentHashMap<>();
     private final Map<String, PendingUserSearchRequest> pendingUserSearchRequests = new ConcurrentHashMap<>();
     private final Map<String, PendingOpenDmRequest> pendingOpenDmRequests = new ConcurrentHashMap<>();
+    private final Map<String, Object> sendAttempts = new ConcurrentHashMap<>();
     private final Map<String, ProtocolMessage> outboundMessages = new ConcurrentHashMap<>();
     private final ScheduledExecutorService timeoutExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread thread = new Thread(r, "ChatClientTimeoutThread");
@@ -268,9 +277,11 @@ public class ChatClient implements AutoCloseable {
 
         outboundMessages.put(chatMessage.messageId, chatMessage);
         final String sentId = chatMessage.messageId;
+        final Object attempt = new Object();
+        sendAttempts.put(sentId, attempt);
         final long sendEpoch = sessionEpoch.get();
         timeoutExecutor.schedule(() -> {
-            if (isCurrentEpoch(sendEpoch)) markOutboundMessageFailed(sentId, "ACK_TIMEOUT", "Chưa nhận được xác nhận từ Server");
+            if (isCurrentEpoch(sendEpoch) && sendAttempts.remove(sentId, attempt)) markOutboundMessageFailed(sentId, "ACK_TIMEOUT", "Chưa nhận được xác nhận từ Server");
         }, requestTimeoutMs, TimeUnit.MILLISECONDS);
         notifyMessageStatusUpdated(chatMessage);
         sendRawMessage(JsonUtil.toJson(chatMessage));
@@ -469,6 +480,7 @@ public class ChatClient implements AutoCloseable {
         return requestId;
     }
     public synchronized void disconnect() {
+        featureRequests.clear();
         try {
             if (writer != null && socket != null && !socket.isClosed()) {
                 ProtocolMessage disconnectMessage = new ProtocolMessage(MessageType.DISCONNECT);
@@ -866,6 +878,7 @@ public class ChatClient implements AutoCloseable {
             }
         }
         outboundMessages.clear();
+        sendAttempts.clear();
     }
 
     private void notifyMessageStatusUpdated(ProtocolMessage message) {

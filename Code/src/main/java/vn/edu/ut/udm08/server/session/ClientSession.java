@@ -274,6 +274,7 @@ public class ClientSession implements Runnable {
     public void setUser(User user) {
         if (user != null) {
             this.user = user;
+            this.avatarId = user.getAvatarPath();
             if (this.username == null || this.username.isBlank()) {
                 this.username = user.getUsername();
             }
